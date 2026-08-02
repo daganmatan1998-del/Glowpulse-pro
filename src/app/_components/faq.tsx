@@ -15,11 +15,11 @@ const faqs = [
   },
   {
     q: "What colors does it come in?",
-    a: "It's available in 7 colors. You can pick your favorite on the AliExpress listing before checkout.",
+    a: "It's available in 7 colors — pick your favorite at checkout.",
   },
   {
     q: "Where do I buy it, and how much does it cost?",
-    a: `It's sold on AliExpress for around $${product.priceUSD} (${product.priceILSNote}). Tap "Shop Now" anywhere on this page to see the live price, shipping options, and available colors on the official listing.`,
+    a: `It's $${product.priceUSD}, shipping included. Tap "Shop Now" anywhere on this page to place your order.`,
   },
 ];
 

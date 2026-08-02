@@ -17,7 +17,7 @@ const nunitoSans = Nunito_Sans({
 export const metadata: Metadata = {
   title: "SwirlMug — Automatic Self-Stirring Coffee Mug",
   description:
-    "The JSB automatic magnetic mug blends your coffee, cocoa, or shake in 3 seconds — no spoon, no mess. Touch-screen display, 304 stainless steel, 7 colors.",
+    "SwirlMug blends your coffee, cocoa, or shake in 3 seconds — no spoon, no mess. Touch-screen display, 304 stainless steel, 7 colors.",
 };
 
 export default function RootLayout({

@@ -16,16 +16,16 @@ export function FinalCTA() {
           routine with the {product.name}.
         </p>
         <a
-          href={product.affiliateUrl}
+          href={product.buyUrl}
           target="_blank"
-          rel="noopener noreferrer sponsored"
+          rel="noopener noreferrer"
           className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "mt-8")}
         >
-          Shop Now on AliExpress
+          Shop Now
           <ArrowRight size={18} aria-hidden />
         </a>
         <p className="mt-4 text-sm text-primary-foreground/60">
-          ${product.priceUSD} · {product.priceILSNote}
+          ${product.priceUSD} · free shipping
         </p>
       </div>
     </section>

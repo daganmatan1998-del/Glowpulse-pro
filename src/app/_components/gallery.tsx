@@ -1,5 +1,7 @@
 import Image from "next/image";
 
+import { product } from "@/lib/product";
+
 const images = [
   {
     src: "/product/lifestyle-tray.jpg",
@@ -27,7 +29,7 @@ export function Gallery() {
           See It In Action
         </h2>
         <p className="mt-4 text-lg text-muted-foreground">
-          Real product photos from the listing.
+          Real photos of the {product.name}.
         </p>
       </div>
 

@@ -37,9 +37,9 @@ export function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
-            The {product.fullName} blends your coffee, cocoa, or protein
-            shake at the tap of a button — no spoon, no clumps, no mess. Just
-            fill, tap, and swirl.
+            {product.name} blends your coffee, cocoa, or protein shake at the
+            tap of a button — no spoon, no clumps, no mess. Just fill, tap,
+            and swirl.
           </p>
 
           <div className="mt-8 flex flex-wrap items-baseline gap-3">
@@ -47,18 +47,18 @@ export function Hero() {
               ${product.priceUSD}
             </span>
             <span className="text-sm text-muted-foreground">
-              {product.priceILSNote} · price confirmed at checkout
+              Free shipping · price confirmed at checkout
             </span>
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <a
-              href={product.affiliateUrl}
+              href={product.buyUrl}
               target="_blank"
-              rel="noopener noreferrer sponsored"
+              rel="noopener noreferrer"
               className={cn(buttonVariants({ size: "lg" }))}
             >
-              Shop Now on AliExpress
+              Shop Now
               <ArrowRight size={18} aria-hidden />
             </a>
             <a
@@ -74,7 +74,7 @@ export function Hero() {
           <div className="relative overflow-hidden rounded-[2rem] border border-border bg-card shadow-2xl shadow-primary/10">
             <Image
               src="/product/product-white.jpg"
-              alt="JSB automatic magnetic self-stirring coffee mug with its lid and touch-screen handle"
+              alt="SwirlMug automatic magnetic self-stirring coffee mug with its lid and touch-screen handle"
               width={960}
               height={960}
               priority

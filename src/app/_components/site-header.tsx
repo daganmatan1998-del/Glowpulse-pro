@@ -6,11 +6,11 @@ import { cn } from "@/lib/utils";
 import { product } from "@/lib/product";
 
 const navLinks = [
-  { href: "#features", label: "Features" },
-  { href: "#how-it-works", label: "How It Works" },
-  { href: "#gallery", label: "Gallery" },
-  { href: "#reviews", label: "Reviews" },
-  { href: "#faq", label: "FAQ" },
+  { href: "/#features", label: "Features" },
+  { href: "/#how-it-works", label: "How It Works" },
+  { href: "/#gallery", label: "Gallery" },
+  { href: "/#reviews", label: "Reviews" },
+  { href: "/#faq", label: "FAQ" },
 ];
 
 export function SiteHeader() {
@@ -18,7 +18,7 @@ export function SiteHeader() {
     <header className="sticky top-0 z-50 border-b border-border/70 bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link
-          href="#top"
+          href="/"
           className="flex items-center gap-2 font-heading text-lg font-bold text-primary"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -29,22 +29,22 @@ export function SiteHeader() {
 
         <nav className="hidden items-center gap-8 md:flex">
           {navLinks.map((link) => (
-            <a
+            <Link
               key={link.href}
               href={link.href}
               className="text-sm font-medium text-foreground/70 transition-colors hover:text-foreground"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
 
-        <a
-          href="#checkout"
+        <Link
+          href="/#checkout"
           className={cn(buttonVariants({ size: "sm" }), "shrink-0")}
         >
           Shop Now
-        </a>
+        </Link>
       </div>
     </header>
   );

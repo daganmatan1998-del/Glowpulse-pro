@@ -1,5 +1,13 @@
+import { Truck, ShieldCheck, RotateCcw } from "lucide-react";
+
 import { product } from "@/lib/product";
 import { CheckoutButtons } from "./checkout-buttons";
+
+const trustPoints = [
+  { icon: Truck, label: "Free shipping" },
+  { icon: ShieldCheck, label: "Secure checkout" },
+  { icon: RotateCcw, label: "30-day returns" },
+];
 
 export function FinalCTA() {
   return (
@@ -28,6 +36,15 @@ export function FinalCTA() {
           <div className="mt-5">
             <CheckoutButtons />
           </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-primary-foreground/70">
+          {trustPoints.map(({ icon: Icon, label }) => (
+            <span key={label} className="inline-flex items-center gap-1.5">
+              <Icon size={15} aria-hidden />
+              {label}
+            </span>
+          ))}
         </div>
       </div>
     </section>

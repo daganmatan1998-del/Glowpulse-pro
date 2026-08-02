@@ -40,9 +40,7 @@ export function SiteHeader() {
         </nav>
 
         <a
-          href={product.buyUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+          href="#checkout"
           className={cn(buttonVariants({ size: "sm" }), "shrink-0")}
         >
           Shop Now

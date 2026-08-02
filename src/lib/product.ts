@@ -7,6 +7,4 @@ export const product = {
   ratingCount: 369,
   soldCount: 482,
   colorCount: 7,
-  // TODO: point this at your own checkout once it exists — see note in chat.
-  buyUrl: "https://a.aliexpress.com/_c2zOilIJ",
 } as const;

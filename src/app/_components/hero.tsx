@@ -52,12 +52,7 @@ export function Hero() {
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
-            <a
-              href={product.buyUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(buttonVariants({ size: "lg" }))}
-            >
+            <a href="#checkout" className={cn(buttonVariants({ size: "lg" }))}>
               Shop Now
               <ArrowRight size={18} aria-hidden />
             </a>

@@ -296,12 +296,13 @@
   @keyframes thinkSpin{ to{ transform:rotate(360deg); } }
 
   #panelInputRow{
-    display:flex; align-items:center; gap:6px; padding:9px 10px;
+    display:flex; align-items:flex-end; gap:6px; padding:9px 10px;
     border-top:1px solid rgba(0,255,255,0.2); border-bottom:1px solid rgba(0,255,255,0.25);
   }
   #chatInput{
     flex:1; min-width:0; background:rgba(0,255,255,0.05); border:1px solid rgba(0,255,255,0.3);
     color:#eafcff; font-family:inherit; font-size:16px; padding:8px 10px; outline:none;
+    resize:none; overflow-y:auto; max-height:120px; line-height:1.4;
   }
   #chatInput::placeholder{ color:rgba(200,240,255,0.4); }
   #panelInputRow button{
@@ -364,6 +365,7 @@
   #panelInputRow button:hover{ background:rgba(0,255,255,0.2); }
   #entBtn{ font-weight:bold; letter-spacing:1px; }
   #convBtn.active{ background:rgba(0,255,140,0.18); border-color:#4dffb0; color:#7dffc4; box-shadow:0 0 10px rgba(80,255,170,0.4); }
+  #silentBtn.active{ background:rgba(255,205,60,0.18); border-color:#ffd23c; color:#ffdd80; box-shadow:0 0 10px rgba(255,210,80,0.4); }
   #micBtn.listening{
     background:rgba(255,70,70,0.28); border-color:#ff6464; color:#ff9a9a;
     animation:micPulse 1s infinite;
@@ -375,8 +377,8 @@
 
   /* ---------------- Responsive fine-tuning ---------------- */
   @media (max-width: 420px){
-    #panelInputRow{ padding:10px; gap:6px; }
-    #panelInputRow button{ padding:9px 10px; font-size:12px; min-width:40px; }
+    #panelInputRow{ padding:10px; gap:4px; }
+    #panelInputRow button{ padding:9px 6px; font-size:10px; min-width:34px; }
     #chatInput{ padding:9px 10px; min-width:0; font-size:16px; }
     #optionsPanelHeader{ padding:10px 12px; font-size:11px; }
     #chatLog{ padding:11px 12px; font-size:13px; gap:10px; }
@@ -512,7 +514,8 @@
     <div id="panelInputRow">
       <button id="entBtn" title="Send">ENT</button>
       <button id="convBtn" title="Continuous conversation">LOOP</button>
-      <input id="chatInput" type="text" placeholder="Type a message..." autocomplete="off">
+      <button id="silentBtn" title="Silent mode — mic input, text replies only, no voice">SILENT</button>
+      <textarea id="chatInput" rows="1" placeholder="Type a message..." autocomplete="off"></textarea>
       <button id="plusBtn" title="Attach">+</button>
       <button id="stopBtn" title="Stop">&#9208;</button>
       <button id="micBtn" title="Talk to J.A.R.V.I.S.">MIC</button>
@@ -616,10 +619,12 @@ const I18N = {
     cartesiaStatusDefault: 'Using browser voice (no key set)',
     communicateLabel: 'COMMUNICATE',
     chatInputPlaceholder: 'Type a message...',
-    entBtn: 'ENT', convBtn: 'LOOP', micBtn: 'MIC',
+    entBtn: 'ENT', convBtn: 'LOOP', micBtn: 'MIC', silentBtn: 'SILENT',
     attachCameraBtn: 'CAMERA', attachGalleryBtn: 'GALLERY', attachFilesBtn: 'FILES',
     imgTooMany: 'Up to 4 attachments per message, Sir.',
     imgFailed: 'Could not attach that file',
+    silentModeOn: 'Silent mode on, Sir — mic input, text replies only, no voice.',
+    silentModeOff: 'Silent mode off — voice replies restored.',
     readyMsg: 'J.A.R.V.I.S. READY',
     thinkingLabel: 'J.A.R.V.I.S. is processing',
     authEmailPlaceholder: 'PIN', authEnterBtn: 'Enter',
@@ -659,10 +664,12 @@ const I18N = {
     cartesiaStatusDefault: 'משתמש בקול דפדפן (לא הוגדר מפתח)',
     communicateLabel: 'תקשורת',
     chatInputPlaceholder: 'הקלד הודעה...',
-    entBtn: 'שלח', convBtn: 'לולאה', micBtn: 'מיק',
+    entBtn: 'שלח', convBtn: 'לולאה', micBtn: 'מיק', silentBtn: 'שקט',
     attachCameraBtn: 'מצלמה', attachGalleryBtn: 'גלריה', attachFilesBtn: 'קבצים',
     imgTooMany: 'עד 4 קבצים בהודעה אחת, אדוני.',
     imgFailed: 'לא הצלחתי לצרף את הקובץ',
+    silentModeOn: 'מצב שקט פעיל, אדוני — קלט מהמיקרופון, תשובות בטקסט בלבד, בלי קול.',
+    silentModeOff: 'מצב שקט כבוי — תשובות קוליות חזרו.',
     readyMsg: 'ג\'רוויס מוכן',
     thinkingLabel: 'ג\'רוויס מעבד',
     authEmailPlaceholder: 'קוד PIN', authEnterBtn: 'כניסה',
@@ -686,7 +693,7 @@ function applyLanguage(lang){
     planUpdateBtn:'planUpdateBtn', newChatBtn:'newChatBtn', brainUrlLabel:'brainUrlLabel',
     backendSaveBtn:'backendSaveBtn', backendClearBtn:'backendClearBtn', brainHint:'brainHint',
     voiceKeyLabel:'voiceKeyLabel', voiceIdLabel:'voiceIdLabel', cartesiaSaveBtn:'cartesiaSaveBtn', cartesiaClearBtn:'cartesiaClearBtn',
-    voiceHint:'voiceHint', communicateLabel:'communicateLabel', entBtn:'entBtn', convBtn:'convBtn', micBtn:'micBtn',
+    voiceHint:'voiceHint', communicateLabel:'communicateLabel', entBtn:'entBtn', convBtn:'convBtn', micBtn:'micBtn', silentBtn:'silentBtn',
     attachCameraBtn:'attachCameraBtn', attachGalleryBtn:'attachGalleryBtn', attachFilesBtn:'attachFilesBtn',
     readyMsg:'readyMsg', authEnterBtn:'authEnterBtn', decoySendBtn:'decoySendBtn'
   };
@@ -1417,9 +1424,9 @@ function animate(){
 /* ---------------------------------------------------------------------
    COMMUNICATION MODULE — persona, memory, Shopify, text + voice
 --------------------------------------------------------------------- */
-const SYSTEM_PROMPT_EN = 'You are J.A.R.V.I.S. — a highly capable, witty, loyal AI assistant with dry humor and unwavering professionalism, inspired by Tony Stark\'s A.I. Address the user as "Sir". Always reply in ENGLISH ONLY, in a refined, composed British-butler register — even if the user writes to you in Hebrew, understand it but always answer in English, never in Hebrew. Keep answers natural, conversational and spoken-friendly (this will be read aloud by text-to-speech): concise but thorough, no markdown, no asterisks, no bullet lists, plain sentences only — this is a spoken back-and-forth brainstorm, not a report. Right now your main job is acting as the user\'s e-commerce co-founder: help him think through niche selection, product picks, pricing, positioning, and store design BEFORE a store is built — ask sharp follow-up questions, challenge weak ideas, and keep the conversation moving like a real strategy session. He already runs a Shopify store (fdbp1y-1n.myshopify.com) and has built several dropshipping stores before (WindowMag, Elementa, ALIGNO Pro, RECOVR, AURA, VOLT X1), so you can draw on that pattern when useful. You have access to his connected Shopify store via tools — use them when the conversation calls for real data. You do NOT have access to Instagram, TikTok, or any other platform; if asked about those, say plainly they are not connected rather than pretending to act on them.';
+const SYSTEM_PROMPT_EN = 'You are J.A.R.V.I.S. — an advanced AI assistant modeled after Tony Stark\'s artificial intelligence, serving one user, addressed always as Sir. Your personality is sharp, witty, dry-humored, loyal, and professionally composed, like a British butler who also happens to be a world-class generalist. Always reply in ENGLISH ONLY — even if the user writes in Hebrew or any other language, understand it fully but reply exclusively in English, no exceptions. All responses must be plain spoken prose: no markdown, no asterisks, no bullet points, no headers, natural flowing conversational sentences only, since this will be read aloud by text-to-speech. Be confident but not arrogant, occasionally witty, always in control; challenge weak ideas respectfully but directly; ask sharp follow-up questions; think like a true companion, not a search engine. You help with everything, not one narrow specialty: everyday questions, programming and debugging, research, learning, planning, non-diagnostic health and fitness information, shopping, travel, creativity, writing, brainstorming, gaming, productivity, personal organization, finance education, general conversation, file analysis, decision support, and problem solving. Business and e-commerce strategy is one of many things you help with, not the whole job — the user has built several Shopify dropshipping stores before (WindowMag, Elementa, ALIGNO Pro, RECOVR, AURA, VOLT X1) and understands the game, so do not over-explain basics unless asked, and push him toward smarter, faster decisions when that topic comes up. You have access to his connected Shopify store via tools — use them when the conversation calls for real store data, never fabricate it. You do NOT have access to Instagram, TikTok, or any platform beyond what is explicitly wired up; say plainly when something is not connected rather than pretending to act on it.';
 
-const SYSTEM_PROMPT_HE = 'אתה ג\'רוויס — עוזר AI מוכשר, שנון, נאמן, עם הומור יבש ומקצועיות ללא פשרות, בהשראת ה-AI של טוני סטארק. פנה למשתמש כ"אדוני". תמיד תענה בעברית בלבד, ברוב עדין ומחונך — גם אם המשתמש כותב לך באנגלית, תבין אבל תמיד תענה בעברית, אף פעם לא באנגלית. שמור על תשובות טבעיות, שיחתיות וידידותיות להקראה (זה ייקרא בקול על ידי טקסט-לדיבור): תמציתי אך יסודי, בלי markdown, בלי כוכביות, בלי רשימות עם תבליטים, משפטים רגילים בלבד — זו סיעור מוחות מדובר הלוך ושוב, לא דוח. כרגע התפקיד העיקרי שלך הוא לשמש כשותף-מייסד למסחר אלקטרוני של המשתמש: לעזור לו לחשוב על בחירת נישה, מוצרים, תמחור, מיצוב ועיצוב חנות לפני שהחנות נבנית — לשאול שאלות המשך חדות, לאתגר רעיונות חלשים, ולשמור על השיחה זורמת כמו ישיבת אסטרטגיה אמיתית. הוא כבר מפעיל חנות Shopify (fdbp1y-1n.myshopify.com) ובנה כמה חנויות דרופשיפינג בעבר (WindowMag, Elementa, ALIGNO Pro, RECOVR, AURA, VOLT X1), אז אתה יכול להיעזר בדפוס הזה כשמתאים. יש לך גישה לחנות ה-Shopify המחוברת שלו דרך כלים — השתמש בהם כשהשיחה דורשת נתונים אמיתיים. אין לך גישה ל-Instagram, TikTok, או כל פלטפורמה אחרת; אם נשאלת על אלה, תגיד בפשטות שהן לא מחוברות במקום להעמיד פנים שאתה יכול לפעול בהן.';
+const SYSTEM_PROMPT_HE = 'אתה ג\'רוויס — עוזר AI מתקדם בהשראת הבינה המלאכותית של טוני סטארק, המשרת משתמש אחד ופונה אליו תמיד כ"אדוני". האישיות שלך חדה, שנונה, עם הומור יבש, נאמנה ומחונכת מקצועית — כמו באטלר בריטי שהוא גם גאון כללי ברמה עולמית. תמיד תענה בעברית בלבד — גם אם המשתמש כותב באנגלית או בכל שפה אחרת, תבין אותה במלואה אך תענה אך ורק בעברית, בלי יוצא מן הכלל. כל תשובה חייבת להיות פרוזה מדוברת פשוטה: בלי markdown, בלי כוכביות, בלי בולטים, בלי כותרות, משפטים טבעיים וזורמים בלבד, מכיוון שזה ייקרא בקול על ידי טקסט-לדיבור. היה בטוח בעצמך אך לא יהיר, שנון מדי פעם, תמיד בשליטה; אתגר רעיונות חלשים בכבוד אך בישירות; שאל שאלות המשך חדות; חשוב כמו שותף אמיתי, לא כמו מנוע חיפוש. אתה עוזר בהכל, לא בתחום צר אחד: שאלות יומיומיות, תכנות ודיבוג, מחקר, למידה, תכנון, מידע לא-אבחוני על בריאות וכושר, קניות, טיולים, יצירתיות, כתיבה, סיעור מוחות, גיימינג, פרודוקטיביות, ארגון אישי, חינוך פיננסי, שיחה כללית, ניתוח קבצים, תמיכה בקבלת החלטות, ופתרון בעיות. אסטרטגיה עסקית ומסחר אלקטרוני הם רק חלק אחד ממה שאתה עוזר בו, לא כל התפקיד — המשתמש בנה כמה חנויות דרופשיפינג בעבר (WindowMag, Elementa, ALIGNO Pro, RECOVR, AURA, VOLT X1) ומבין את המשחק, אז אל תסביר יותר מדי יסודות אלא אם מתבקש, ותדחוף אותו להחלטות חכמות ומהירות יותר כשהנושא עולה. יש לך גישה לחנות ה-Shopify המחוברת שלו דרך כלים — השתמש בהם כשהשיחה דורשת נתוני חנות אמיתיים, לעולם אל תמציא נתונים. אין לך גישה ל-Instagram, TikTok, או כל פלטפורמה שלא חוברה במפורש; אם נשאלת על כאלה, תגיד בפשטות שהן לא מחוברות במקום להעמיד פנים שאתה יכול לפעול בהן.';
 
 function planToMemoryText(plan){
   if(!plan) return '';
@@ -1461,6 +1468,7 @@ function getSystemPrompt(calendarAvailable){
 let isThinking = false;
 let isSpeaking = false;
 let conversationMode = false;
+let silentMode = false; // mic in, text-only replies, no TTS — for offices/nights/meetings
 let currentAbortController = null; // in-flight Claude request, if any
 let activeAudio = null;            // currently-playing Cartesia <audio>, if any
 let convRestartTimer = null;       // pending "listen again" timer in LOOP mode
@@ -1664,6 +1672,7 @@ const chatInput = document.getElementById('chatInput');
 const entBtn = document.getElementById('entBtn');
 const micBtn = document.getElementById('micBtn');
 const convBtn = document.getElementById('convBtn');
+const silentBtn = document.getElementById('silentBtn');
 const optionsBtn = document.getElementById('optionsBtn');
 const optionsPanel = document.getElementById('optionsPanel');
 const closeOptions = document.getElementById('closeOptions');
@@ -1782,11 +1791,24 @@ convBtn.addEventListener('click', ()=>{
   conversationMode = !conversationMode;
   convBtn.classList.toggle('active', conversationMode);
   if(conversationMode){
+    if(silentMode){ silentMode = false; silentBtn.classList.remove('active'); }
     addMessage('system', 'Continuous conversation mode on — no need to press the mic each time.');
     const hadHistory = chatHistory.length > 0;
     maybeGreet();
     if(hadHistory) startListening(); // otherwise the greeting's TTS will trigger listening when it finishes
   }
+});
+
+silentBtn.addEventListener('click', ()=>{
+  silentMode = !silentMode;
+  silentBtn.classList.toggle('active', silentMode);
+  if(silentMode && conversationMode){
+    conversationMode = false;
+    convBtn.classList.remove('active');
+  }
+  addMessage('system', t(silentMode ? 'silentModeOn' : 'silentModeOff'));
+  if(window.speechSynthesis) window.speechSynthesis.cancel();
+  if(silentMode && activeAudio){ try{ activeAudio.pause(); }catch(e){} }
 });
 
 /* --- Speech synthesis (TTS) — Cartesia with browser fallback --- */
@@ -2125,6 +2147,10 @@ function speakWithBrowser(text, onStart){
 async function speak(text, onStart){
   let started = false;
   const fireOnce = ()=>{ if(!started){ started = true; if(onStart) onStart(); } };
+  if(silentMode){
+    fireOnce(); // text-only reply, no voice — Silent Mode
+    return;
+  }
   try{
     if(cartesiaApiKey){
       await speakWithCartesia(text, fireOnce);
@@ -2451,11 +2477,38 @@ cameraFileInput.addEventListener('change', ()=> handlePickedFiles(cameraFileInpu
 galleryFileInput.addEventListener('change', ()=> handlePickedFiles(galleryFileInput));
 docFileInput.addEventListener('change', ()=> handlePickedFiles(docFileInput));
 
+/* --- Chat input: auto-resize + draft autosave/restore, so nothing typed is ever lost --- */
+const DRAFT_KEY = 'jarvis:draft';
+let draftSaveTimer = null;
+
+function autoResizeChatInput(){
+  chatInput.style.height = 'auto';
+  chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+}
+function scheduleDraftSave(){
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(()=>{
+    const val = chatInput.value;
+    if(val) Store.set(DRAFT_KEY, val).catch(()=>{});
+    else Store.delete(DRAFT_KEY).catch(()=>{});
+  }, 300);
+}
+chatInput.addEventListener('input', ()=>{ autoResizeChatInput(); scheduleDraftSave(); });
+(async function restoreDraft(){
+  try{
+    const r = await Store.get(DRAFT_KEY);
+    if(r && r.value){ chatInput.value = r.value; autoResizeChatInput(); }
+  }catch(err){ /* no draft saved */ }
+})();
+
 async function handleSend(){
   const text = chatInput.value.trim();
   const images = pendingImages.slice();
   if((!text && !images.length) || isThinking) return;
   chatInput.value = '';
+  autoResizeChatInput();
+  clearTimeout(draftSaveTimer);
+  Store.delete(DRAFT_KEY).catch(()=>{});
   pendingImages = [];
   renderImgPreviews();
   addMessage('user', text, images);
@@ -2476,7 +2529,9 @@ async function handleSend(){
   showReply();
 }
 entBtn.addEventListener('click', handleSend);
-chatInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') handleSend(); });
+chatInput.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); }
+});
 document.getElementById('stopBtn').addEventListener('click', stopJarvis);
 
 /* --- Restore memory on boot --- */

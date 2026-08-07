@@ -3,24 +3,35 @@
     "main": {
       "type": "main-product",
       "blocks": {
-        "title": { "type": "title", "settings": {} },
+        "title": {
+          "type": "title",
+          "settings": {}
+        },
         "rating": {
           "type": "rating",
-          "settings": { "rating": "4.8", "label": "1,284 reviews" }
+          "settings": {
+            "rating": "4.8",
+            "label": "1,284 reviews"
+          }
         },
         "price": {
           "type": "price",
-          "settings": { "show_saving": true, "show_tax_note": true }
+          "settings": {
+            "show_saving": true,
+            "show_tax_note": true
+          }
         },
         "short_text": {
           "type": "short_text",
           "settings": {
-            "text": "<p>A one-line summary of why this product is worth buying.</p>"
+            "text": "<p>Press once and it stirs your drink for you — coffee, protein, cocoa or any powder, mixed smooth in seconds.</p>"
           }
         },
         "variant_picker": {
           "type": "variant_picker",
-          "settings": { "picker_type": "button" }
+          "settings": {
+            "picker_type": "button"
+          }
         },
         "buy_buttons": {
           "type": "buy_buttons",
@@ -33,17 +44,29 @@
         },
         "highlight-1": {
           "type": "highlight",
-          "settings": { "icon": "truck", "text": "Free tracked shipping worldwide" }
+          "settings": {
+            "icon": "zap",
+            "text": "One-touch automatic stirring"
+          }
         },
         "highlight-2": {
           "type": "highlight",
-          "settings": { "icon": "refresh", "text": "30-day free returns" }
+          "settings": {
+            "icon": "truck",
+            "text": "Free tracked shipping worldwide"
+          }
         },
         "highlight-3": {
           "type": "highlight",
-          "settings": { "icon": "lock", "text": "Secure checkout" }
+          "settings": {
+            "icon": "refresh",
+            "text": "30-day free returns"
+          }
         },
-        "description": { "type": "description", "settings": {} },
+        "description": {
+          "type": "description",
+          "settings": {}
+        },
         "collapsible-shipping": {
           "type": "collapsible",
           "settings": {
@@ -67,7 +90,7 @@
           "settings": {
             "heading": "Specifications",
             "icon": "tag",
-            "content": "<p>Add materials, dimensions, weight and what is included in the box.</p>",
+            "content": "<p>Stainless steel body with a BPA-free interior, battery powered, with a touch panel and LCD temperature display on the handle.</p>",
             "open": false
           }
         }
@@ -109,9 +132,9 @@
         "benefit-1": {
           "type": "benefit",
           "settings": {
-            "icon": "truck",
-            "title": "Free worldwide shipping",
-            "text": "<p>Tracked delivery on every order, with no minimum spend.</p>"
+            "icon": "zap",
+            "title": "Stirs in seconds",
+            "text": "<p>No spoon needed. One press mixes hot or cold drinks perfectly.</p>"
           }
         },
         "benefit-2": {
@@ -131,7 +154,11 @@
           }
         }
       },
-      "block_order": ["benefit-1", "benefit-2", "benefit-3"],
+      "block_order": [
+        "benefit-1",
+        "benefit-2",
+        "benefit-3"
+      ],
       "settings": {
         "heading": "",
         "heading_alignment": "center",
@@ -155,26 +182,51 @@
       "blocks": {
         "spec-1": {
           "type": "spec",
-          "settings": { "label": "Material", "value": "Anodised aluminium and recycled ABS" }
+          "settings": {
+            "label": "Material",
+            "value": "Stainless steel body, BPA-free interior"
+          }
         },
         "spec-2": {
           "type": "spec",
-          "settings": { "label": "Dimensions", "value": "182 × 74 × 9 mm" }
+          "settings": {
+            "label": "Capacity",
+            "value": "400 ml"
+          }
         },
         "spec-3": {
           "type": "spec",
-          "settings": { "label": "Weight", "value": "245 g" }
+          "settings": {
+            "label": "Power",
+            "value": "Battery powered, one-touch button"
+          }
         },
         "spec-4": {
           "type": "spec",
-          "settings": { "label": "In the box", "value": "Device, USB-C cable, quick start guide" }
+          "settings": {
+            "label": "Display",
+            "value": "LCD temperature readout on the handle"
+          }
+        },
+        "spec-5": {
+          "type": "spec",
+          "settings": {
+            "label": "In the box",
+            "value": "Smart mug, lid, user guide"
+          }
         }
       },
-      "block_order": ["spec-1", "spec-2", "spec-3", "spec-4"],
+      "block_order": [
+        "spec-1",
+        "spec-2",
+        "spec-3",
+        "spec-4",
+        "spec-5"
+      ],
       "settings": {
         "heading": "Specifications",
         "heading_alignment": "center",
-        "note": "Measurements are approximate and may vary slightly.",
+        "note": "Hand wash only — do not submerge the handle.",
         "content_width": "narrow",
         "padding_top": 56,
         "padding_bottom": 56,
@@ -210,7 +262,11 @@
           }
         }
       },
-      "block_order": ["item-1", "item-2", "item-3"],
+      "block_order": [
+        "item-1",
+        "item-2",
+        "item-3"
+      ],
       "settings": {
         "heading": "Shipping and delivery",
         "heading_alignment": "center",
@@ -231,8 +287,8 @@
           "type": "review",
           "settings": {
             "rating": "5",
-            "title": "Exactly as described",
-            "text": "<p>Arrived faster than expected and the quality is genuinely better than I hoped.</p>",
+            "title": "No more spoons",
+            "text": "<p>I use it every morning for coffee and after the gym for protein. Mixes better than shaking.</p>",
             "author": "Sarah M.",
             "verified": true
           }
@@ -241,8 +297,8 @@
           "type": "review",
           "settings": {
             "rating": "5",
-            "title": "Worth every penny",
-            "text": "<p>This has become part of my daily routine. Packaging was excellent too.</p>",
+            "title": "Keeps my coffee hot",
+            "text": "<p>The temperature display is the part I did not expect to love.</p>",
             "author": "James T.",
             "verified": true
           }
@@ -251,14 +307,18 @@
           "type": "review",
           "settings": {
             "rating": "4.5",
-            "title": "Great support",
-            "text": "<p>I had a question before ordering and got a helpful reply the same day.</p>",
+            "title": "Great gift",
+            "text": "<p>Bought one for myself and ended up ordering two more as presents.</p>",
             "author": "Priya K.",
             "verified": true
           }
         }
       },
-      "block_order": ["review-1", "review-2", "review-3"],
+      "block_order": [
+        "review-1",
+        "review-2",
+        "review-3"
+      ],
       "settings": {
         "subheading": "Reviews",
         "heading": "What customers say",
@@ -285,26 +345,30 @@
         "q-1": {
           "type": "question",
           "settings": {
-            "question": "How long does shipping take?",
-            "answer": "<p>Orders are dispatched within 24 hours. Delivery usually takes 5–9 business days, and every order includes tracking.</p>"
+            "question": "How does the stirring work?",
+            "answer": "<p>A magnetic disc in the base spins when you press the button on the handle, mixing your drink in a few seconds.</p>"
           }
         },
         "q-2": {
           "type": "question",
           "settings": {
-            "question": "What is your return policy?",
-            "answer": "<p>You have 30 days from delivery to request a return. Items must be unused and in their original packaging.</p>"
+            "question": "Can I put it in the dishwasher?",
+            "answer": "<p>No. Rinse the inside under the tap and wipe the outside — the handle should not be submerged.</p>"
           }
         },
         "q-3": {
           "type": "question",
           "settings": {
-            "question": "Do you ship internationally?",
-            "answer": "<p>Yes, we ship worldwide. Import duties may apply depending on your country.</p>"
+            "question": "Does it work with cold drinks?",
+            "answer": "<p>Yes. It mixes protein shakes, iced coffee and powdered drinks just as well as hot ones.</p>"
           }
         }
       },
-      "block_order": ["q-1", "q-2", "q-3"],
+      "block_order": [
+        "q-1",
+        "q-2",
+        "q-3"
+      ],
       "settings": {
         "heading": "Frequently asked questions",
         "heading_alignment": "center",
@@ -319,5 +383,12 @@
       }
     }
   },
-  "order": ["main", "benefits", "specifications", "shipping", "reviews", "faq"]
+  "order": [
+    "main",
+    "benefits",
+    "specifications",
+    "shipping",
+    "reviews",
+    "faq"
+  ]
 }

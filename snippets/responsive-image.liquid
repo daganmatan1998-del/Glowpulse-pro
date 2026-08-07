@@ -5,7 +5,9 @@
   Accepts:
   - image:          {Object} desktop image (optional — falls back to a placeholder)
   - image_mobile:   {Object} optional art-directed mobile image
-  - ratio_desktop:  {String} square | portrait | tall | landscape | wide | ultrawide
+  - preset:         {String} handle of a bundled theme image, used only when no
+                    image has been uploaded. See PRESETS below.
+  - ratio_desktop:  {String} square | portrait | tall | xtall | landscape | wide | ultrawide
   - ratio_mobile:   {String} same options (defaults to ratio_desktop)
   - fit:            {String} cover | contain (default cover)
   - radius:         {Number} border radius in px
@@ -35,6 +37,8 @@
       assign ratio_css_desktop = '4 / 5'
     when 'tall'
       assign ratio_css_desktop = '3 / 4'
+    when 'xtall'
+      assign ratio_css_desktop = '2 / 3'
     when 'landscape'
       assign ratio_css_desktop = '4 / 3'
     when 'wide'
@@ -50,6 +54,8 @@
       assign ratio_css_mobile = '4 / 5'
     when 'tall'
       assign ratio_css_mobile = '3 / 4'
+    when 'xtall'
+      assign ratio_css_mobile = '2 / 3'
     when 'landscape'
       assign ratio_css_mobile = '4 / 3'
     when 'wide'
@@ -57,6 +63,43 @@
     when 'ultrawide'
       assign ratio_css_mobile = '21 / 9'
   endcase
+
+  # PRESETS — images shipped with the theme, in assets/ as <handle>-lg.jpg and
+  # <handle>-sm.jpg. They are only used when the merchant has not uploaded an
+  # image of their own, so an upload always wins.
+  assign use_preset = false
+  if image == blank and preset != blank and preset != 'none'
+    assign use_preset = true
+    assign preset_w = 1200
+    assign preset_h = 1500
+    assign preset_sm_w = 700
+    assign preset_alt = ''
+    case preset
+      when 'banner-elevate'
+        assign preset_w = 1122
+        assign preset_h = 1402
+        assign preset_alt = 'Elevate your everyday — the self-stirring smart mug on a marble surface'
+      when 'lifestyle-family'
+        assign preset_w = 1086
+        assign preset_h = 1448
+        assign preset_alt = 'A parent drinking from the smart mug at the breakfast table with two children'
+      when 'lifestyle-gym'
+        assign preset_w = 1086
+        assign preset_h = 1448
+        assign preset_alt = 'An athlete drinking from the smart mug during a gym session'
+      when 'feature-chart'
+        assign preset_w = 1024
+        assign preset_h = 1536
+        assign preset_sm_w = 800
+        assign preset_alt = 'Feature overview: automatic stirring, one-touch operation, battery powered, easy to clean'
+      when 'detail-lcd'
+        assign preset_w = 960
+        assign preset_h = 960
+        assign preset_alt = 'Close-up of the mug stirring coffee, with the LCD temperature display on the handle'
+    endcase
+    assign preset_lg = preset | append: '-lg.jpg'
+    assign preset_sm = preset | append: '-sm.jpg'
+  endif
 -%}
 
 <div
@@ -93,6 +136,17 @@
         {% if priority %}fetchpriority="high"{% endif %}
       >
     </picture>
+  {%- elsif use_preset -%}
+    <img
+      src="{{ preset_lg | asset_url }}"
+      srcset="{{ preset_sm | asset_url }} {{ preset_sm_w }}w, {{ preset_lg | asset_url }} {{ preset_w }}w"
+      sizes="{{ img_sizes }}"
+      alt="{{ alt | default: preset_alt | escape }}"
+      width="{{ preset_w }}"
+      height="{{ preset_h }}"
+      loading="{{ img_loading }}"
+      {% if priority %}fetchpriority="high"{% endif %}
+    >
   {%- else -%}
     {{ placeholder_name | placeholder_svg_tag: 'placeholder-svg' }}
   {%- endif -%}

@@ -55,6 +55,7 @@
           --gallery-cols-desktop: {{ st.columns_desktop }};
           --gallery-gap: {{ st.gap_mobile }}px;
           --gallery-gap-desktop: {{ st.gap_desktop }}px;
+          {% if st.media_max_width > 0 %}--gallery-max-width: {{ st.media_max_width }}px;{% endif %}
         "
       >
         {%- for block in section.blocks -%}
@@ -66,6 +67,7 @@
             {% render 'responsive-image',
               image: block.settings.image,
               image_mobile: block.settings.image_mobile,
+              preset: block.settings.preset_image,
               ratio_desktop: st.image_ratio_desktop,
               ratio_mobile: st.image_ratio_mobile,
               fit: st.image_fit,
@@ -159,6 +161,7 @@
         { "value": "square", "label": "Square (1:1)" },
         { "value": "portrait", "label": "Portrait (4:5)" },
         { "value": "tall", "label": "Tall (3:4)" },
+        { "value": "xtall", "label": "Extra tall (2:3)" },
         { "value": "landscape", "label": "Landscape (4:3)" },
         { "value": "wide", "label": "Wide (16:9)" }
       ],
@@ -172,6 +175,7 @@
         { "value": "square", "label": "Square (1:1)" },
         { "value": "portrait", "label": "Portrait (4:5)" },
         { "value": "tall", "label": "Tall (3:4)" },
+        { "value": "xtall", "label": "Extra tall (2:3)" },
         { "value": "landscape", "label": "Landscape (4:3)" }
       ],
       "default": "square"
@@ -185,6 +189,17 @@
         { "value": "contain", "label": "Show the whole image" }
       ],
       "default": "cover"
+    },
+    {
+      "type": "range",
+      "id": "media_max_width",
+      "min": 0,
+      "max": 1400,
+      "step": 20,
+      "unit": "px",
+      "label": "Maximum image area width",
+      "default": 0,
+      "info": "Set to 0 to fill the section width."
     },
     {
       "type": "range",
@@ -329,6 +344,21 @@
           "id": "image_mobile",
           "label": "Mobile image",
           "info": "Optional."
+        },
+        {
+          "type": "select",
+          "id": "preset_image",
+          "label": "Bundled image",
+          "info": "Used when no image is uploaded above. Uploading your own always wins.",
+          "options": [
+            { "value": "none", "label": "None" },
+            { "value": "banner-elevate", "label": "Banner — Elevate your everyday" },
+            { "value": "lifestyle-family", "label": "Lifestyle — Family breakfast" },
+            { "value": "lifestyle-gym", "label": "Lifestyle — Gym" },
+            { "value": "feature-chart", "label": "Feature chart — How it works" },
+            { "value": "detail-lcd", "label": "Detail — Stirring and LCD display" }
+          ],
+          "default": "none"
         },
         {
           "type": "text",

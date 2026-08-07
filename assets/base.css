@@ -2718,3 +2718,9 @@ html.no-js .js-only {
   max-width: 560px;
   margin-inline: auto;
 }
+
+/* Optional cap on the image gallery, mirroring the hero's max width setting. */
+.image-gallery {
+  max-width: var(--gallery-max-width, none);
+  margin-inline: auto;
+}

@@ -30,8 +30,9 @@ shopify theme push --unpublished
 2. **Settings → Policies** — fill these in; the footer's *Store policies* block lists them
    automatically.
 3. **Customize → Featured product** — pick the product you want on the homepage.
-4. **Customize → Hero** — upload your image(s). Each Image block takes a separate desktop
-   and mobile image so nothing is cropped badly on phones.
+4. **Customize → Hero** — the theme ships with product photography already in place
+   (see *Bundled images* below). Swap any of it for your own: each Image block has an
+   image picker plus a separate mobile image, so nothing is cropped badly on phones.
 5. **Theme settings → Colors / Typography** — set your brand palette and fonts.
 
 ## Structure
@@ -65,6 +66,31 @@ Each one can be added, removed, reordered, hidden and restyled in the theme edit
 | Trust badges | Payment / guarantee badges, image or icon |
 | Featured collection | Product grid from a chosen collection |
 | Rich text, Newsletter, Contact form, Announcement bar | — |
+
+### Bundled images
+
+Five optimised images ship in `assets/` and are used across the homepage out of the box:
+
+| Handle | Used by default in | Native size |
+| --- | --- | --- |
+| `banner-elevate` | Hero | 1122 x 1402 (4:5) |
+| `detail-lcd` | Image with text | 960 x 960 (1:1) |
+| `lifestyle-family` | Image gallery — "Made for real life" | 1086 x 1448 (3:4) |
+| `lifestyle-gym` | Image gallery — "Made for real life" | 1086 x 1448 (3:4) |
+| `feature-chart` | Image gallery — "How it works" | 1024 x 1536 (2:3) |
+
+Every section that shows one has two controls:
+
+- **Image** — an image picker. Whatever you upload here always wins.
+- **Bundled image** — a dropdown listing all five, so you can swap which one a section
+  shows without uploading anything. Set it to *None* to fall back to a placeholder.
+
+Each image ships at two widths (`-lg` and `-sm`) and is served through `srcset`, so phones
+download the small one. The section defaults use each image's exact native aspect ratio, so
+nothing is cropped — if you swap images between sections, adjust *Image shape* to match.
+
+The product page deliberately carries none of these: its gallery shows the real images from
+the product you select in Shopify.
 
 ### Product page
 

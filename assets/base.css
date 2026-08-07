@@ -1206,6 +1206,11 @@ textarea.field__input {
 }
 
 .cart-item__remove {
+  /* Padding + matching negative margin grows the tap target to ~41px
+     without moving anything around it. */
+  align-self: flex-start;
+  padding: 10px 6px;
+  margin: -10px -6px 0;
   font-size: 0.8125rem;
   color: var(--color-text-muted);
   text-decoration: underline;

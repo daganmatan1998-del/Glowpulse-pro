@@ -1,0 +1,13 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-404",
+      "settings": {
+        "heading": "404",
+        "text": "The page you are looking for does not exist or has moved.",
+        "button_label": "Continue shopping"
+      }
+    }
+  },
+  "order": ["main"]
+}

@@ -1,0 +1,51 @@
+{%- comment -%}
+  Renders an accessible quantity stepper.
+
+  Accepts:
+  - input_id: {String} unique DOM id (required)
+  - name:     {String} form field name (default 'quantity')
+  - value:    {Number} starting value (default 1)
+  - min:      {Number} minimum (default 1)
+  - max:      {Number} maximum (optional)
+  - line:     {Number} cart line index, enables cart updates (optional)
+  - form:     {String} id of the form this input belongs to (optional)
+  - small:    {Boolean} compact size for cart rows (default false)
+
+  Usage:
+  {% render 'quantity-input', input_id: 'Quantity-1', value: 1 %}
+{%- endcomment -%}
+
+<quantity-input class="quantity{% if small %} quantity--small{% endif %}">
+  <button
+    type="button"
+    class="quantity__button"
+    data-action="decrease"
+    aria-label="{{ 'products.product.decrease_quantity' | t }}"
+  >
+    {% render 'icon', name: 'minus' %}
+  </button>
+
+  <label class="visually-hidden" for="{{ input_id }}">{{ 'products.product.quantity' | t }}</label>
+  <input
+    id="{{ input_id }}"
+    class="quantity__input"
+    type="number"
+    inputmode="numeric"
+    name="{{ name | default: 'quantity' }}"
+    value="{{ value | default: 1 }}"
+    min="{{ min | default: 1 }}"
+    {% if max %}max="{{ max }}"{% endif %}
+    step="1"
+    {% if form %}form="{{ form }}"{% endif %}
+    {% if line %}data-cart-quantity data-line="{{ line }}"{% endif %}
+  >
+
+  <button
+    type="button"
+    class="quantity__button"
+    data-action="increase"
+    aria-label="{{ 'products.product.increase_quantity' | t }}"
+  >
+    {% render 'icon', name: 'plus' %}
+  </button>
+</quantity-input>

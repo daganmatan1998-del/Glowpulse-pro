@@ -1,0 +1,20 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-collection",
+      "settings": {
+        "show_description": true,
+        "heading_alignment": "center",
+        "show_toolbar": true,
+        "products_per_page": 16,
+        "columns_mobile": 2,
+        "columns_desktop": 4,
+        "image_ratio": "square",
+        "card_alignment": "left",
+        "show_vendor": false,
+        "show_badges": true
+      }
+    }
+  },
+  "order": ["main"]
+}

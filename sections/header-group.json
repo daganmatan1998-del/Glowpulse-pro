@@ -1,0 +1,57 @@
+{
+  "name": "Header",
+  "type": "header",
+  "sections": {
+    "announcement-bar": {
+      "type": "announcement-bar",
+      "blocks": {
+        "announcement-1": {
+          "type": "announcement",
+          "settings": {
+            "text": "Free worldwide shipping — 30-day returns",
+            "icon": "truck"
+          }
+        }
+      },
+      "block_order": ["announcement-1"],
+      "settings": {
+        "background_color": "#14161a",
+        "text_color": "#ffffff",
+        "font_size": 13,
+        "rotate": true,
+        "rotate_speed": 5
+      }
+    },
+    "header": {
+      "type": "header",
+      "blocks": {
+        "contact": {
+          "type": "contact",
+          "settings": {
+            "heading": "Need help?",
+            "text": "<p>We reply within 24 hours.</p>"
+          }
+        }
+      },
+      "block_order": ["contact"],
+      "settings": {
+        "logo_position": "left",
+        "logo_width_mobile": 110,
+        "logo_width_desktop": 140,
+        "menu": "main-menu",
+        "drawer_menu": "main-menu",
+        "drawer_heading": "Menu",
+        "drawer_position": "right",
+        "show_search": true,
+        "sticky": true,
+        "header_height_mobile": 62,
+        "header_height_desktop": 76,
+        "background_color": "#ffffff",
+        "text_color": "#14161a",
+        "border_color": "#e4e4e1",
+        "border_width": 1
+      }
+    }
+  },
+  "order": ["announcement-bar", "header"]
+}

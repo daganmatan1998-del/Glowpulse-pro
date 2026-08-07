@@ -1,0 +1,154 @@
+<!doctype html>
+<html class="no-js" lang="{{ request.locale.iso_code }}">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="{{ settings.color_background }}">
+    <link rel="canonical" href="{{ canonical_url }}">
+
+    {%- if settings.favicon != blank -%}
+      <link rel="icon" type="image/png" href="{{ settings.favicon | image_url: width: 32, height: 32 }}">
+      <link rel="apple-touch-icon" href="{{ settings.favicon | image_url: width: 180, height: 180 }}">
+    {%- endif -%}
+
+    <link rel="preconnect" href="https://cdn.shopify.com" crossorigin>
+
+    <title>
+      {{ page_title }}
+      {%- if current_tags %} &ndash; {{ 'general.meta.tags' | t: tags: current_tags | join: ', ' }}{% endif -%}
+      {%- if current_page != 1 %} &ndash; {{ 'general.meta.page' | t: page: current_page }}{% endif -%}
+      {%- unless page_title contains shop.name %} &ndash; {{ shop.name }}{% endunless -%}
+    </title>
+
+    {%- if page_description -%}
+      <meta name="description" content="{{ page_description | escape }}">
+    {%- endif -%}
+
+    {% render 'meta-tags' %}
+
+    {%- liquid
+      assign body_font = settings.font_body
+      assign body_font_bold = body_font | font_modify: 'weight', 'bold'
+      assign body_font_italic = body_font | font_modify: 'style', 'italic'
+      assign body_font_bold_italic = body_font_bold | font_modify: 'style', 'italic'
+      assign heading_font = settings.font_heading
+      assign heading_font_weighted = heading_font | font_modify: 'weight', settings.font_heading_weight
+    -%}
+
+    {{ body_font | font_face: font_display: 'swap' }}
+    {{ body_font_bold | font_face: font_display: 'swap' }}
+    {{ body_font_italic | font_face: font_display: 'swap' }}
+    {{ body_font_bold_italic | font_face: font_display: 'swap' }}
+    {{ heading_font | font_face: font_display: 'swap' }}
+    {%- if heading_font_weighted -%}
+      {{ heading_font_weighted | font_face: font_display: 'swap' }}
+    {%- endif -%}
+
+    <style>
+      :root {
+        /* Layout */
+        --page-width: {{ settings.page_width }}px;
+        --page-gutter: {{ settings.page_gutter_mobile }}px;
+        --header-offset: 70px;
+
+        /* Corners */
+        --radius-base: {{ settings.radius_base }}px;
+        --radius-button: {{ settings.radius_button }}px;
+        --radius-input: {{ settings.radius_input }}px;
+
+        /* Colours */
+        --color-background: {{ settings.color_background }};
+        --color-background-alt: {{ settings.color_background_alt }};
+        --color-text: {{ settings.color_text }};
+        --color-text-muted: {{ settings.color_text_muted }};
+        --color-border: {{ settings.color_border }};
+        --color-accent: {{ settings.color_accent }};
+        --color-button-background: {{ settings.color_button_background }};
+        --color-button-text: {{ settings.color_button_text }};
+        --color-button-alt-background: {{ settings.color_button_alt_background }};
+        --color-button-alt-text: {{ settings.color_button_alt_text }};
+        --color-sale: {{ settings.color_sale }};
+        --color-badge-background: {{ settings.color_badge_background }};
+        --color-badge-text: {{ settings.color_badge_text }};
+        --color-star: {{ settings.color_star }};
+
+        /* Typography */
+        --font-body-family: {{ body_font.family }}, {{ body_font.fallback_families }};
+        --font-body-style: {{ body_font.style }};
+        --font-body-weight: {{ body_font.weight }};
+        --font-body-size: {{ settings.font_body_size_mobile }}px;
+        --font-body-line-height: {{ settings.font_body_line_height | divided_by: 100.0 }};
+
+        --font-heading-family: {{ heading_font.family }}, {{ heading_font.fallback_families }};
+        --font-heading-style: {{ heading_font.style }};
+        --font-heading-weight: {{ settings.font_heading_weight }};
+        --font-heading-scale: {{ settings.font_heading_scale_mobile | divided_by: 100.0 }};
+        --font-heading-letter-spacing: {{ settings.font_heading_letter_spacing }}px;
+        --font-heading-transform: {{ settings.font_heading_transform }};
+
+        /* Buttons */
+        --button-height: {{ settings.button_height_mobile }}px;
+        --button-weight: {{ settings.button_weight }};
+        --button-letter-spacing: {{ settings.button_letter_spacing }}px;
+        --button-transform: {{ settings.button_transform }};
+      }
+
+      @media screen and (min-width: 750px) {
+        :root {
+          --page-gutter: {{ settings.page_gutter_desktop }}px;
+          --font-body-size: {{ settings.font_body_size_desktop }}px;
+          --font-heading-scale: {{ settings.font_heading_scale_desktop | divided_by: 100.0 }};
+          --button-height: {{ settings.button_height_desktop }}px;
+        }
+      }
+    </style>
+
+    <link rel="stylesheet" href="{{ 'base.css' | asset_url }}">
+
+    <script>
+      window.themeRoutes = {
+        root: {{ routes.root_url | json }},
+        cart: {{ routes.cart_url | json }},
+        cartAdd: {{ routes.cart_add_url | json }},
+        cartChange: {{ routes.cart_change_url | json }},
+        cartUpdate: {{ routes.cart_update_url | json }},
+        predictiveSearch: {{ routes.predictive_search_url | json }}
+      };
+      window.themeStrings = {
+        addToCart: {{ 'products.product.add_to_cart' | t | json }},
+        soldOut: {{ 'products.product.sold_out' | t | json }},
+        unavailable: {{ 'products.product.unavailable' | t | json }},
+        savePercent: {{ 'products.product.save_percent' | t: percent: '__PCT__' | json }},
+        cartError: {{ 'general.accessibility.error' | t | json }},
+        moneyFormat: {{ shop.money_format | strip_html | json }}
+      };
+    </script>
+
+    <script src="{{ 'theme.js' | asset_url }}" defer="defer"></script>
+
+    {{ content_for_header }}
+  </head>
+
+  <body class="template-{{ template.name | handle }}{% if settings.animations_enabled %} animations-enabled{% endif %}">
+    <a class="skip-to-content button button--small" href="#MainContent">
+      {{ 'general.accessibility.skip_to_content' | t }}
+    </a>
+
+    {% sections 'header-group' %}
+
+    <main id="MainContent" class="main-content" role="main" tabindex="-1">
+      {{ content_for_layout }}
+    </main>
+
+    {% sections 'footer-group' %}
+
+    {%- if settings.cart_type == 'drawer' -%}
+      {% section 'cart-drawer' %}
+    {%- endif -%}
+
+    <ul hidden>
+      <li id="a11y-refresh-page-message">{{ 'general.accessibility.refresh_page' | t }}</li>
+    </ul>
+  </body>
+</html>

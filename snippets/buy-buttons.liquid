@@ -1,0 +1,81 @@
+{%- comment -%}
+  Renders the quantity stepper, add-to-cart button and optional dynamic
+  checkout buttons (Shop Pay, PayPal, Google Pay …).
+
+  Accepts:
+  - product:       {Object} product (required)
+  - section_id:    {String} owning section id (required)
+  - show_quantity: {Boolean} (default true)
+  - show_dynamic:  {Boolean} show Buy it now / dynamic checkout (default true)
+  - button_label:  {String} override for the add-to-cart label (optional)
+  - full_width:    {Boolean} stretch the button (default true)
+
+  Usage:
+  {% render 'buy-buttons', product: product, section_id: section.id %}
+{%- endcomment -%}
+
+{%- liquid
+  assign variant = product.selected_or_first_available_variant
+
+  if show_quantity == nil
+    assign show_quantity = true
+  endif
+  if show_dynamic == nil
+    assign show_dynamic = true
+  endif
+  if full_width == nil
+    assign full_width = true
+  endif
+
+  assign default_label = 'products.product.add_to_cart' | t
+  assign label = button_label | default: default_label
+
+  if variant == nil
+    assign label = 'products.product.unavailable' | t
+    assign is_disabled = true
+  elsif variant.available == false
+    assign label = 'products.product.sold_out' | t
+    assign is_disabled = true
+  else
+    assign is_disabled = false
+  endif
+
+  assign form_id = 'product-form-' | append: section_id
+  assign quantity_id = 'Quantity-' | append: section_id
+-%}
+
+<product-form class="product-form" data-section="{{ section_id }}">
+  {%- form 'product', product, id: form_id, novalidate: 'novalidate' -%}
+    <input
+      type="hidden"
+      name="id"
+      id="VariantId-{{ section_id }}"
+      value="{{ variant.id }}"
+      {% if is_disabled %}disabled{% endif %}
+    >
+
+    <div class="product-form__controls">
+      {%- if show_quantity -%}
+        {% render 'quantity-input', input_id: quantity_id, value: 1, min: 1 %}
+      {%- endif -%}
+
+      <button
+        type="submit"
+        name="add"
+        class="button button--large{% if full_width %} button--full{% endif %}"
+        data-add-to-cart
+        data-section="{{ section_id }}"
+        {% if is_disabled %}disabled{% endif %}
+      >
+        <span class="button__label">{{ label }}</span>
+        <span class="button__spinner" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <p class="product-form__error" data-product-form-error role="alert"></p>
+
+    {%- if show_dynamic -%}
+      {{ form | payment_button }}
+    {%- endif -%}
+  {%- endform -%}
+</product-form>

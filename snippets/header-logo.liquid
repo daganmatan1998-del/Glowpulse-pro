@@ -1,0 +1,39 @@
+{%- comment -%}
+  Renders the store logo (image or text fallback).
+  Uses an <h1> on the homepage only, so heading order stays correct elsewhere.
+
+  Accepts:
+  - section: {Object} the header section (required)
+
+  Usage:
+  {% render 'header-logo', section: section %}
+{%- endcomment -%}
+
+{%- liquid
+  assign logo = section.settings.logo
+  if request.page_type == 'index'
+    assign wrapper_tag = 'h1'
+  else
+    assign wrapper_tag = 'div'
+  endif
+-%}
+
+<{{ wrapper_tag }} class="header__heading">
+  <a href="{{ routes.root_url }}" class="header__heading-link">
+    {%- if logo != blank -%}
+      <img
+        class="header__logo-image"
+        src="{{ logo | image_url: width: 600 }}"
+        srcset="{{ logo | image_url: width: 300 }} 300w, {{ logo | image_url: width: 600 }} 600w"
+        sizes="{{ section.settings.logo_width_desktop }}px"
+        alt="{{ logo.alt | escape | default: shop.name | escape }}"
+        width="{{ logo.width }}"
+        height="{{ logo.height }}"
+        loading="eager"
+        fetchpriority="high"
+      >
+    {%- else -%}
+      <span class="header__logo-text">{{ shop.name }}</span>
+    {%- endif -%}
+  </a>
+</{{ wrapper_tag }}>

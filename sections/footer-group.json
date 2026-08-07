@@ -1,0 +1,53 @@
+{
+  "name": "Footer",
+  "type": "footer",
+  "sections": {
+    "footer": {
+      "type": "footer",
+      "blocks": {
+        "brand": {
+          "type": "brand",
+          "settings": {
+            "logo_width": 130,
+            "text": "<p>Thoughtfully made products, shipped worldwide with tracked delivery and a 30-day guarantee.</p>",
+            "show_social": true
+          }
+        },
+        "menu": {
+          "type": "menu",
+          "settings": {
+            "heading": "Shop",
+            "menu": "footer"
+          }
+        },
+        "policies": {
+          "type": "policies",
+          "settings": {
+            "heading": "Policies"
+          }
+        },
+        "contact": {
+          "type": "contact",
+          "settings": {
+            "heading": "Contact",
+            "text": "<p>Support available Monday to Friday.</p>"
+          }
+        }
+      },
+      "block_order": ["brand", "menu", "policies", "contact"],
+      "settings": {
+        "background_color": "#ffffff",
+        "text_color": "#14161a",
+        "border_color": "#e4e4e1",
+        "copyright_text": "All rights reserved.",
+        "show_payment_icons": true,
+        "show_powered_by": false,
+        "padding_top": 64,
+        "padding_bottom": 40,
+        "padding_top_mobile": 44,
+        "padding_bottom_mobile": 32
+      }
+    }
+  },
+  "order": ["footer"]
+}

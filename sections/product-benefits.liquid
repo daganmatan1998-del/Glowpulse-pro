@@ -1,0 +1,432 @@
+{%- liquid
+  assign st = section.settings
+
+  assign width_class = 'page-width'
+  if st.content_width == 'narrow'
+    assign width_class = 'page-width page-width--narrow'
+  elsif st.content_width == 'medium'
+    assign width_class = 'page-width page-width--medium'
+  endif
+
+  assign header_align_class = ''
+  if st.heading_alignment == 'center'
+    assign header_align_class = ' section__header--center'
+  elsif st.heading_alignment == 'right'
+    assign header_align_class = ' section__header--right'
+  endif
+
+  assign benefit_class = 'benefit'
+  if st.layout == 'stacked'
+    assign benefit_class = 'benefit benefit--stacked'
+  elsif st.layout == 'center'
+    assign benefit_class = 'benefit benefit--center'
+  endif
+  if st.boxed
+    assign benefit_class = benefit_class | append: ' benefit--boxed'
+  endif
+
+  assign columns_desktop = st.columns_desktop
+  if section.blocks.size < columns_desktop
+    assign columns_desktop = section.blocks.size
+  endif
+  if columns_desktop < 1
+    assign columns_desktop = 1
+  endif
+-%}
+
+{% render 'section-style', section: section %}
+
+{%- style -%}
+  #shopify-section-{{ section.id }} .benefit__title {
+    font-size: {{ st.title_size_mobile }}px;
+  }
+  #shopify-section-{{ section.id }} .benefit__text {
+    font-size: {{ st.text_size_mobile }}px;
+  }
+  @media screen and (min-width: 750px) {
+    #shopify-section-{{ section.id }} .benefit__title {
+      font-size: {{ st.title_size_desktop }}px;
+    }
+    #shopify-section-{{ section.id }} .benefit__text {
+      font-size: {{ st.text_size_desktop }}px;
+    }
+  }
+{%- endstyle -%}
+
+<div class="section">
+  <div class="{{ width_class }}">
+    {%- if st.heading != blank or st.subheading != blank or st.text != blank -%}
+      <div class="section__header{{ header_align_class }}">
+        {%- if st.subheading != blank -%}
+          <span class="eyebrow">{{ st.subheading }}</span>
+        {%- endif -%}
+        {%- if st.heading != blank -%}
+          <h2>{{ st.heading }}</h2>
+        {%- endif -%}
+        {%- if st.text != blank -%}
+          <div class="rte section__text">{{ st.text }}</div>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+    {%- if section.blocks.size > 0 -%}
+      <div
+        class="benefits{% if settings.animations_enabled %} animate-in{% endif %}"
+        style="
+          --benefits-mobile: {{ st.columns_mobile }};
+          --benefits-desktop: {{ columns_desktop }};
+          --benefit-icon-size: {{ st.icon_size }}px;
+        "
+      >
+        {%- for block in section.blocks -%}
+          <div class="{{ benefit_class }}" {{ block.shopify_attributes }}>
+            {%- if st.show_icons -%}
+              <span class="benefit__icon" style="color: {{ st.icon_color }};">
+                {%- if block.settings.custom_icon != blank -%}
+                  <img
+                    src="{{ block.settings.custom_icon | image_url: width: 120 }}"
+                    alt=""
+                    width="60"
+                    height="60"
+                    loading="lazy"
+                  >
+                {%- else -%}
+                  {% render 'icon', name: block.settings.icon %}
+                {%- endif -%}
+              </span>
+            {%- endif -%}
+
+            <div>
+              {%- if block.settings.title != blank -%}
+                <h3 class="benefit__title">{{ block.settings.title }}</h3>
+              {%- endif -%}
+              {%- if block.settings.text != blank -%}
+                <div class="rte benefit__text">{{ block.settings.text }}</div>
+              {%- endif -%}
+            </div>
+          </div>
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Product benefits",
+  "tag": "section",
+  "class": "section-benefits",
+  "max_blocks": 8,
+  "settings": [
+    {
+      "type": "header",
+      "content": "Heading"
+    },
+    {
+      "type": "text",
+      "id": "subheading",
+      "label": "Small label above heading"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Why customers choose us"
+    },
+    {
+      "type": "richtext",
+      "id": "text",
+      "label": "Text"
+    },
+    {
+      "type": "select",
+      "id": "heading_alignment",
+      "label": "Heading alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "Benefit layout",
+      "options": [
+        { "value": "inline", "label": "Icon beside text" },
+        { "value": "stacked", "label": "Icon above text" },
+        { "value": "center", "label": "Centred" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "checkbox",
+      "id": "boxed",
+      "label": "Show a border around each benefit",
+      "default": false
+    },
+    {
+      "type": "range",
+      "id": "columns_mobile",
+      "min": 1,
+      "max": 2,
+      "step": 1,
+      "label": "Columns on mobile",
+      "default": 1
+    },
+    {
+      "type": "range",
+      "id": "columns_desktop",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "label": "Columns on desktop",
+      "default": 3
+    },
+    {
+      "type": "header",
+      "content": "Icons"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_icons",
+      "label": "Show icons",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "icon_size",
+      "min": 16,
+      "max": 64,
+      "step": 2,
+      "unit": "px",
+      "label": "Icon size",
+      "default": 30
+    },
+    {
+      "type": "color",
+      "id": "icon_color",
+      "label": "Icon colour",
+      "default": "#14161a"
+    },
+    {
+      "type": "header",
+      "content": "Typography"
+    },
+    {
+      "type": "range",
+      "id": "title_size_mobile",
+      "min": 13,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "label": "Benefit title size (mobile)",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "title_size_desktop",
+      "min": 14,
+      "max": 34,
+      "step": 1,
+      "unit": "px",
+      "label": "Benefit title size (desktop)",
+      "default": 18
+    },
+    {
+      "type": "range",
+      "id": "text_size_mobile",
+      "min": 11,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "label": "Benefit text size (mobile)",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "text_size_desktop",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "label": "Benefit text size (desktop)",
+      "default": 15
+    },
+    {
+      "type": "header",
+      "content": "Section layout"
+    },
+    {
+      "type": "select",
+      "id": "content_width",
+      "label": "Section width",
+      "options": [
+        { "value": "page", "label": "Standard" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "narrow", "label": "Narrow" }
+      ],
+      "default": "page"
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text"
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Heading"
+    },
+    {
+      "type": "range",
+      "id": "section_radius",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "label": "Section corner radius",
+      "default": 0
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 36
+    }
+  ],
+  "blocks": [
+    {
+      "type": "benefit",
+      "name": "Benefit",
+      "settings": [
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            { "value": "truck", "label": "Delivery" },
+            { "value": "shield", "label": "Guarantee" },
+            { "value": "refresh", "label": "Returns" },
+            { "value": "headset", "label": "Support" },
+            { "value": "lock", "label": "Secure payment" },
+            { "value": "leaf", "label": "Sustainable" },
+            { "value": "heart", "label": "Loved" },
+            { "value": "clock", "label": "Fast" },
+            { "value": "award", "label": "Award" },
+            { "value": "gift", "label": "Gift" },
+            { "value": "zap", "label": "Lightning" },
+            { "value": "check-circle", "label": "Check" },
+            { "value": "box", "label": "Package" },
+            { "value": "globe", "label": "Worldwide" },
+            { "value": "credit-card", "label": "Payment" },
+            { "value": "percent", "label": "Discount" },
+            { "value": "smile", "label": "Happy" },
+            { "value": "thumbs-up", "label": "Thumbs up" },
+            { "value": "water-drop", "label": "Waterproof" },
+            { "value": "sparkles", "label": "Sparkle" },
+            { "value": "plane", "label": "Air mail" },
+            { "value": "map-pin", "label": "Location" },
+            { "value": "star", "label": "Star" }
+          ],
+          "default": "truck"
+        },
+        {
+          "type": "image_picker",
+          "id": "custom_icon",
+          "label": "Custom icon image",
+          "info": "Optional. Replaces the icon above. 60 x 60px works well."
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Title",
+          "default": "Free worldwide shipping"
+        },
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Text",
+          "default": "<p>Tracked delivery on every order, with no minimum spend.</p>"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Product benefits",
+      "blocks": [
+        { "type": "benefit" },
+        {
+          "type": "benefit",
+          "settings": {
+            "icon": "refresh",
+            "title": "30-day returns",
+            "text": "<p>Changed your mind? Send it back for a full refund.</p>"
+          }
+        },
+        {
+          "type": "benefit",
+          "settings": {
+            "icon": "headset",
+            "title": "Real human support",
+            "text": "<p>Questions answered within 24 hours, every day of the week.</p>"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

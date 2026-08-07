@@ -1,0 +1,475 @@
+{%- liquid
+  assign st = section.settings
+
+  assign width_class = 'page-width'
+  if st.content_width == 'narrow'
+    assign width_class = 'page-width page-width--narrow'
+  elsif st.content_width == 'medium'
+    assign width_class = 'page-width page-width--medium'
+  endif
+
+  assign header_align_class = ''
+  if st.heading_alignment == 'center'
+    assign header_align_class = ' section__header--center'
+  elsif st.heading_alignment == 'right'
+    assign header_align_class = ' section__header--right'
+  endif
+
+  assign grid_class = 'reviews'
+  if st.mobile_layout == 'scroll'
+    assign grid_class = 'reviews reviews--scroll'
+  endif
+
+  assign columns_desktop = st.columns_desktop
+  if section.blocks.size < columns_desktop
+    assign columns_desktop = section.blocks.size
+  endif
+  if columns_desktop < 1
+    assign columns_desktop = 1
+  endif
+-%}
+
+{% render 'section-style', section: section %}
+
+{%- style -%}
+  #shopify-section-{{ section.id }} .review__text {
+    font-size: {{ st.text_size_mobile }}px;
+  }
+  @media screen and (min-width: 750px) {
+    #shopify-section-{{ section.id }} .review__text {
+      font-size: {{ st.text_size_desktop }}px;
+    }
+  }
+{%- endstyle -%}
+
+<div class="section">
+  <div class="{{ width_class }}">
+    {%- if st.heading != blank or st.subheading != blank -%}
+      <div class="section__header{{ header_align_class }}">
+        {%- if st.subheading != blank -%}
+          <span class="eyebrow">{{ st.subheading }}</span>
+        {%- endif -%}
+        {%- if st.heading != blank -%}
+          <h2>{{ st.heading }}</h2>
+        {%- endif -%}
+        {%- if st.text != blank -%}
+          <div class="rte section__text">{{ st.text }}</div>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+    {%- if st.show_summary -%}
+      <div class="reviews__summary">
+        <span class="reviews__summary-score">{{ st.summary_score }}</span>
+        {% render 'rating-stars', rating: st.summary_score %}
+        {%- if st.summary_text != blank -%}
+          <span class="text-small text-muted">{{ st.summary_text }}</span>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+    {%- if section.blocks.size > 0 -%}
+      <div
+        class="{{ grid_class }}{% if settings.animations_enabled %} animate-in{% endif %}"
+        style="--reviews-mobile: {{ st.columns_mobile }}; --reviews-desktop: {{ columns_desktop }};"
+      >
+        {%- for block in section.blocks -%}
+          <div
+            class="review{% if st.card_style == 'plain' %} review--plain{% endif %}"
+            {{ block.shopify_attributes }}
+          >
+            {%- if st.show_stars -%}
+              {% render 'rating-stars', rating: block.settings.rating %}
+            {%- endif -%}
+
+            {%- if block.settings.title != blank -%}
+              <p class="h4">{{ block.settings.title }}</p>
+            {%- endif -%}
+
+            {%- if block.settings.text != blank -%}
+              <div class="rte review__text">{{ block.settings.text }}</div>
+            {%- endif -%}
+
+            {%- if block.settings.image != blank -%}
+              <div class="review__image">
+                <span class="media media--landscape">
+                  <img
+                    src="{{ block.settings.image | image_url: width: 600 }}"
+                    alt=""
+                    width="{{ block.settings.image.width }}"
+                    height="{{ block.settings.image.height }}"
+                    loading="lazy"
+                  >
+                </span>
+              </div>
+            {%- endif -%}
+
+            <div class="review__author">
+              {%- if block.settings.avatar != blank -%}
+                <img
+                  class="review__avatar"
+                  src="{{ block.settings.avatar | image_url: width: 120, height: 120, crop: 'center' }}"
+                  alt=""
+                  width="38"
+                  height="38"
+                  loading="lazy"
+                >
+              {%- endif -%}
+              <div>
+                {%- if block.settings.author != blank -%}
+                  <div class="review__name">{{ block.settings.author }}</div>
+                {%- endif -%}
+                {%- if block.settings.verified -%}
+                  <div class="review__meta">
+                    {% render 'icon', name: 'check-circle' %}
+                    {{ 'sections.reviews.verified' | t }}
+                  </div>
+                {%- elsif block.settings.meta != blank -%}
+                  <div class="review__meta">{{ block.settings.meta }}</div>
+                {%- endif -%}
+              </div>
+            </div>
+          </div>
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+
+    {%- if st.button_label != blank -%}
+      <div class="text-center" style="margin-top:28px;">
+        <a class="button button--secondary" href="{{ st.button_link | default: '#' }}">
+          {{ st.button_label }}
+        </a>
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Reviews",
+  "tag": "section",
+  "class": "section-reviews",
+  "max_blocks": 12,
+  "settings": [
+    {
+      "type": "header",
+      "content": "Heading"
+    },
+    {
+      "type": "text",
+      "id": "subheading",
+      "label": "Small label above heading",
+      "default": "Reviews"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "What customers say"
+    },
+    {
+      "type": "richtext",
+      "id": "text",
+      "label": "Text"
+    },
+    {
+      "type": "select",
+      "id": "heading_alignment",
+      "label": "Heading alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "header",
+      "content": "Rating summary"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_summary",
+      "label": "Show average rating",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "summary_score",
+      "label": "Average rating",
+      "options": [
+        { "value": "5", "label": "5.0" },
+        { "value": "4.9", "label": "4.9" },
+        { "value": "4.8", "label": "4.8" },
+        { "value": "4.7", "label": "4.7" },
+        { "value": "4.6", "label": "4.6" },
+        { "value": "4.5", "label": "4.5" },
+        { "value": "4.3", "label": "4.3" },
+        { "value": "4", "label": "4.0" }
+      ],
+      "default": "4.8"
+    },
+    {
+      "type": "text",
+      "id": "summary_text",
+      "label": "Summary text",
+      "default": "Based on 1,284 verified reviews"
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_stars",
+      "label": "Show stars on each review",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "card_style",
+      "label": "Review style",
+      "options": [
+        { "value": "boxed", "label": "Boxed" },
+        { "value": "plain", "label": "Plain" }
+      ],
+      "default": "boxed"
+    },
+    {
+      "type": "select",
+      "id": "mobile_layout",
+      "label": "Mobile layout",
+      "options": [
+        { "value": "scroll", "label": "Swipeable row" },
+        { "value": "grid", "label": "Stacked grid" }
+      ],
+      "default": "scroll"
+    },
+    {
+      "type": "range",
+      "id": "columns_mobile",
+      "min": 1,
+      "max": 2,
+      "step": 1,
+      "label": "Columns on mobile (grid layout only)",
+      "default": 1
+    },
+    {
+      "type": "range",
+      "id": "columns_desktop",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "label": "Columns on desktop",
+      "default": 3
+    },
+    {
+      "type": "range",
+      "id": "text_size_mobile",
+      "min": 12,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "label": "Review text size (mobile)",
+      "default": 15
+    },
+    {
+      "type": "range",
+      "id": "text_size_desktop",
+      "min": 13,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "label": "Review text size (desktop)",
+      "default": 15
+    },
+    {
+      "type": "header",
+      "content": "Button"
+    },
+    {
+      "type": "text",
+      "id": "button_label",
+      "label": "Button label"
+    },
+    {
+      "type": "url",
+      "id": "button_link",
+      "label": "Button link"
+    },
+    {
+      "type": "header",
+      "content": "Section layout"
+    },
+    {
+      "type": "select",
+      "id": "content_width",
+      "label": "Section width",
+      "options": [
+        { "value": "page", "label": "Standard" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "narrow", "label": "Narrow" }
+      ],
+      "default": "page"
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text"
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Heading"
+    },
+    {
+      "type": "range",
+      "id": "section_radius",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "label": "Section corner radius",
+      "default": 0
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 36
+    }
+  ],
+  "blocks": [
+    {
+      "type": "review",
+      "name": "Review",
+      "settings": [
+        {
+          "type": "select",
+          "id": "rating",
+          "label": "Stars",
+          "options": [
+            { "value": "5", "label": "5 stars" },
+            { "value": "4.5", "label": "4.5 stars" },
+            { "value": "4", "label": "4 stars" },
+            { "value": "3.5", "label": "3.5 stars" },
+            { "value": "3", "label": "3 stars" }
+          ],
+          "default": "5"
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Title",
+          "default": "Exactly as described"
+        },
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Review",
+          "default": "<p>Arrived faster than expected and the quality is genuinely better than I hoped. I have already ordered a second one.</p>"
+        },
+        {
+          "type": "text",
+          "id": "author",
+          "label": "Customer name",
+          "default": "Sarah M."
+        },
+        {
+          "type": "text",
+          "id": "meta",
+          "label": "Extra detail",
+          "info": "Shown when \"Verified purchase\" is off. For example a date or location."
+        },
+        {
+          "type": "checkbox",
+          "id": "verified",
+          "label": "Show \"Verified purchase\"",
+          "default": true
+        },
+        {
+          "type": "image_picker",
+          "id": "avatar",
+          "label": "Customer photo"
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Review image"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Reviews",
+      "blocks": [
+        { "type": "review" },
+        {
+          "type": "review",
+          "settings": {
+            "title": "Worth every penny",
+            "text": "<p>I was sceptical at first, but this has become part of my daily routine. Packaging was excellent too.</p>",
+            "author": "James T."
+          }
+        },
+        {
+          "type": "review",
+          "settings": {
+            "title": "Great support",
+            "text": "<p>I had a question before ordering and got a helpful reply the same day. Delivery took four days.</p>",
+            "author": "Priya K."
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

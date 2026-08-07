@@ -1,0 +1,42 @@
+{%- comment -%}
+  Renders a star rating out of five.
+
+  Accepts:
+  - rating: {Number} 0–5, decimals allowed (required)
+  - label:  {String} optional visible text shown after the stars
+
+  Usage:
+  {% render 'rating-stars', rating: 4.5 %}
+{%- endcomment -%}
+
+{%- liquid
+  assign value = rating | default: 5 | times: 1.0
+  assign full = value | floor
+  assign remainder = value | minus: full
+  assign has_half = false
+
+  if remainder >= 0.75
+    assign full = full | plus: 1
+  elsif remainder >= 0.25
+    assign has_half = true
+  endif
+
+  assign half_index = full | plus: 1
+-%}
+
+<span class="rating">
+  <span class="rating__stars" role="img" aria-label="{{ 'sections.reviews.rating_of' | t: rating: value, max: 5 }}">
+    {%- for i in (1..5) -%}
+      {%- if forloop.index <= full -%}
+        {% render 'icon', name: 'star' %}
+      {%- elsif has_half and forloop.index == half_index -%}
+        {% render 'icon', name: 'star-half' %}
+      {%- else -%}
+        {% render 'icon', name: 'star-outline' %}
+      {%- endif -%}
+    {%- endfor -%}
+  </span>
+  {%- if label != blank -%}
+    <span class="rating__label text-small text-muted">{{ label }}</span>
+  {%- endif -%}
+</span>

@@ -1,0 +1,129 @@
+{%- liquid
+  assign st = section.settings
+-%}
+
+<div
+  class="drawer drawer--right"
+  id="CartDrawer"
+  data-drawer
+  data-drawer-editor-open
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="CartDrawerTitle"
+  aria-hidden="true"
+>
+  <div class="drawer__overlay" data-drawer-close></div>
+
+  <div class="drawer__panel">
+    <div class="drawer__header">
+      <span class="drawer__title" id="CartDrawerTitle">
+        {{ 'cart.general.title' | t }}
+      </span>
+      <button type="button" class="drawer__close" data-drawer-close>
+        {% render 'icon', name: 'close' %}
+        <span class="visually-hidden">{{ 'general.accessibility.close' | t }}</span>
+      </button>
+    </div>
+
+    {%- comment -%}
+      Everything inside this wrapper is replaced by the Section Rendering API
+      after every add / update, which keeps the drawer open and scrolled.
+    {%- endcomment -%}
+    <div class="drawer__content" id="CartDrawerContent" data-cart-region>
+      {%- if cart.item_count > 0 -%}
+        <div class="drawer__body">
+          {% render 'free-shipping-bar' %}
+          {% render 'cart-items', context: 'drawer' %}
+
+          {%- if settings.cart_show_note -%}
+            <div class="field" style="margin-top:20px;">
+              <label class="field__label" for="CartDrawerNote">{{ 'cart.general.note' | t }}</label>
+              <textarea
+                class="field__input"
+                id="CartDrawerNote"
+                name="note"
+                form="cart-drawer-form"
+                placeholder="{{ 'cart.general.note_placeholder' | t | escape }}"
+              >{{ cart.note }}</textarea>
+            </div>
+          {%- endif -%}
+        </div>
+
+        <div class="drawer__footer">
+          <form action="{{ routes.cart_url }}" method="post" id="cart-drawer-form">
+            <div class="cart__totals">
+              <span class="cart__total-label">{{ 'cart.general.subtotal' | t }}</span>
+              <span class="cart__total-value">{{ cart.total_price | money_with_currency }}</span>
+            </div>
+
+            {%- if cart.cart_level_discount_applications.size > 0 -%}
+              {%- for discount in cart.cart_level_discount_applications -%}
+                <p class="text-small text-muted" style="margin-bottom:6px;">
+                  {{ discount.title }} (-{{ discount.total_allocated_amount | money }})
+                </p>
+              {%- endfor -%}
+            {%- endif -%}
+
+            <p class="cart__tax-note">{{ 'cart.general.taxes_and_shipping_at_checkout' | t }}</p>
+
+            <button type="submit" name="checkout" class="button button--full button--large">
+              {{ 'cart.general.checkout' | t }}
+            </button>
+
+            {%- if st.show_view_cart -%}
+              <a
+                href="{{ routes.cart_url }}"
+                class="button button--secondary button--full"
+                style="margin-top:10px;"
+              >
+                {{ 'cart.general.view_cart' | t }}
+              </a>
+            {%- endif -%}
+          </form>
+        </div>
+      {%- else -%}
+        <div class="drawer__body">
+          <div class="cart__empty">
+            {% render 'icon', name: 'bag', class: 'cart__empty-icon' %}
+            <p class="h3">{{ 'cart.general.empty' | t }}</p>
+            <p class="text-muted">{{ 'cart.general.empty_subtext' | t }}</p>
+            <a href="{{ st.empty_button_link | default: routes.all_products_collection_url }}" class="button">
+              {{ st.empty_button_label | default: 'Continue shopping' }}
+            </a>
+          </div>
+        </div>
+      {%- endif -%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Cart drawer",
+  "tag": "section",
+  "class": "section-cart-drawer",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Switch between a drawer and a cart page in Theme settings → Cart."
+    },
+    {
+      "type": "checkbox",
+      "id": "show_view_cart",
+      "label": "Show \"View cart\" button",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "empty_button_label",
+      "label": "Empty cart button label",
+      "default": "Continue shopping"
+    },
+    {
+      "type": "url",
+      "id": "empty_button_link",
+      "label": "Empty cart button link"
+    }
+  ]
+}
+{% endschema %}

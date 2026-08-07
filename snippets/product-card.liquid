@@ -1,0 +1,106 @@
+{%- comment -%}
+  Renders a product card for grids and carousels.
+
+  Accepts:
+  - card_product: {Object} product (required — pass blank for a placeholder)
+  - image_ratio:  {String} square | portrait | landscape (defaults to theme setting)
+  - show_vendor:  {Boolean} (defaults to theme setting)
+  - show_badges:  {Boolean} (defaults to theme setting)
+  - alignment:    {String} left | center (defaults to theme setting)
+  - lazy:         {Boolean} lazy load the image (default true)
+  - index:        {Number} position in the grid, used to prioritise the first images
+
+  Usage:
+  {% render 'product-card', card_product: product, index: forloop.index %}
+{%- endcomment -%}
+
+{%- liquid
+  assign ratio = image_ratio | default: settings.card_image_ratio
+  assign align = alignment | default: settings.card_text_alignment
+
+  assign show_vendor_final = show_vendor
+  if show_vendor_final == nil
+    assign show_vendor_final = settings.card_show_vendor
+  endif
+
+  assign show_badges_final = show_badges
+  if show_badges_final == nil
+    assign show_badges_final = settings.card_show_badges
+  endif
+
+  assign loading = 'lazy'
+  assign fetch_priority = 'auto'
+  if index and index <= 2
+    assign loading = 'eager'
+    assign fetch_priority = 'high'
+  endif
+-%}
+
+<div class="card{% if align == 'center' %} card--center{% endif %}">
+  <div class="card__media">
+    {%- if show_badges_final -%}
+      <div class="card__badges">
+        {%- if card_product.available == false -%}
+          <span class="badge badge--muted">{{ 'products.product.sold_out' | t }}</span>
+        {%- elsif card_product.compare_at_price > card_product.price -%}
+          {%- assign percent = card_product.compare_at_price | minus: card_product.price | times: 100.0 | divided_by: card_product.compare_at_price | round -%}
+          <span class="badge badge--sale">{{ 'products.product.save_percent' | t: percent: percent }}</span>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+    <div class="media media--{{ ratio }}">
+      {%- if card_product.featured_media -%}
+        <img
+          src="{{ card_product.featured_media | image_url: width: 600 }}"
+          srcset="
+            {{ card_product.featured_media | image_url: width: 300 }} 300w,
+            {{ card_product.featured_media | image_url: width: 450 }} 450w,
+            {{ card_product.featured_media | image_url: width: 600 }} 600w,
+            {{ card_product.featured_media | image_url: width: 900 }} 900w
+          "
+          sizes="(min-width: 990px) 300px, (min-width: 750px) 33vw, 45vw"
+          alt="{{ card_product.featured_media.alt | escape | default: card_product.title | escape }}"
+          width="{{ card_product.featured_media.width }}"
+          height="{{ card_product.featured_media.height }}"
+          loading="{{ loading }}"
+          fetchpriority="{{ fetch_priority }}"
+        >
+
+        {%- if card_product.media[1] -%}
+          <img
+            class="card__image-secondary"
+            src="{{ card_product.media[1] | image_url: width: 600 }}"
+            alt=""
+            width="{{ card_product.media[1].width }}"
+            height="{{ card_product.media[1].height }}"
+            loading="lazy"
+            aria-hidden="true"
+          >
+        {%- endif -%}
+      {%- else -%}
+        {{ 'product-1' | placeholder_svg_tag: 'placeholder-svg' }}
+      {%- endif -%}
+    </div>
+  </div>
+
+  <div class="card__content">
+    {%- if show_vendor_final and card_product.vendor != blank -%}
+      <span class="card__vendor">{{ card_product.vendor }}</span>
+    {%- endif -%}
+
+    <h3 class="card__title">
+      {%- if card_product.url -%}
+        <a href="{{ card_product.url }}">{{ card_product.title | escape }}</a>
+      {%- else -%}
+        {{ 'onboarding.product_title' | t }}
+      {%- endif -%}
+    </h3>
+
+    {%- if card_product.url -%}
+      {% render 'price', product: card_product, show_labels: true %}
+    {%- else -%}
+      <div class="price"><span class="price__current">{{ 1999 | money }}</span></div>
+    {%- endif -%}
+  </div>
+</div>

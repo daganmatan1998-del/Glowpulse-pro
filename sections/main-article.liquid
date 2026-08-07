@@ -1,0 +1,172 @@
+{% render 'section-style', section: section %}
+
+<div class="section">
+  <div class="page-width">
+    <article class="article__body">
+      <header class="article__header">
+        {%- if section.settings.show_date -%}
+          <p class="article-card__meta">{{ article.published_at | date: format: 'date' }}</p>
+        {%- endif -%}
+        <h1>{{ article.title }}</h1>
+        {%- if section.settings.show_author and article.author != blank -%}
+          <p class="article-card__meta">{{ article.author }}</p>
+        {%- endif -%}
+      </header>
+
+      {%- if article.image -%}
+        <div style="margin-bottom:28px;">
+          <div class="media media--landscape">
+            <img
+              src="{{ article.image | image_url: width: 1200 }}"
+              srcset="
+                {{ article.image | image_url: width: 600 }} 600w,
+                {{ article.image | image_url: width: 1200 }} 1200w
+              "
+              sizes="(min-width: 750px) 720px, 100vw"
+              alt="{{ article.image.alt | escape | default: article.title | escape }}"
+              width="{{ article.image.width }}"
+              height="{{ article.image.height }}"
+              loading="eager"
+              fetchpriority="high"
+            >
+          </div>
+        </div>
+      {%- endif -%}
+
+      <div class="rte">{{ article.content }}</div>
+
+      {%- if section.settings.show_share -%}
+        <div style="margin-top:32px;">
+          {% render 'social-icons' %}
+        </div>
+      {%- endif -%}
+
+      <div style="margin-top:32px;">
+        <a class="link-arrow" href="{{ blog.url }}">
+          {% render 'icon', name: 'arrow-left' %}
+          {{ 'blogs.article.back_to_blog' | t: title: blog.title }}
+        </a>
+      </div>
+
+      {%- if blog.comments_enabled? -%}
+        <div style="margin-top:48px;">
+          <h2 class="h3">{{ 'blogs.article.comments' | t: count: article.comments_count }}</h2>
+
+          {%- if article.comments_count > 0 -%}
+            <div style="margin-top:20px;display:flex;flex-direction:column;gap:20px;">
+              {%- for comment in article.comments -%}
+                <div class="review review--plain">
+                  <div class="rte review__text">{{ comment.content }}</div>
+                  <div class="review__meta">{{ comment.author }} · {{ comment.created_at | date: format: 'date' }}</div>
+                </div>
+              {%- endfor -%}
+            </div>
+          {%- endif -%}
+
+          {%- form 'new_comment', article, class: 'form-stack' -%}
+            {%- if form.posted_successfully? -%}
+              <p class="form__message form__message--success">{{ 'blogs.article.success' | t }}</p>
+            {%- elsif form.errors -%}
+              <p class="form__message form__message--error">{{ form.errors.messages.form }}</p>
+            {%- endif -%}
+
+            <h3 class="h4">{{ 'blogs.article.title' | t }}</h3>
+
+            <div class="field">
+              <label class="field__label" for="CommentAuthor">{{ 'blogs.article.name' | t }}</label>
+              <input class="field__input" id="CommentAuthor" type="text" name="comment[author]" required>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="CommentEmail">{{ 'blogs.article.email' | t }}</label>
+              <input class="field__input" id="CommentEmail" type="email" name="comment[email]" required>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="CommentBody">{{ 'blogs.article.message' | t }}</label>
+              <textarea class="field__input" id="CommentBody" name="comment[body]" required></textarea>
+            </div>
+
+            {%- if blog.moderated? -%}
+              <p class="text-small text-muted">{{ 'blogs.article.moderated' | t }}</p>
+            {%- endif -%}
+
+            <button type="submit" class="button">{{ 'blogs.article.post' | t }}</button>
+          {%- endform -%}
+        </div>
+      {%- endif -%}
+    </article>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Blog post",
+  "tag": "section",
+  "class": "section-main-article",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "show_date",
+      "label": "Show date",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_author",
+      "label": "Show author",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "show_share",
+      "label": "Show social links",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 48
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 64
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 40
+    }
+  ]
+}
+{% endschema %}

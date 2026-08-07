@@ -1,0 +1,80 @@
+<div class="page-width" style="padding-block: 56px 72px;">
+  <div class="customer customer--wide">
+    <div class="section__header section__header--center">
+      <h1>{{ 'customer.addresses.title' | t }}</h1>
+      <p class="text-small">
+        <a class="link" href="{{ routes.account_url }}">{{ 'customer.account.return' | t }}</a>
+      </p>
+    </div>
+
+    <div style="max-width:560px;margin-inline:auto;">
+      <h2 class="h3">{{ 'customer.addresses.add_new' | t }}</h2>
+
+      {%- form 'customer_address', customer.new_address, class: 'form-stack' -%}
+        <div class="field">
+          <label class="field__label" for="AddressFirstNameNew">{{ 'customer.addresses.first_name' | t }}</label>
+          <input class="field__input" id="AddressFirstNameNew" type="text" name="address[first_name]" autocomplete="given-name">
+        </div>
+        <div class="field">
+          <label class="field__label" for="AddressLastNameNew">{{ 'customer.addresses.last_name' | t }}</label>
+          <input class="field__input" id="AddressLastNameNew" type="text" name="address[last_name]" autocomplete="family-name">
+        </div>
+        <div class="field">
+          <label class="field__label" for="AddressCompanyNew">{{ 'customer.addresses.company' | t }}</label>
+          <input class="field__input" id="AddressCompanyNew" type="text" name="address[company]" autocomplete="organization">
+        </div>
+        <div class="field">
+          <label class="field__label" for="AddressAddress1New">{{ 'customer.addresses.address1' | t }}</label>
+          <input class="field__input" id="AddressAddress1New" type="text" name="address[address1]" autocomplete="address-line1">
+        </div>
+        <div class="field">
+          <label class="field__label" for="AddressAddress2New">{{ 'customer.addresses.address2' | t }}</label>
+          <input class="field__input" id="AddressAddress2New" type="text" name="address[address2]" autocomplete="address-line2">
+        </div>
+        <div class="field">
+          <label class="field__label" for="AddressCityNew">{{ 'customer.addresses.city' | t }}</label>
+          <input class="field__input" id="AddressCityNew" type="text" name="address[city]" autocomplete="address-level2">
+        </div>
+        <div class="field">
+          <label class="field__label" for="AddressCountryNew">{{ 'customer.addresses.country' | t }}</label>
+          <div class="select">
+            <select class="select__select" id="AddressCountryNew" name="address[country]" data-default="{{ form.country }}">
+              {{ country_option_tags }}
+            </select>
+            <span class="select__icon">{% render 'icon', name: 'chevron-down' %}</span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field__label" for="AddressZipNew">{{ 'customer.addresses.zip' | t }}</label>
+          <input class="field__input" id="AddressZipNew" type="text" name="address[zip]" autocomplete="postal-code">
+        </div>
+        <div class="field">
+          <label class="field__label" for="AddressPhoneNew">{{ 'customer.addresses.phone' | t }}</label>
+          <input class="field__input" id="AddressPhoneNew" type="tel" name="address[phone]" autocomplete="tel">
+        </div>
+
+        <label style="display:flex;gap:8px;align-items:center;">
+          {{ form.set_as_default_checkbox }}
+          <span class="text-small">{{ 'customer.addresses.set_default' | t }}</span>
+        </label>
+
+        <button type="submit" class="button button--full">{{ 'customer.addresses.add' | t }}</button>
+      {%- endform -%}
+    </div>
+
+    {%- paginate customer.addresses by 6 -%}
+      <div style="margin-top:48px;display:flex;flex-direction:column;gap:20px;">
+        {%- for address in customer.addresses -%}
+          <div class="review" style="text-align:center;">
+            {%- if address == customer.default_address -%}
+              <span class="badge badge--muted">{{ 'customer.addresses.default' | t }}</span>
+            {%- endif -%}
+            {{ address | format_address }}
+          </div>
+        {%- endfor -%}
+      </div>
+
+      {% render 'pagination', paginate: paginate %}
+    {%- endpaginate -%}
+  </div>
+</div>

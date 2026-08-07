@@ -1,0 +1,415 @@
+{
+  "sections": {
+    "hero": {
+      "type": "hero",
+      "blocks": {
+        "image-1": {
+          "type": "image",
+          "settings": {
+            "alt": "Product photography",
+            "link_label": "Shop now"
+          }
+        }
+      },
+      "block_order": [
+        "image-1"
+      ],
+      "settings": {
+        "eyebrow": "New season",
+        "heading": "Designed for everyday life",
+        "text": "<p>Free worldwide shipping, 30-day returns and a two-year guarantee on every order.</p>",
+        "text_position": "above",
+        "text_alignment": "center",
+        "button_1_label": "Shop now",
+        "button_1_style": "primary",
+        "button_2_label": "",
+        "image_ratio_desktop": "wide",
+        "image_ratio_mobile": "square",
+        "image_fit": "cover",
+        "media_max_width": 820,
+        "image_radius": 14,
+        "columns_mobile": 1,
+        "columns_desktop": 1,
+        "image_gap_mobile": 10,
+        "image_gap_desktop": 16,
+        "overlay_opacity": 30,
+        "overlay_text_color": "#ffffff",
+        "overlay_position": "middle",
+        "heading_size_mobile": 27,
+        "heading_size_desktop": 42,
+        "text_size_mobile": 15,
+        "text_size_desktop": 17,
+        "content_width": "page",
+        "content_gap_mobile": 20,
+        "content_gap_desktop": 28,
+        "section_radius": 0,
+        "padding_top": 48,
+        "padding_bottom": 40,
+        "padding_top_mobile": 24,
+        "padding_bottom_mobile": 24
+      }
+    },
+    "trust-badges": {
+      "type": "trust-badges",
+      "blocks": {
+        "badge-1": {
+          "type": "badge",
+          "settings": {
+            "icon": "truck",
+            "text": "Free shipping"
+          }
+        },
+        "badge-2": {
+          "type": "badge",
+          "settings": {
+            "icon": "refresh",
+            "text": "30-day returns"
+          }
+        },
+        "badge-3": {
+          "type": "badge",
+          "settings": {
+            "icon": "lock",
+            "text": "Secure checkout"
+          }
+        },
+        "badge-4": {
+          "type": "badge",
+          "settings": {
+            "icon": "headset",
+            "text": "Human support"
+          }
+        }
+      },
+      "block_order": [
+        "badge-1",
+        "badge-2",
+        "badge-3",
+        "badge-4"
+      ],
+      "settings": {
+        "show_labels": true,
+        "badge_height": 30,
+        "columns_mobile": 2,
+        "columns_desktop": 4,
+        "content_width": "medium",
+        "padding_top": 24,
+        "padding_bottom": 24,
+        "padding_top_mobile": 20,
+        "padding_bottom_mobile": 20
+      }
+    },
+    "featured-product": {
+      "type": "featured-product",
+      "blocks": {
+        "highlight-1": {
+          "type": "highlight",
+          "settings": {
+            "icon": "truck",
+            "text": "Free tracked shipping worldwide"
+          }
+        },
+        "highlight-2": {
+          "type": "highlight",
+          "settings": {
+            "icon": "refresh",
+            "text": "30-day free returns"
+          }
+        },
+        "highlight-3": {
+          "type": "highlight",
+          "settings": {
+            "icon": "shield",
+            "text": "Two-year guarantee"
+          }
+        }
+      },
+      "block_order": [
+        "highlight-1",
+        "highlight-2",
+        "highlight-3"
+      ],
+      "settings": {
+        "subheading": "Best seller",
+        "heading": "",
+        "show_vendor": false,
+        "show_rating": true,
+        "rating": "4.8",
+        "rating_label": "1,284 reviews",
+        "show_description": true,
+        "description_words": 40,
+        "variant_picker_type": "button",
+        "show_quantity": true,
+        "show_dynamic_checkout": true,
+        "show_view_details": true,
+        "image_ratio": "square",
+        "image_fit": "cover",
+        "media_max_width": 560,
+        "show_thumbnails": true,
+        "content_width": "page",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "benefits": {
+      "type": "product-benefits",
+      "blocks": {
+        "benefit-1": {
+          "type": "benefit",
+          "settings": {
+            "icon": "zap",
+            "title": "Ready in seconds",
+            "text": "<p>No setup, no learning curve. Take it out of the box and start using it.</p>"
+          }
+        },
+        "benefit-2": {
+          "type": "benefit",
+          "settings": {
+            "icon": "shield",
+            "title": "Built to last",
+            "text": "<p>Tested to survive daily use, and covered by a two-year guarantee.</p>"
+          }
+        },
+        "benefit-3": {
+          "type": "benefit",
+          "settings": {
+            "icon": "heart",
+            "title": "Loved by thousands",
+            "text": "<p>Rated 4.8 out of 5 by more than a thousand verified customers.</p>"
+          }
+        }
+      },
+      "block_order": [
+        "benefit-1",
+        "benefit-2",
+        "benefit-3"
+      ],
+      "settings": {
+        "subheading": "",
+        "heading": "Why customers choose us",
+        "heading_alignment": "center",
+        "layout": "center",
+        "boxed": false,
+        "columns_mobile": 1,
+        "columns_desktop": 3,
+        "show_icons": true,
+        "icon_size": 30,
+        "icon_color": "#14161a",
+        "title_size_mobile": 16,
+        "title_size_desktop": 18,
+        "text_size_mobile": 14,
+        "text_size_desktop": 15,
+        "content_width": "page",
+        "background_color": "#f6f6f4",
+        "section_radius": 0,
+        "padding_top": 64,
+        "padding_bottom": 64,
+        "padding_top_mobile": 40,
+        "padding_bottom_mobile": 40
+      }
+    },
+    "image-with-text": {
+      "type": "image-with-text",
+      "blocks": {
+        "point-1": {
+          "type": "point",
+          "settings": {
+            "icon": "check",
+            "text": "Independently tested materials"
+          }
+        },
+        "point-2": {
+          "type": "point",
+          "settings": {
+            "icon": "check",
+            "text": "Recyclable, plastic-free packaging"
+          }
+        },
+        "point-3": {
+          "type": "point",
+          "settings": {
+            "icon": "check",
+            "text": "Ships from a local warehouse"
+          }
+        }
+      },
+      "block_order": [
+        "point-1",
+        "point-2",
+        "point-3"
+      ],
+      "settings": {
+        "image_position": "left",
+        "image_width": 50,
+        "image_ratio_desktop": "square",
+        "image_ratio_mobile": "square",
+        "image_fit": "cover",
+        "image_radius": 14,
+        "subheading": "The details",
+        "heading": "Built to last, made to be used",
+        "text": "<p>Explain what makes the product different \u2014 the materials, the testing, the guarantee. Keep it short and specific.</p>",
+        "text_alignment": "left",
+        "button_label": "",
+        "heading_size_mobile": 24,
+        "heading_size_desktop": 34,
+        "text_size_mobile": 15,
+        "text_size_desktop": 16,
+        "content_width": "page",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "reviews": {
+      "type": "reviews",
+      "blocks": {
+        "review-1": {
+          "type": "review",
+          "settings": {
+            "rating": "5",
+            "title": "Exactly as described",
+            "text": "<p>Arrived faster than expected and the quality is genuinely better than I hoped. I have already ordered a second one.</p>",
+            "author": "Sarah M.",
+            "verified": true
+          }
+        },
+        "review-2": {
+          "type": "review",
+          "settings": {
+            "rating": "5",
+            "title": "Worth every penny",
+            "text": "<p>I was sceptical at first, but this has become part of my daily routine. Packaging was excellent too.</p>",
+            "author": "James T.",
+            "verified": true
+          }
+        },
+        "review-3": {
+          "type": "review",
+          "settings": {
+            "rating": "4.5",
+            "title": "Great support",
+            "text": "<p>I had a question before ordering and got a helpful reply the same day. Delivery took four days.</p>",
+            "author": "Priya K.",
+            "verified": true
+          }
+        }
+      },
+      "block_order": [
+        "review-1",
+        "review-2",
+        "review-3"
+      ],
+      "settings": {
+        "subheading": "Reviews",
+        "heading": "What customers say",
+        "heading_alignment": "center",
+        "show_summary": true,
+        "summary_score": "4.8",
+        "summary_text": "Based on 1,284 verified reviews",
+        "show_stars": true,
+        "card_style": "boxed",
+        "mobile_layout": "scroll",
+        "columns_mobile": 1,
+        "columns_desktop": 3,
+        "text_size_mobile": 15,
+        "text_size_desktop": 15,
+        "content_width": "page",
+        "section_radius": 0,
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "faq": {
+      "type": "faq",
+      "blocks": {
+        "q-1": {
+          "type": "question",
+          "settings": {
+            "question": "How long does shipping take?",
+            "answer": "<p>Orders are dispatched within 24 hours. Delivery usually takes 5\u20139 business days, and every order includes tracking.</p>"
+          }
+        },
+        "q-2": {
+          "type": "question",
+          "settings": {
+            "question": "What is your return policy?",
+            "answer": "<p>You have 30 days from delivery to request a return. Items must be unused and in their original packaging.</p>"
+          }
+        },
+        "q-3": {
+          "type": "question",
+          "settings": {
+            "question": "How do I track my order?",
+            "answer": "<p>You will receive a tracking link by email as soon as your parcel leaves our warehouse.</p>"
+          }
+        },
+        "q-4": {
+          "type": "question",
+          "settings": {
+            "question": "Is checkout secure?",
+            "answer": "<p>Yes. Payments are processed by Shopify Payments over an encrypted connection. We never see your card details.</p>"
+          }
+        }
+      },
+      "block_order": [
+        "q-1",
+        "q-2",
+        "q-3",
+        "q-4"
+      ],
+      "settings": {
+        "heading": "Frequently asked questions",
+        "heading_alignment": "center",
+        "style": "lines",
+        "one_at_a_time": true,
+        "enable_seo_schema": true,
+        "question_size_mobile": 16,
+        "question_size_desktop": 17,
+        "answer_size_mobile": 15,
+        "answer_size_desktop": 15,
+        "content_width": "narrow",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "call-to-action": {
+      "type": "call-to-action",
+      "settings": {
+        "heading": "Ready when you are",
+        "text": "<p>Join thousands of happy customers. Free shipping, 30-day returns and support that actually replies.</p>",
+        "footnote": "Secure checkout \u00b7 Tracked delivery",
+        "text_alignment": "center",
+        "button_1_label": "Shop now",
+        "button_1_style": "primary",
+        "heading_size_mobile": 26,
+        "heading_size_desktop": 38,
+        "text_size_mobile": 15,
+        "text_size_desktop": 17,
+        "boxed": true,
+        "box_background": "#f6f6f4",
+        "content_width": "page",
+        "padding_top": 40,
+        "padding_bottom": 64,
+        "padding_top_mobile": 28,
+        "padding_bottom_mobile": 40
+      }
+    }
+  },
+  "order": [
+    "hero",
+    "trust-badges",
+    "featured-product",
+    "benefits",
+    "image-with-text",
+    "reviews",
+    "faq",
+    "call-to-action"
+  ]
+}

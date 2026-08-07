@@ -1,0 +1,83 @@
+{%- comment -%}
+  Renders a price block that the variant picker can live-update.
+
+  Accepts:
+  - product:      {Object} product (required unless variant is given)
+  - variant:      {Object} specific variant (optional)
+  - price_id:     {String} DOM id, needed for live updates (optional)
+  - price_class:  {String} extra class, e.g. 'price--large' (optional)
+  - show_saving:  {Boolean} show the "Save x%" badge (default false)
+  - show_labels:  {Boolean} render visually hidden price labels (default true)
+
+  Usage:
+  {% render 'price', product: product, price_id: price_id, show_saving: true %}
+{%- endcomment -%}
+
+{%- liquid
+  if variant
+    assign target = variant
+  elsif product
+    assign target = product.selected_or_first_available_variant
+  endif
+
+  if target
+    assign current_price = target.price
+    assign compare_price = target.compare_at_price
+    assign unit_price_measurement = target.unit_price_measurement
+    assign unit_price = target.unit_price
+  else
+    assign current_price = product.price
+    assign compare_price = product.compare_at_price
+  endif
+
+  assign on_sale = false
+  if compare_price and compare_price > current_price
+    assign on_sale = true
+    assign saving_percent = compare_price | minus: current_price | times: 100.0 | divided_by: compare_price | round
+  endif
+
+  if show_labels == nil
+    assign show_labels = true
+  endif
+-%}
+
+<div
+  class="price{% if on_sale %} price--on-sale{% endif %}{% if price_class %} {{ price_class }}{% endif %}"
+  {% if price_id %}id="{{ price_id }}"{% endif %}
+  {% if price_section %}data-price-block data-section="{{ price_section }}"{% endif %}
+>
+  {%- if show_labels -%}
+    <span class="visually-hidden">
+      {%- if on_sale -%}
+        {{ 'products.product.sale_price' | t }}
+      {%- else -%}
+        {{ 'products.product.regular_price' | t }}
+      {%- endif -%}
+    </span>
+  {%- endif -%}
+
+  <span class="price__current" data-price-current>{{ current_price | money }}</span>
+
+  <s class="price__compare" data-price-compare {% unless on_sale %}hidden{% endunless %}>
+    {%- if on_sale -%}{{ compare_price | money }}{%- endif -%}
+  </s>
+
+  {%- if show_saving -%}
+    <span class="badge badge--sale" data-price-saving {% unless on_sale %}hidden{% endunless %}>
+      {%- if on_sale -%}
+        {{ 'products.product.save_percent' | t: percent: saving_percent }}
+      {%- endif -%}
+    </span>
+  {%- endif -%}
+
+  {%- if unit_price_measurement -%}
+    <span class="price__unit">
+      {{ unit_price | money }}
+      {{ 'products.product.unit_price_separator' | t }}
+      {%- if unit_price_measurement.reference_value != 1 %}
+        {{ unit_price_measurement.reference_value }}
+      {%- endif %}
+      {{ unit_price_measurement.reference_unit }}
+    </span>
+  {%- endif -%}
+</div>

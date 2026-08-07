@@ -1,0 +1,233 @@
+{%- liquid
+  assign st = section.settings
+
+  assign width_class = 'page-width'
+  if st.content_width == 'narrow'
+    assign width_class = 'page-width page-width--narrow'
+  elsif st.content_width == 'medium'
+    assign width_class = 'page-width page-width--medium'
+  endif
+
+  assign columns_desktop = st.columns_desktop
+  if section.blocks.size < columns_desktop
+    assign columns_desktop = section.blocks.size
+  endif
+  if columns_desktop < 1
+    assign columns_desktop = 1
+  endif
+-%}
+
+{% render 'section-style', section: section %}
+
+<div class="section">
+  <div class="{{ width_class }}">
+    {%- if st.heading != blank -%}
+      <div class="section__header section__header--center">
+        <h2 class="h4">{{ st.heading }}</h2>
+      </div>
+    {%- endif -%}
+
+    {%- if section.blocks.size > 0 -%}
+      <div
+        class="trust-badges"
+        style="
+          --badges-mobile: {{ st.columns_mobile }};
+          --badges-desktop: {{ columns_desktop }};
+          --badge-height: {{ st.badge_height }}px;
+        "
+      >
+        {%- for block in section.blocks -%}
+          <div class="trust-badge" {{ block.shopify_attributes }}>
+            {%- if block.settings.image != blank -%}
+              <img
+                src="{{ block.settings.image | image_url: width: 300 }}"
+                alt="{{ block.settings.text | escape }}"
+                width="{{ block.settings.image.width }}"
+                height="{{ block.settings.image.height }}"
+                loading="lazy"
+              >
+            {%- else -%}
+              <span class="benefit__icon" style="--benefit-icon-size: {{ st.badge_height }}px;">
+                {% render 'icon', name: block.settings.icon %}
+              </span>
+            {%- endif -%}
+
+            {%- if block.settings.text != blank and st.show_labels -%}
+              <span>{{ block.settings.text }}</span>
+            {%- endif -%}
+          </div>
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Trust badges",
+  "tag": "section",
+  "class": "section-trust-badges",
+  "max_blocks": 8,
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_labels",
+      "label": "Show text under each badge",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "badge_height",
+      "min": 20,
+      "max": 90,
+      "step": 2,
+      "unit": "px",
+      "label": "Badge size",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "columns_mobile",
+      "min": 1,
+      "max": 3,
+      "step": 1,
+      "label": "Columns on mobile",
+      "default": 2
+    },
+    {
+      "type": "range",
+      "id": "columns_desktop",
+      "min": 2,
+      "max": 6,
+      "step": 1,
+      "label": "Columns on desktop",
+      "default": 4
+    },
+    {
+      "type": "header",
+      "content": "Section layout"
+    },
+    {
+      "type": "select",
+      "id": "content_width",
+      "label": "Section width",
+      "options": [
+        { "value": "page", "label": "Standard" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "narrow", "label": "Narrow" }
+      ],
+      "default": "medium"
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text"
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 28
+    }
+  ],
+  "blocks": [
+    {
+      "type": "badge",
+      "name": "Badge",
+      "settings": [
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Badge image",
+          "info": "Optional. Replaces the icon below."
+        },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            { "value": "lock", "label": "Secure" },
+            { "value": "truck", "label": "Delivery" },
+            { "value": "refresh", "label": "Returns" },
+            { "value": "shield", "label": "Guarantee" },
+            { "value": "credit-card", "label": "Payment" },
+            { "value": "headset", "label": "Support" },
+            { "value": "award", "label": "Award" },
+            { "value": "leaf", "label": "Sustainable" }
+          ],
+          "default": "lock"
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Text",
+          "default": "Secure checkout"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Trust badges",
+      "blocks": [
+        { "type": "badge" },
+        { "type": "badge", "settings": { "icon": "truck", "text": "Free shipping" } },
+        { "type": "badge", "settings": { "icon": "refresh", "text": "30-day returns" } },
+        { "type": "badge", "settings": { "icon": "headset", "text": "24/7 support" } }
+      ]
+    }
+  ]
+}
+{% endschema %}

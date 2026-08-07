@@ -1,0 +1,27 @@
+<div class="page-width" style="padding-block: 56px 72px;">
+  <div class="customer">
+    <h1>{{ 'customer.activate_account.title' | t }}</h1>
+    <p class="text-small text-muted text-center">{{ 'customer.activate_account.subtext' | t }}</p>
+
+    {%- form 'activate_customer_password', class: 'form-stack' -%}
+      {%- if form.errors -%}
+        <p class="form__message form__message--error">{{ form.errors.messages.form }}</p>
+      {%- endif -%}
+
+      <div class="field">
+        <label class="field__label" for="ActivatePassword">{{ 'customer.activate_account.password' | t }}</label>
+        <input class="field__input" id="ActivatePassword" type="password" name="customer[password]" autocomplete="new-password" required>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="ActivatePasswordConfirm">{{ 'customer.activate_account.password_confirm' | t }}</label>
+        <input class="field__input" id="ActivatePasswordConfirm" type="password" name="customer[password_confirmation]" autocomplete="new-password" required>
+      </div>
+
+      <button type="submit" class="button button--full">{{ 'customer.activate_account.submit' | t }}</button>
+      <button type="submit" name="decline" class="button button--secondary button--full">
+        {{ 'customer.activate_account.cancel' | t }}
+      </button>
+    {%- endform -%}
+  </div>
+</div>

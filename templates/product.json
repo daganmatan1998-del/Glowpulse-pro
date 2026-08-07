@@ -1,0 +1,323 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-product",
+      "blocks": {
+        "title": { "type": "title", "settings": {} },
+        "rating": {
+          "type": "rating",
+          "settings": { "rating": "4.8", "label": "1,284 reviews" }
+        },
+        "price": {
+          "type": "price",
+          "settings": { "show_saving": true, "show_tax_note": true }
+        },
+        "short_text": {
+          "type": "short_text",
+          "settings": {
+            "text": "<p>A one-line summary of why this product is worth buying.</p>"
+          }
+        },
+        "variant_picker": {
+          "type": "variant_picker",
+          "settings": { "picker_type": "button" }
+        },
+        "buy_buttons": {
+          "type": "buy_buttons",
+          "settings": {
+            "show_quantity": true,
+            "show_dynamic_checkout": true,
+            "show_inventory": true,
+            "low_stock_threshold": 10
+          }
+        },
+        "highlight-1": {
+          "type": "highlight",
+          "settings": { "icon": "truck", "text": "Free tracked shipping worldwide" }
+        },
+        "highlight-2": {
+          "type": "highlight",
+          "settings": { "icon": "refresh", "text": "30-day free returns" }
+        },
+        "highlight-3": {
+          "type": "highlight",
+          "settings": { "icon": "lock", "text": "Secure checkout" }
+        },
+        "description": { "type": "description", "settings": {} },
+        "collapsible-shipping": {
+          "type": "collapsible",
+          "settings": {
+            "heading": "Shipping and delivery",
+            "icon": "truck",
+            "content": "<p>Orders are dispatched within 24 hours. Delivery takes 5–9 business days with tracking included. Shipping is free on every order.</p>",
+            "open": false
+          }
+        },
+        "collapsible-returns": {
+          "type": "collapsible",
+          "settings": {
+            "heading": "Returns and guarantee",
+            "icon": "refresh",
+            "content": "<p>Not right for you? Return it within 30 days for a full refund. Every order is covered by a two-year guarantee.</p>",
+            "open": false
+          }
+        },
+        "collapsible-specs": {
+          "type": "collapsible",
+          "settings": {
+            "heading": "Specifications",
+            "icon": "tag",
+            "content": "<p>Add materials, dimensions, weight and what is included in the box.</p>",
+            "open": false
+          }
+        }
+      },
+      "block_order": [
+        "title",
+        "rating",
+        "price",
+        "short_text",
+        "variant_picker",
+        "buy_buttons",
+        "highlight-1",
+        "highlight-2",
+        "highlight-3",
+        "description",
+        "collapsible-shipping",
+        "collapsible-returns",
+        "collapsible-specs"
+      ],
+      "settings": {
+        "image_ratio": "square",
+        "image_fit": "cover",
+        "media_max_width": 600,
+        "media_width": 55,
+        "show_thumbnails": true,
+        "enable_sticky_atc": true,
+        "title_size_mobile": 24,
+        "title_size_desktop": 32,
+        "content_width": "page",
+        "padding_top": 40,
+        "padding_bottom": 48,
+        "padding_top_mobile": 20,
+        "padding_bottom_mobile": 32
+      }
+    },
+    "benefits": {
+      "type": "product-benefits",
+      "blocks": {
+        "benefit-1": {
+          "type": "benefit",
+          "settings": {
+            "icon": "truck",
+            "title": "Free worldwide shipping",
+            "text": "<p>Tracked delivery on every order, with no minimum spend.</p>"
+          }
+        },
+        "benefit-2": {
+          "type": "benefit",
+          "settings": {
+            "icon": "refresh",
+            "title": "30-day returns",
+            "text": "<p>Changed your mind? Send it back for a full refund.</p>"
+          }
+        },
+        "benefit-3": {
+          "type": "benefit",
+          "settings": {
+            "icon": "headset",
+            "title": "Real human support",
+            "text": "<p>Questions answered within 24 hours, every day of the week.</p>"
+          }
+        }
+      },
+      "block_order": ["benefit-1", "benefit-2", "benefit-3"],
+      "settings": {
+        "heading": "",
+        "heading_alignment": "center",
+        "layout": "center",
+        "boxed": false,
+        "columns_mobile": 1,
+        "columns_desktop": 3,
+        "show_icons": true,
+        "icon_size": 28,
+        "icon_color": "#14161a",
+        "content_width": "page",
+        "background_color": "#f6f6f4",
+        "padding_top": 48,
+        "padding_bottom": 48,
+        "padding_top_mobile": 32,
+        "padding_bottom_mobile": 32
+      }
+    },
+    "specifications": {
+      "type": "product-specifications",
+      "blocks": {
+        "spec-1": {
+          "type": "spec",
+          "settings": { "label": "Material", "value": "Anodised aluminium and recycled ABS" }
+        },
+        "spec-2": {
+          "type": "spec",
+          "settings": { "label": "Dimensions", "value": "182 × 74 × 9 mm" }
+        },
+        "spec-3": {
+          "type": "spec",
+          "settings": { "label": "Weight", "value": "245 g" }
+        },
+        "spec-4": {
+          "type": "spec",
+          "settings": { "label": "In the box", "value": "Device, USB-C cable, quick start guide" }
+        }
+      },
+      "block_order": ["spec-1", "spec-2", "spec-3", "spec-4"],
+      "settings": {
+        "heading": "Specifications",
+        "heading_alignment": "center",
+        "note": "Measurements are approximate and may vary slightly.",
+        "content_width": "narrow",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "shipping": {
+      "type": "shipping-information",
+      "blocks": {
+        "item-1": {
+          "type": "item",
+          "settings": {
+            "icon": "clock",
+            "title": "Dispatched in 24 hours",
+            "text": "<p>Orders placed before 3pm ship the same working day.</p>"
+          }
+        },
+        "item-2": {
+          "type": "item",
+          "settings": {
+            "icon": "plane",
+            "title": "5–9 day delivery",
+            "text": "<p>Delivered by your local postal service with full tracking.</p>"
+          }
+        },
+        "item-3": {
+          "type": "item",
+          "settings": {
+            "icon": "refresh",
+            "title": "Easy returns",
+            "text": "<p>30 days to change your mind, no questions asked.</p>"
+          }
+        }
+      },
+      "block_order": ["item-1", "item-2", "item-3"],
+      "settings": {
+        "heading": "Shipping and delivery",
+        "heading_alignment": "center",
+        "columns_desktop": 3,
+        "icon_color": "#14161a",
+        "policy_link_label": "Read the full shipping policy",
+        "content_width": "medium",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "reviews": {
+      "type": "reviews",
+      "blocks": {
+        "review-1": {
+          "type": "review",
+          "settings": {
+            "rating": "5",
+            "title": "Exactly as described",
+            "text": "<p>Arrived faster than expected and the quality is genuinely better than I hoped.</p>",
+            "author": "Sarah M.",
+            "verified": true
+          }
+        },
+        "review-2": {
+          "type": "review",
+          "settings": {
+            "rating": "5",
+            "title": "Worth every penny",
+            "text": "<p>This has become part of my daily routine. Packaging was excellent too.</p>",
+            "author": "James T.",
+            "verified": true
+          }
+        },
+        "review-3": {
+          "type": "review",
+          "settings": {
+            "rating": "4.5",
+            "title": "Great support",
+            "text": "<p>I had a question before ordering and got a helpful reply the same day.</p>",
+            "author": "Priya K.",
+            "verified": true
+          }
+        }
+      },
+      "block_order": ["review-1", "review-2", "review-3"],
+      "settings": {
+        "subheading": "Reviews",
+        "heading": "What customers say",
+        "heading_alignment": "center",
+        "show_summary": true,
+        "summary_score": "4.8",
+        "summary_text": "Based on 1,284 verified reviews",
+        "show_stars": true,
+        "card_style": "boxed",
+        "mobile_layout": "scroll",
+        "columns_mobile": 1,
+        "columns_desktop": 3,
+        "content_width": "page",
+        "background_color": "#f6f6f4",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "faq": {
+      "type": "faq",
+      "blocks": {
+        "q-1": {
+          "type": "question",
+          "settings": {
+            "question": "How long does shipping take?",
+            "answer": "<p>Orders are dispatched within 24 hours. Delivery usually takes 5–9 business days, and every order includes tracking.</p>"
+          }
+        },
+        "q-2": {
+          "type": "question",
+          "settings": {
+            "question": "What is your return policy?",
+            "answer": "<p>You have 30 days from delivery to request a return. Items must be unused and in their original packaging.</p>"
+          }
+        },
+        "q-3": {
+          "type": "question",
+          "settings": {
+            "question": "Do you ship internationally?",
+            "answer": "<p>Yes, we ship worldwide. Import duties may apply depending on your country.</p>"
+          }
+        }
+      },
+      "block_order": ["q-1", "q-2", "q-3"],
+      "settings": {
+        "heading": "Frequently asked questions",
+        "heading_alignment": "center",
+        "style": "lines",
+        "one_at_a_time": true,
+        "enable_seo_schema": false,
+        "content_width": "narrow",
+        "padding_top": 56,
+        "padding_bottom": 64,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 40
+      }
+    }
+  },
+  "order": ["main", "benefits", "specifications", "shipping", "reviews", "faq"]
+}

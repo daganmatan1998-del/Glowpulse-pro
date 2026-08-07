@@ -1,0 +1,13 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-blog",
+      "settings": {
+        "posts_per_page": 9,
+        "show_date": true,
+        "show_excerpt": true
+      }
+    }
+  },
+  "order": ["main"]
+}

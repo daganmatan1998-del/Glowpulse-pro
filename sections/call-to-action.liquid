@@ -1,0 +1,319 @@
+{%- liquid
+  assign st = section.settings
+
+  assign width_class = 'page-width'
+  if st.content_width == 'narrow'
+    assign width_class = 'page-width page-width--narrow'
+  elsif st.content_width == 'medium'
+    assign width_class = 'page-width page-width--medium'
+  endif
+
+  assign flex_align = 'center'
+  if st.text_alignment == 'left'
+    assign flex_align = 'flex-start'
+  elsif st.text_alignment == 'right'
+    assign flex_align = 'flex-end'
+  endif
+-%}
+
+{% render 'section-style', section: section %}
+
+{%- style -%}
+  #shopify-section-{{ section.id }} .cta__heading {
+    font-size: {{ st.heading_size_mobile }}px;
+  }
+  #shopify-section-{{ section.id }} .cta__text {
+    font-size: {{ st.text_size_mobile }}px;
+  }
+  {%- if st.box_background != blank %}
+    #shopify-section-{{ section.id }} .cta--boxed {
+      background-color: {{ st.box_background }};
+    }
+  {% endif -%}
+  @media screen and (min-width: 750px) {
+    #shopify-section-{{ section.id }} .cta__heading {
+      font-size: {{ st.heading_size_desktop }}px;
+    }
+    #shopify-section-{{ section.id }} .cta__text {
+      font-size: {{ st.text_size_desktop }}px;
+    }
+  }
+{%- endstyle -%}
+
+<div class="section">
+  <div class="{{ width_class }}">
+    <div
+      class="cta{% if st.boxed %} cta--boxed{% endif %}{% if settings.animations_enabled %} animate-in{% endif %}"
+      style="--content-align: {{ flex_align }}; --content-text-align: {{ st.text_alignment }};"
+    >
+      {%- if st.subheading != blank -%}
+        <span class="eyebrow">{{ st.subheading }}</span>
+      {%- endif -%}
+
+      {%- if st.heading != blank -%}
+        <h2 class="cta__heading">{{ st.heading }}</h2>
+      {%- endif -%}
+
+      {%- if st.text != blank -%}
+        <div class="rte cta__text">{{ st.text }}</div>
+      {%- endif -%}
+
+      {%- if st.button_1_label != blank or st.button_2_label != blank -%}
+        <div class="hero__buttons">
+          {%- if st.button_1_label != blank -%}
+            <a
+              class="button button--large{% if st.button_1_style == 'secondary' %} button--secondary{% endif %}"
+              href="{{ st.button_1_link | default: '#' }}"
+            >
+              {{ st.button_1_label }}
+            </a>
+          {%- endif -%}
+          {%- if st.button_2_label != blank -%}
+            <a
+              class="button button--large{% if st.button_2_style == 'secondary' %} button--secondary{% endif %}"
+              href="{{ st.button_2_link | default: '#' }}"
+            >
+              {{ st.button_2_label }}
+            </a>
+          {%- endif -%}
+        </div>
+      {%- endif -%}
+
+      {%- if st.footnote != blank -%}
+        <p class="text-small text-muted">{{ st.footnote }}</p>
+      {%- endif -%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Call to action",
+  "tag": "section",
+  "class": "section-cta",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Content"
+    },
+    {
+      "type": "text",
+      "id": "subheading",
+      "label": "Small label above heading"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Ready when you are"
+    },
+    {
+      "type": "richtext",
+      "id": "text",
+      "label": "Text",
+      "default": "<p>Join thousands of happy customers. Free shipping, 30-day returns and support that actually replies.</p>"
+    },
+    {
+      "type": "text",
+      "id": "footnote",
+      "label": "Small print below buttons",
+      "default": "Secure checkout · Tracked delivery"
+    },
+    {
+      "type": "select",
+      "id": "text_alignment",
+      "label": "Alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "header",
+      "content": "Buttons"
+    },
+    {
+      "type": "text",
+      "id": "button_1_label",
+      "label": "First button label",
+      "default": "Shop now"
+    },
+    {
+      "type": "url",
+      "id": "button_1_link",
+      "label": "First button link"
+    },
+    {
+      "type": "select",
+      "id": "button_1_style",
+      "label": "First button style",
+      "options": [
+        { "value": "primary", "label": "Primary" },
+        { "value": "secondary", "label": "Secondary" }
+      ],
+      "default": "primary"
+    },
+    {
+      "type": "text",
+      "id": "button_2_label",
+      "label": "Second button label"
+    },
+    {
+      "type": "url",
+      "id": "button_2_link",
+      "label": "Second button link"
+    },
+    {
+      "type": "select",
+      "id": "button_2_style",
+      "label": "Second button style",
+      "options": [
+        { "value": "primary", "label": "Primary" },
+        { "value": "secondary", "label": "Secondary" }
+      ],
+      "default": "secondary"
+    },
+    {
+      "type": "header",
+      "content": "Typography"
+    },
+    {
+      "type": "range",
+      "id": "heading_size_mobile",
+      "min": 16,
+      "max": 44,
+      "step": 1,
+      "unit": "px",
+      "label": "Heading size (mobile)",
+      "default": 26
+    },
+    {
+      "type": "range",
+      "id": "heading_size_desktop",
+      "min": 18,
+      "max": 64,
+      "step": 1,
+      "unit": "px",
+      "label": "Heading size (desktop)",
+      "default": 38
+    },
+    {
+      "type": "range",
+      "id": "text_size_mobile",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "label": "Text size (mobile)",
+      "default": 15
+    },
+    {
+      "type": "range",
+      "id": "text_size_desktop",
+      "min": 13,
+      "max": 26,
+      "step": 1,
+      "unit": "px",
+      "label": "Text size (desktop)",
+      "default": 17
+    },
+    {
+      "type": "header",
+      "content": "Section layout"
+    },
+    {
+      "type": "checkbox",
+      "id": "boxed",
+      "label": "Show content in a coloured box",
+      "default": true
+    },
+    {
+      "type": "color",
+      "id": "box_background",
+      "label": "Box background",
+      "default": "#f6f6f4"
+    },
+    {
+      "type": "select",
+      "id": "content_width",
+      "label": "Section width",
+      "options": [
+        { "value": "page", "label": "Standard" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "narrow", "label": "Narrow" }
+      ],
+      "default": "page"
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Section background"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text"
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Heading"
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 36
+    }
+  ],
+  "presets": [
+    {
+      "name": "Call to action"
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,230 @@
+{%- liquid
+  assign st = section.settings
+-%}
+
+{% render 'section-style', section: section %}
+
+<div class="section">
+  <div class="page-width">
+    <div class="section__header{% if st.heading_alignment == 'center' %} section__header--center{% endif %}">
+      <h1>{{ collection.title }}</h1>
+      {%- if st.show_description and collection.description != blank -%}
+        <div class="rte section__text">{{ collection.description }}</div>
+      {%- endif -%}
+    </div>
+
+    {%- if st.show_toolbar -%}
+      <div class="collection__toolbar">
+        <span class="collection__count">
+          {{ 'products.facets.product_count' | t: count: collection.products_count }}
+        </span>
+
+        <form class="collection__sort" method="get">
+          {%- assign sort_by = collection.sort_by | default: collection.default_sort_by -%}
+          <label class="visually-hidden" for="SortBy">{{ 'products.facets.sort_by_label' | t }}</label>
+          <div class="select">
+            <select
+              class="select__select"
+              name="sort_by"
+              id="SortBy"
+              onchange="this.form.submit()"
+            >
+              {%- for option in collection.sort_options -%}
+                <option value="{{ option.value }}" {% if option.value == sort_by %}selected{% endif %}>
+                  {{ option.name }}
+                </option>
+              {%- endfor -%}
+            </select>
+            <span class="select__icon">{% render 'icon', name: 'chevron-down' %}</span>
+          </div>
+          <noscript>
+            <button type="submit" class="button button--small">{{ 'products.facets.apply' | t }}</button>
+          </noscript>
+        </form>
+      </div>
+    {%- endif -%}
+
+    {%- paginate collection.products by st.products_per_page -%}
+      {%- if collection.products.size > 0 -%}
+        <ul
+          class="product-grid"
+          role="list"
+          style="--grid-mobile: {{ st.columns_mobile }}; --grid-desktop: {{ st.columns_desktop }};"
+        >
+          {%- for product in collection.products -%}
+            <li>
+              {% render 'product-card',
+                card_product: product,
+                image_ratio: st.image_ratio,
+                show_vendor: st.show_vendor,
+                show_badges: st.show_badges,
+                alignment: st.card_alignment,
+                index: forloop.index
+              %}
+            </li>
+          {%- endfor -%}
+        </ul>
+
+        {% render 'pagination', paginate: paginate %}
+      {%- else -%}
+        <p class="text-center text-muted" style="padding:48px 0;">
+          {{ 'general.404.subtext' | t }}
+        </p>
+      {%- endif -%}
+    {%- endpaginate -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Collection",
+  "tag": "section",
+  "class": "section-main-collection",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "show_description",
+      "label": "Show collection description",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "heading_alignment",
+      "label": "Heading alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_toolbar",
+      "label": "Show product count and sorting",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Product grid"
+    },
+    {
+      "type": "range",
+      "id": "products_per_page",
+      "min": 8,
+      "max": 48,
+      "step": 4,
+      "label": "Products per page",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "columns_mobile",
+      "min": 1,
+      "max": 2,
+      "step": 1,
+      "label": "Columns on mobile",
+      "default": 2
+    },
+    {
+      "type": "range",
+      "id": "columns_desktop",
+      "min": 2,
+      "max": 5,
+      "step": 1,
+      "label": "Columns on desktop",
+      "default": 4
+    },
+    {
+      "type": "select",
+      "id": "image_ratio",
+      "label": "Image shape",
+      "options": [
+        { "value": "square", "label": "Square (1:1)" },
+        { "value": "portrait", "label": "Portrait (4:5)" },
+        { "value": "landscape", "label": "Landscape (4:3)" }
+      ],
+      "default": "square"
+    },
+    {
+      "type": "select",
+      "id": "card_alignment",
+      "label": "Card text alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" }
+      ],
+      "default": "left"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_vendor",
+      "label": "Show vendor",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "show_badges",
+      "label": "Show sale and sold out badges",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text"
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 48
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 64
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 40
+    }
+  ]
+}
+{% endschema %}

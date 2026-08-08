@@ -126,3 +126,19 @@ button scrolls away.
 
 The theme passes Shopify's official `theme-check` with zero offenses across all 82 enabled
 checks, and its rendering was verified in Chromium at mobile, tablet and desktop widths.
+
+### Server-side rules theme-check does not catch
+
+Shopify's own upload validation is stricter than `theme-check`, and it rejects an offending
+file **silently** — the theme uploads, the file is simply absent, and any template that
+referenced it disappears too. Rules learned the hard way:
+
+- **A `range` setting must offer at least 3 selectable values**, i.e.
+  `(max - min) / step + 1 >= 3`. A slider from 1 to 2 is rejected and takes the whole
+  section file with it.
+- **`font_face` returns a bare CSS rule**, so it must sit inside a `<style>` element.
+- **A `<style>` element is raw text**: no Liquid tags inside it, and no comment containing
+  the literal text of a style opening tag.
+
+After uploading, compare the theme's file list against the repository — a missing file is
+the symptom of a rejected one.

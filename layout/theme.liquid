@@ -34,18 +34,26 @@
       assign body_font_bold_italic = body_font_bold | font_modify: 'style', 'italic'
       assign heading_font = settings.font_heading
       assign heading_font_weighted = heading_font | font_modify: 'weight', settings.font_heading_weight
+
+      # Resolved up here because Liquid tags are not allowed inside a <style> element.
+      capture heading_font_face
+        if heading_font_weighted
+          echo heading_font_weighted | font_face: font_display: 'swap'
+        endif
+      endcapture
     -%}
 
-    {{ body_font | font_face: font_display: 'swap' }}
-    {{ body_font_bold | font_face: font_display: 'swap' }}
-    {{ body_font_italic | font_face: font_display: 'swap' }}
-    {{ body_font_bold_italic | font_face: font_display: 'swap' }}
-    {{ heading_font | font_face: font_display: 'swap' }}
-    {%- if heading_font_weighted -%}
-      {{ heading_font_weighted | font_face: font_display: 'swap' }}
-    {%- endif -%}
-
     <style>
+      /* font_face returns a bare @font-face rule rather than a style element,
+         so it has to live in here. Outside, the browser treats it as text and
+         prints it at the top of the page. */
+      {{ body_font | font_face: font_display: 'swap' }}
+      {{ body_font_bold | font_face: font_display: 'swap' }}
+      {{ body_font_italic | font_face: font_display: 'swap' }}
+      {{ body_font_bold_italic | font_face: font_display: 'swap' }}
+      {{ heading_font | font_face: font_display: 'swap' }}
+      {{ heading_font_face }}
+
       :root {
         /* Layout */
         --page-width: {{ settings.page_width }}px;

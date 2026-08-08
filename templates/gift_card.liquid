@@ -16,10 +16,11 @@
       assign body_font = settings.font_body
       assign heading_font = settings.font_heading
     -%}
-    {{ body_font | font_face: font_display: 'swap' }}
-    {{ heading_font | font_face: font_display: 'swap' }}
-
     <style>
+      /* font_face emits a bare CSS rule, so it must sit inside this style tag. */
+      {{ body_font | font_face: font_display: 'swap' }}
+      {{ heading_font | font_face: font_display: 'swap' }}
+
       :root {
         --page-width: {{ settings.page_width }}px;
         --page-gutter: {{ settings.page_gutter_mobile }}px;

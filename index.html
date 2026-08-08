@@ -475,6 +475,11 @@
     padding:9px 4px; cursor:pointer; white-space:nowrap;
   }
   .attachOpt:hover{ background:rgba(0,255,255,0.16); }
+  .attachOpt.active{
+    background:rgba(0,255,140,0.18); border-color:#4dffb0; color:#7dffc4;
+    box-shadow:0 0 10px rgba(80,255,170,0.35);
+  }
+  #plusBtn.researchOn{ border-color:#4dffb0; color:#7dffc4; box-shadow:0 0 8px rgba(80,255,170,0.35); }
 
   .fileChip{
     display:flex; align-items:center; gap:6px; max-width:150px;
@@ -502,6 +507,11 @@
     font-family:inherit; font-size:10px; cursor:pointer; padding:0;
   }
   body.lang-rtl .imgThumbX{ right:auto; left:-6px; }
+  .videoBadge{
+    position:absolute; left:2px; bottom:2px; right:2px;
+    background:rgba(0,10,20,0.8); color:var(--cyan); font-size:9px; letter-spacing:0.5px;
+    padding:2px 4px; pointer-events:none; text-align:center;
+  }
   .msgFile{ margin-top:6px; font-size:11px; opacity:0.85; }
   .msgImg{
     max-width:180px; max-height:180px; margin-top:6px; display:block;
@@ -707,6 +717,7 @@
       <button id="attachCameraBtn" class="attachOpt">CAMERA</button>
       <button id="attachGalleryBtn" class="attachOpt">GALLERY</button>
       <button id="attachFilesBtn" class="attachOpt">FILES</button>
+      <button id="researchBtn" class="attachOpt" title="Deep Research Mode — sub-questions, cross-checked sources, one final synthesis">RESEARCH</button>
     </div>
     <div id="imgPreviewRow"></div>
     <div id="panelInputRow">
@@ -716,7 +727,7 @@
     </div>
     <input id="cameraFileInput" type="file" accept="image/*" capture="environment" style="display:none;">
     <input id="galleryFileInput" type="file" accept="image/*" multiple style="display:none;">
-    <input id="docFileInput" type="file" accept=".pdf,.txt,.md,.csv,.json,.log,application/pdf,text/*" multiple style="display:none;">
+    <input id="docFileInput" type="file" accept=".pdf,.txt,.md,.csv,.json,.log,application/pdf,text/*,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,.mp4,.mov,.avi,.mkv,.webm" multiple style="display:none;">
   </div>
   <div id="commBar">
     <button id="micBtn" title="Talk to J.A.R.V.I.S.">MIC</button>
@@ -896,8 +907,12 @@ const I18N = {
     chatInputPlaceholder: 'Type a message...',
     entBtn: 'ENT', convBtn: 'LOOP', micBtn: 'MIC', muteBtn: 'MUTE', muteBtnOn: 'MUTED',
     attachCameraBtn: 'CAMERA', attachGalleryBtn: 'GALLERY', attachFilesBtn: 'FILES',
+    researchBtn: 'RESEARCH', researchBtnOn: 'RESEARCHING',
+    researchModeOn: 'Deep Research Mode on, Sir — I will break this down into sub-questions and cross-check sources before answering.',
+    researchModeOff: 'Deep Research Mode off — back to normal pace.',
     imgTooMany: 'Up to 4 attachments per message, Sir.',
     imgFailed: 'Could not attach that file',
+    videoProcessing: 'Reading the video, Sir — sampling frames…',
     replyCappedByBackend: 'Cut off after only {n} tokens, though {max} were requested \u2014 so the limit is being imposed by your backend, not by him. Redeploy jarvis-worker.js: the current one is rewriting the request instead of passing it through.',
     usingFallback: 'Anthropic is unavailable, so he has switched to {model}. He will keep working, but web search and connected tools are Anthropic-only and are off until it recovers.',
     backOnPrimary: 'Anthropic is answering again.',
@@ -1016,8 +1031,12 @@ const I18N = {
     chatInputPlaceholder: 'הקלד הודעה...',
     entBtn: 'שלח', convBtn: 'לולאה', micBtn: 'מיק', muteBtn: 'קול', muteBtnOn: 'מושתק',
     attachCameraBtn: 'מצלמה', attachGalleryBtn: 'גלריה', attachFilesBtn: 'קבצים',
+    researchBtn: 'מחקר', researchBtnOn: 'חוקר',
+    researchModeOn: 'מצב מחקר מעמיק פעיל, אדוני — אפרק את זה לתת-שאלות ואבדוק מקורות לפני שאענה.',
+    researchModeOff: 'מצב מחקר מעמיק כבוי — חוזרים לקצב רגיל.',
     imgTooMany: 'עד 4 קבצים בהודעה אחת, אדוני.',
     imgFailed: 'לא הצלחתי לצרף את הקובץ',
+    videoProcessing: 'קורא את הסרטון, אדוני — דוגם פריימים…',
     replyCappedByBackend: 'נחתך אחרי {n} טוקנים בלבד למרות שביקשנו {max} \u2014 כלומר המגבלה מגיעה מה-backend שלך, לא ממנו. תפרוס מחדש את jarvis-worker.js: הנוכחי משכתב את הבקשה במקום להעביר אותה.',
     usingFallback: 'Anthropic לא זמינה, אז הוא עבר ל-{model}. הוא ימשיך לעבוד, אבל חיפוש באינטרנט והכלים המחוברים קיימים רק ב-Anthropic והם כבויים עד שהיא תחזור.',
     backOnPrimary: 'Anthropic חזרה לענות.',
@@ -1083,6 +1102,7 @@ function applyLanguage(lang){
   }
   if(typeof updateWakeWordUI === 'function') updateWakeWordUI();
   if(typeof updateMuteLabel === 'function') updateMuteLabel();
+  if(typeof updateResearchUI === 'function') updateResearchUI();
   if(typeof syncChatToggleLabel === 'function') syncChatToggleLabel();
 
   const placeholderMap = {
@@ -2043,12 +2063,21 @@ function getSystemPrompt(calendarAvailable){
   prompt += (currentLang === 'he')
     ? ' המשתמש יכול לצרף תמונות מגלריית הטלפון שלו — כשמצורפת תמונה, התייחס אליה ישירות (מוצר, עיצוב חנות, מודעה, צילום מסך) ותן משוב קונקרטי.'
     : ' The user can attach images from his phone gallery — when an image is attached, engage with it directly (a product, a store design, an ad, a screenshot) and give concrete feedback.';
+  prompt += (currentLang === 'he')
+    ? ' הוא יכול גם לצרף סרטון (mp4, mov, avi, mkv, webm). אין לך גישה לסרטון עצמו — במקום זאת תקבל רצף של פריימים לדוגמה מתוך הסרטון, כל אחד מסומן בחותמת זמן משלו כמו [0:04], מהמוקדם למאוחר. תייחס לזה כאל "צפייה" בסרטון: תאר סצנות, זהה אובייקטים ואנשים אם רלוונטי, ותתייחס לרגעים ספציפיים לפי חותמת הזמן שלהם כשהמשתמש שואל עליהם. אם המשתמש מבקש רזולוציית זמן שהפריימים שנשלחו לא מספיקים בשבילה, תגיד זאת בפשטות.'
+    : " He can also attach a video (mp4, mov, avi, mkv, webm). You never get the raw video — instead you receive a sequence of sampled frames from it, each labeled with its own timestamp like [0:04], oldest to newest. Treat this as genuinely watching the clip: describe scenes, identify objects and people where relevant, and reference specific moments by their timestamp when he asks about them. If he asks about a level of detail the sampled frames cannot resolve, say so plainly rather than guessing.";
   const memoryText = planToMemoryText(currentPlanCache);
   if(memoryText){
     const memoryNote = currentLang === 'he'
       ? '\n\nיש לך זיכרון מתמשך על פני כל השיחות הקודמות עם המשתמש (לא רק זו הנוכחית), שמתעדכן אוטומטית ברקע. הנה מה שאתה זוכר עד כה:\n' + memoryText + '\nהתייחס לזה כידע קיים — אל תשאל שוב על דברים שכבר מופיעים כאן, אלא אם המשתמש רוצה לשנות אותם.'
       : "\n\nYou have persistent memory across all of the user's previous conversations with you (not just this current thread), which updates automatically in the background. Here is what you remember so far:\n" + memoryText + "\nTreat this as established knowledge — don't re-ask about things already covered here unless the user wants to change them.";
     prompt += memoryNote;
+  }
+  if(researchMode && calendarAvailable){
+    const researchNote = currentLang === 'he'
+      ? '\n\nמצב מחקר מעמיק פעיל בהחלפה הזו: אל תענה מחיפוש מהיר בודד. עבוד כמו אנליסט אמיתי — בשקט, גבש שתיים-שלוש תת-שאלות קונקרטיות שהנושא באמת תלוי בהן, הרץ web_search נפרד לכל אחת במקום שאילתה רחבה אחת, בדוק שוב כל טענה שמופיעה במקור יחיד בלבד, וציין בפירוש אם המקורות סותרים. רק אחרי שעשית את זה, דבר את הסינתזה הסופית באותה פרוזה מדוברת פשוטה כרגיל — בלי markdown, בלי רשימות — תוך ציון המקורות שלך לפי שם הגוף המפרסם תוך כדי דיבור, ותציין בפירוש כל דבר שלא הצלחת לאמת.'
+      : '\n\nDeep Research Mode is active for this exchange: do not answer from a single quick search. Work like a real analyst — silently form two or three concrete sub-questions the topic actually depends on, run a separate web_search for each rather than one broad query, cross-check any claim that shows up in only one source, and flag it plainly if sources disagree. Only once you have done that should you speak the final synthesis, in the same plain spoken prose as always — no markdown, no bullet lists — naming your sources by outlet or publisher inline as you go, and noting anything you could not verify.';
+    prompt += researchNote;
   }
   prompt += nowContextLine();
   return prompt;
@@ -2058,6 +2087,7 @@ let isThinking = false;
 let isSpeaking = false;
 let conversationMode = false;
 let silentMode = false; // mic in, text-only replies, no TTS — for offices/nights/meetings
+let researchMode = false; // sub-question, cross-check, cite — instead of one quick search
 let currentAbortController = null; // in-flight Claude request, if any
 let activeAudio = null;            // currently-playing Cartesia <audio>, if any
 let convRestartTimer = null;       // pending "listen again" timer in LOOP mode
@@ -2319,7 +2349,17 @@ function addMessage(role, text, images){
   if(text) div.textContent = text;
   if(images && images.length){
     for(const att of images){
-      if(att.kind === 'image' || att.dataUrl){
+      if(att.kind === 'video'){
+        const el = document.createElement('img');
+        el.className = 'msgImg';
+        el.src = (att.frames[0] && att.frames[0].dataUrl) || '';
+        div.appendChild(el);
+        const line = document.createElement('div');
+        line.className = 'msgFile';
+        line.textContent = '\u{1F3A5} ' + (att.name || 'video') + ' — ' + formatDuration(att.durationSec) +
+                            ', ' + att.frames.length + ' sampled frame' + (att.frames.length === 1 ? '' : 's');
+        div.appendChild(line);
+      } else if(att.kind === 'image' || att.dataUrl){
         const el = document.createElement('img');
         el.className = 'msgImg';
         el.src = att.dataUrl || ('data:' + att.media_type + ';base64,' + att.data);
@@ -2884,6 +2924,8 @@ backendSaveBtn.addEventListener('click', async ()=>{
   }catch(err){}
   backendStatus.style.color = '';
   backendStatus.textContent = backendUrl ? t('backendStatusOwn') : t('backendStatusInChat');
+  if(typeof updateResearchUI === 'function') updateResearchUI();
+  if(!backendUrl && typeof setResearchMode === 'function') setResearchMode(false, true);
   probeBackend();
 });
 
@@ -3045,6 +3087,8 @@ backendClearBtn.addEventListener('click', async ()=>{
   backendSupportsStreaming = false;
   workerVoiceAvailable = false;
   cartesiaStatus.textContent = voiceStatusText();
+  if(typeof setResearchMode === 'function') setResearchMode(false, true);
+  else if(typeof updateResearchUI === 'function') updateResearchUI();
 });
 
 /* --- Store plan: on-demand structured summary of the brainstorm --- */
@@ -4372,6 +4416,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth){
       backendStatus.textContent = t('backendStatusOwn');
       addMessage('system', t(inChatWasDeliberate ? 'backendRestoredChosen' : 'backendRestored'));
       inChatWasDeliberate = false;
+      if(typeof updateResearchUI === 'function') updateResearchUI();
       probeBackend();
       return await callClaude(messages, true, onText, retriedAuth);   // once, with the worker
     }
@@ -4441,7 +4486,7 @@ async function askJarvis(userText, images, onText){
   userInterrupted = false;
   if(images && images.length){
     // Keep the newest photo around: it is what "put MY product in a scene" needs.
-    const photo = images.filter(a => a.kind !== 'pdf' && a.kind !== 'text').slice(-1)[0];
+    const photo = images.filter(a => a.kind !== 'pdf' && a.kind !== 'text' && a.kind !== 'video').slice(-1)[0];
     if(photo && photo.data) lastAttachedImage = photo;
     const blocks = [];
     for(const att of images){
@@ -4449,6 +4494,16 @@ async function askJarvis(userText, images, onText){
         blocks.push({ type:'document', source:{ type:'base64', media_type:'application/pdf', data: att.data } });
       } else if(att.kind === 'text'){
         blocks.push({ type:'text', text:'--- File: ' + att.name + ' ---\n' + att.text + '\n--- end of file ---' });
+      } else if(att.kind === 'video'){
+        // No native video input — hand over a timestamped filmstrip instead,
+        // so he can still point at a specific moment.
+        blocks.push({ type:'text', text:'--- Video: ' + att.name + ' (' + formatDuration(att.durationSec) +
+                      ') — ' + att.frames.length + ' sampled frames follow, oldest to newest, each labeled with its timestamp ---' });
+        for(const frame of att.frames){
+          blocks.push({ type:'text', text:'[' + formatDuration(frame.t) + ']' });
+          blocks.push({ type:'image', source:{ type:'base64', media_type: frame.media_type, data: frame.data } });
+        }
+        blocks.push({ type:'text', text:'--- end of video ---' });
       } else {
         blocks.push({ type:'image', source:{ type:'base64', media_type: att.media_type, data: att.data } });
       }
@@ -5118,6 +5173,43 @@ document.addEventListener('visibilitychange', ()=>{
 document.getElementById('attachGalleryBtn').addEventListener('click', ()=>{ setAttachMenu(false); galleryFileInput.click(); });
 document.getElementById('attachFilesBtn').addEventListener('click', ()=>{ setAttachMenu(false); docFileInput.click(); });
 
+/* DEEP RESEARCH MODE — sticky like mute/loop, not a one-shot: sub-questions,
+   a separate web_search per question, cross-checked sources, one synthesis
+   at the end. Only useful once a backend is connected (that is where
+   web_search actually lives), so it stays disabled otherwise. */
+const RESEARCH_KEY = 'jarvis:research_mode';
+const researchBtn = document.getElementById('researchBtn');
+
+function updateResearchUI(){
+  if(!researchBtn) return;
+  researchBtn.classList.toggle('active', researchMode);
+  researchBtn.textContent = t(researchMode ? 'researchBtnOn' : 'researchBtn');
+  plusBtn.classList.toggle('researchOn', researchMode);
+  researchBtn.disabled = !backendUrl;
+  researchBtn.title = backendUrl
+    ? 'Deep Research Mode — sub-questions, cross-checked sources, one final synthesis'
+    : 'Deep Research Mode needs a backend connected (☰ → BRAIN)';
+}
+
+function setResearchMode(on, quiet){
+  researchMode = !!on && !!backendUrl;
+  updateResearchUI();
+  if(!quiet) addMessage('system', t(researchMode ? 'researchModeOn' : 'researchModeOff'));
+  try{ Store.set(RESEARCH_KEY, researchMode ? '1' : '0'); }catch(err){}
+}
+
+if(researchBtn){
+  researchBtn.addEventListener('click', ()=> setResearchMode(!researchMode));
+  (async function initResearchMode(){
+    let saved = '0';
+    try{
+      const r = await Store.get(RESEARCH_KEY);
+      if(r && r.value) saved = r.value;
+    }catch(err){ /* never set */ }
+    setResearchMode(saved === '1', true);
+  })();
+}
+
 function fileToResizedImage(file){
   return new Promise((resolve, reject)=>{
     const reader = new FileReader();
@@ -5160,11 +5252,93 @@ function fileToText(file){
   });
 }
 
+function formatDuration(sec){
+  sec = Math.round(sec || 0);
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
 const TEXTUAL_EXT = /\.(txt|md|csv|json|log|yml|yaml|xml|html|js|ts|css|py)$/i;
+const VIDEO_EXT = /\.(mp4|mov|avi|mkv|webm)$/i;
+const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200MB raw — only sampled frames actually get uploaded
+const VIDEO_MAX_FRAMES = 6;
+const VIDEO_MIN_FRAMES = 3;
+const VIDEO_FRAME_INTERVAL_SEC = 4; // roughly one sampled frame every 4s of footage
+
+/* Claude's API takes images and PDFs, not video. "Watching" a clip means
+   sampling it into a timestamped filmstrip of frames and letting Claude read
+   those instead — a real seek-and-grab through an off-DOM <video> element,
+   not a checkbox. Frame count scales with length but is capped so a long
+   video does not blow the attachment budget or the token bill. */
+function fileToVideoFrames(file){
+  return new Promise((resolve, reject)=>{
+    if(file.size > MAX_VIDEO_BYTES){
+      reject(new Error('video is larger than 200MB'));
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.src = url;
+
+    const cleanup = ()=>{ URL.revokeObjectURL(url); video.removeAttribute('src'); video.load(); };
+
+    video.onerror = ()=>{ cleanup(); reject(new Error('could not read video — unsupported codec or corrupt file')); };
+
+    video.onloadedmetadata = async ()=>{
+      const duration = video.duration;
+      if(!isFinite(duration) || duration <= 0){ cleanup(); reject(new Error('could not read video duration')); return; }
+
+      const frameCount = Math.max(VIDEO_MIN_FRAMES, Math.min(VIDEO_MAX_FRAMES, Math.ceil(duration / VIDEO_FRAME_INTERVAL_SEC) + 1));
+      const timestamps = [];
+      for(let i = 0; i < frameCount; i++){
+        const t = frameCount === 1 ? 0 : (duration * i / (frameCount - 1));
+        timestamps.push(Math.min(duration - 0.05, Math.max(0, t)));
+      }
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const frames = [];
+
+      const seekTo = (t)=> new Promise((res, rej)=>{
+        const onSeeked = ()=>{ video.removeEventListener('seeked', onSeeked); res(); };
+        video.addEventListener('seeked', onSeeked);
+        try{ video.currentTime = t; }catch(err){ video.removeEventListener('seeked', onSeeked); rej(err); }
+      });
+
+      try{
+        for(const t of timestamps){
+          await seekTo(t);
+          const w = video.videoWidth, h = video.videoHeight;
+          if(!w || !h) continue;
+          const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(w, h));
+          canvas.width = Math.round(w * scale);
+          canvas.height = Math.round(h * scale);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          frames.push({ dataUrl, media_type:'image/jpeg', data: dataUrl.split(',')[1], t });
+        }
+      }catch(err){
+        cleanup();
+        reject(err);
+        return;
+      }
+
+      cleanup();
+      if(!frames.length){ reject(new Error('could not extract any frames from that video')); return; }
+      resolve({ kind:'video', name: file.name, durationSec: duration, frames });
+    };
+  });
+}
 
 async function ingestFile(file){
   if(file.type && file.type.startsWith('image/')){
     return await fileToResizedImage(file);
+  }
+  if(file.type && file.type.startsWith('video/') || VIDEO_EXT.test(file.name)){
+    return await fileToVideoFrames(file);
   }
   if(file.size > MAX_DOC_BYTES){
     throw new Error('file is larger than 4MB');
@@ -5175,7 +5349,7 @@ async function ingestFile(file){
   if((file.type && file.type.startsWith('text/')) || TEXTUAL_EXT.test(file.name)){
     return { kind:'text', name: file.name, text: await fileToText(file) };
   }
-  throw new Error('unsupported file type — images, PDF and text files only');
+  throw new Error('unsupported file type — images, video, PDF and text files only');
 }
 
 function renderImgPreviews(){
@@ -5194,6 +5368,20 @@ function renderImgPreviews(){
       x.textContent = '\u2715';
       x.addEventListener('click', remove);
       wrap.appendChild(thumb); wrap.appendChild(x);
+      imgPreviewRow.appendChild(wrap);
+    } else if(att.kind === 'video'){
+      const wrap = document.createElement('div');
+      wrap.className = 'imgThumb video';
+      const thumb = document.createElement('img');
+      thumb.src = (att.frames[0] && att.frames[0].dataUrl) || '';
+      const badge = document.createElement('span');
+      badge.className = 'videoBadge';
+      badge.textContent = '\u25b6 ' + formatDuration(att.durationSec);
+      const x = document.createElement('button');
+      x.className = 'imgThumbX';
+      x.textContent = '\u2715';
+      x.addEventListener('click', remove);
+      wrap.appendChild(thumb); wrap.appendChild(badge); wrap.appendChild(x);
       imgPreviewRow.appendChild(wrap);
     } else {
       const chip = document.createElement('div');
@@ -5219,11 +5407,15 @@ async function handlePickedFiles(input){
       addMessage('system', t('imgTooMany'));
       break;
     }
+    const isVideo = (file.type && file.type.startsWith('video/')) || VIDEO_EXT.test(file.name);
+    let processingMsg = null;
+    if(isVideo) processingMsg = addMessage('system', t('videoProcessing'));
     try{
       pendingImages.push(await ingestFile(file));
     }catch(err){
       addMessage('system', t('imgFailed') + ' (' + err.message + ')');
     }
+    if(processingMsg && processingMsg.isConnected) processingMsg.remove();
   }
   renderImgPreviews();
 }

@@ -1,0 +1,508 @@
+{
+  "sections": {
+    "hero": {
+      "type": "hero",
+      "blocks": {
+        "image-1": {
+          "type": "image",
+          "settings": {
+            "preset_image": "banner-elevate",
+            "alt": "",
+            "link_label": "Shop now"
+          }
+        }
+      },
+      "block_order": [
+        "image-1"
+      ],
+      "settings": {
+        "eyebrow": "",
+        "heading": "The mug that stirs itself",
+        "text": "<p>One touch and your coffee, protein or cocoa mixes perfectly — no spoon, no lumps, no effort.</p>",
+        "text_position": "below",
+        "text_alignment": "center",
+        "button_1_label": "Shop now",
+        "button_1_style": "primary",
+        "button_2_label": "",
+        "image_ratio_desktop": "portrait",
+        "image_ratio_mobile": "portrait",
+        "image_fit": "cover",
+        "media_max_width": 520,
+        "image_radius": 14,
+        "columns_mobile": 1,
+        "columns_desktop": 1,
+        "image_gap_mobile": 10,
+        "image_gap_desktop": 16,
+        "overlay_opacity": 30,
+        "overlay_text_color": "#ffffff",
+        "overlay_position": "middle",
+        "heading_size_mobile": 26,
+        "heading_size_desktop": 38,
+        "text_size_mobile": 15,
+        "text_size_desktop": 17,
+        "content_width": "page",
+        "content_gap_mobile": 22,
+        "content_gap_desktop": 30,
+        "section_radius": 0,
+        "padding_top": 40,
+        "padding_bottom": 40,
+        "padding_top_mobile": 24,
+        "padding_bottom_mobile": 24
+      }
+    },
+    "trust-badges": {
+      "type": "trust-badges",
+      "blocks": {
+        "badge-1": {
+          "type": "badge",
+          "settings": {
+            "icon": "truck",
+            "text": "Free shipping"
+          }
+        },
+        "badge-2": {
+          "type": "badge",
+          "settings": {
+            "icon": "refresh",
+            "text": "30-day returns"
+          }
+        },
+        "badge-3": {
+          "type": "badge",
+          "settings": {
+            "icon": "lock",
+            "text": "Secure checkout"
+          }
+        },
+        "badge-4": {
+          "type": "badge",
+          "settings": {
+            "icon": "headset",
+            "text": "Human support"
+          }
+        }
+      },
+      "block_order": [
+        "badge-1",
+        "badge-2",
+        "badge-3",
+        "badge-4"
+      ],
+      "settings": {
+        "show_labels": true,
+        "badge_height": 30,
+        "columns_mobile": 2,
+        "columns_desktop": 4,
+        "content_width": "medium",
+        "padding_top": 24,
+        "padding_bottom": 24,
+        "padding_top_mobile": 20,
+        "padding_bottom_mobile": 20
+      }
+    },
+    "featured-product": {
+      "type": "featured-product",
+      "blocks": {
+        "highlight-1": {
+          "type": "highlight",
+          "settings": {
+            "icon": "zap",
+            "text": "Stirs your drink in seconds — one press"
+          }
+        },
+        "highlight-2": {
+          "type": "highlight",
+          "settings": {
+            "icon": "truck",
+            "text": "Free tracked shipping worldwide"
+          }
+        },
+        "highlight-3": {
+          "type": "highlight",
+          "settings": {
+            "icon": "refresh",
+            "text": "30-day free returns"
+          }
+        }
+      },
+      "block_order": [
+        "highlight-1",
+        "highlight-2",
+        "highlight-3"
+      ],
+      "settings": {
+        "subheading": "Best seller",
+        "heading": "",
+        "show_vendor": false,
+        "show_rating": true,
+        "rating": "4.8",
+        "rating_label": "1,284 reviews",
+        "show_description": true,
+        "description_words": 40,
+        "variant_picker_type": "button",
+        "show_quantity": true,
+        "show_dynamic_checkout": true,
+        "show_view_details": true,
+        "image_ratio": "square",
+        "image_fit": "cover",
+        "media_max_width": 560,
+        "show_thumbnails": true,
+        "content_width": "page",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "benefits": {
+      "type": "product-benefits",
+      "blocks": {
+        "benefit-1": {
+          "type": "benefit",
+          "settings": {
+            "icon": "zap",
+            "title": "Automatic stirring",
+            "text": "<p>Press the button and the mug mixes coffee, milk, sugar or any powder in seconds.</p>"
+          }
+        },
+        "benefit-2": {
+          "type": "benefit",
+          "settings": {
+            "icon": "clock",
+            "title": "No spoon, no mess",
+            "text": "<p>Smooth, lump-free drinks every time — and nothing extra to wash up.</p>"
+          }
+        },
+        "benefit-3": {
+          "type": "benefit",
+          "settings": {
+            "icon": "globe",
+            "title": "Takes it anywhere",
+            "text": "<p>Home, office, gym or car. Battery powered, so it works wherever you are.</p>"
+          }
+        }
+      },
+      "block_order": [
+        "benefit-1",
+        "benefit-2",
+        "benefit-3"
+      ],
+      "settings": {
+        "subheading": "",
+        "heading": "Why customers choose it",
+        "heading_alignment": "center",
+        "layout": "center",
+        "boxed": false,
+        "columns_mobile": 1,
+        "columns_desktop": 3,
+        "show_icons": true,
+        "icon_size": 30,
+        "icon_color": "#14161a",
+        "title_size_mobile": 16,
+        "title_size_desktop": 18,
+        "text_size_mobile": 14,
+        "text_size_desktop": 15,
+        "content_width": "page",
+        "background_color": "#f6f6f4",
+        "section_radius": 0,
+        "padding_top": 64,
+        "padding_bottom": 64,
+        "padding_top_mobile": 40,
+        "padding_bottom_mobile": 40
+      }
+    },
+    "image-with-text": {
+      "type": "image-with-text",
+      "blocks": {
+        "point-1": {
+          "type": "point",
+          "settings": {
+            "icon": "check",
+            "text": "LCD display shows the real drink temperature"
+          }
+        },
+        "point-2": {
+          "type": "point",
+          "settings": {
+            "icon": "check",
+            "text": "One-touch button on the handle"
+          }
+        },
+        "point-3": {
+          "type": "point",
+          "settings": {
+            "icon": "check",
+            "text": "Rinse and it is ready for the next drink"
+          }
+        }
+      },
+      "block_order": [
+        "point-1",
+        "point-2",
+        "point-3"
+      ],
+      "settings": {
+        "preset_image": "detail-lcd",
+        "image_alt": "",
+        "image_position": "left",
+        "image_width": 50,
+        "image_ratio_desktop": "square",
+        "image_ratio_mobile": "square",
+        "image_fit": "cover",
+        "image_radius": 14,
+        "subheading": "The detail",
+        "heading": "Know the temperature at a glance",
+        "text": "<p>The touch panel on the handle shows exactly how hot your drink is, so you never burn your first sip or settle for a cold one.</p>",
+        "text_alignment": "left",
+        "button_label": "",
+        "heading_size_mobile": 24,
+        "heading_size_desktop": 34,
+        "text_size_mobile": 15,
+        "text_size_desktop": 16,
+        "content_width": "page",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "gallery-lifestyle": {
+      "type": "image-gallery",
+      "blocks": {
+        "image-1": {
+          "type": "image",
+          "settings": {
+            "preset_image": "lifestyle-family",
+            "alt": "",
+            "caption": "Busy mornings",
+            "link_label": "Shop now"
+          }
+        },
+        "image-2": {
+          "type": "image",
+          "settings": {
+            "preset_image": "lifestyle-gym",
+            "alt": "",
+            "caption": "Post-workout shakes",
+            "link_label": "Shop now"
+          }
+        }
+      },
+      "block_order": [
+        "image-1",
+        "image-2"
+      ],
+      "settings": {
+        "subheading": "",
+        "heading": "Made for real life",
+        "text": "",
+        "text_alignment": "center",
+        "heading_size_mobile": 24,
+        "heading_size_desktop": 32,
+        "image_ratio_desktop": "tall",
+        "image_ratio_mobile": "tall",
+        "image_fit": "cover",
+        "media_max_width": 900,
+        "image_radius": 14,
+        "columns_mobile": 2,
+        "columns_desktop": 2,
+        "gap_mobile": 10,
+        "gap_desktop": 16,
+        "content_width": "page",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "gallery-features": {
+      "type": "image-gallery",
+      "blocks": {
+        "image-1": {
+          "type": "image",
+          "settings": {
+            "preset_image": "feature-chart",
+            "alt": "",
+            "link_label": "Shop now"
+          }
+        }
+      },
+      "block_order": [
+        "image-1"
+      ],
+      "settings": {
+        "subheading": "",
+        "heading": "How it works",
+        "text": "",
+        "text_alignment": "center",
+        "heading_size_mobile": 24,
+        "heading_size_desktop": 32,
+        "image_ratio_desktop": "xtall",
+        "image_ratio_mobile": "xtall",
+        "image_fit": "cover",
+        "media_max_width": 720,
+        "image_radius": 14,
+        "columns_mobile": 1,
+        "columns_desktop": 1,
+        "gap_mobile": 10,
+        "gap_desktop": 16,
+        "content_width": "page",
+        "background_color": "#f6f6f4",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "reviews": {
+      "type": "reviews",
+      "blocks": {
+        "review-1": {
+          "type": "review",
+          "settings": {
+            "rating": "5",
+            "title": "No more spoons",
+            "text": "<p>I use it every morning for coffee and after the gym for protein. It mixes better than shaking ever did.</p>",
+            "author": "Sarah M.",
+            "verified": true
+          }
+        },
+        "review-2": {
+          "type": "review",
+          "settings": {
+            "rating": "5",
+            "title": "Keeps my coffee hot",
+            "text": "<p>The temperature display is the part I did not expect to love. I always know when it is ready to drink.</p>",
+            "author": "James T.",
+            "verified": true
+          }
+        },
+        "review-3": {
+          "type": "review",
+          "settings": {
+            "rating": "4.5",
+            "title": "Great gift",
+            "text": "<p>Bought one for myself and ended up ordering two more as presents. Everyone asks where it is from.</p>",
+            "author": "Priya K.",
+            "verified": true
+          }
+        }
+      },
+      "block_order": [
+        "review-1",
+        "review-2",
+        "review-3"
+      ],
+      "settings": {
+        "subheading": "Reviews",
+        "heading": "What customers say",
+        "heading_alignment": "center",
+        "show_summary": true,
+        "summary_score": "4.8",
+        "summary_text": "Based on 1,284 verified reviews",
+        "show_stars": true,
+        "card_style": "boxed",
+        "mobile_layout": "scroll",
+        "columns_mobile": 1,
+        "columns_desktop": 3,
+        "text_size_mobile": 15,
+        "text_size_desktop": 15,
+        "content_width": "page",
+        "section_radius": 0,
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "faq": {
+      "type": "faq",
+      "blocks": {
+        "q-1": {
+          "type": "question",
+          "settings": {
+            "question": "How does the stirring work?",
+            "answer": "<p>A magnetic disc in the base spins when you press the button on the handle, mixing your drink in a few seconds. There is nothing to assemble.</p>"
+          }
+        },
+        "q-2": {
+          "type": "question",
+          "settings": {
+            "question": "Can I put it in the dishwasher?",
+            "answer": "<p>No. Rinse the inside under the tap and wipe the outside — the electronics in the handle should not be submerged.</p>"
+          }
+        },
+        "q-3": {
+          "type": "question",
+          "settings": {
+            "question": "How long does shipping take?",
+            "answer": "<p>Orders are dispatched within 24 hours. Delivery usually takes 5–9 business days, and every order includes tracking.</p>"
+          }
+        },
+        "q-4": {
+          "type": "question",
+          "settings": {
+            "question": "What is your return policy?",
+            "answer": "<p>You have 30 days from delivery to request a return. Items must be unused and in their original packaging.</p>"
+          }
+        }
+      },
+      "block_order": [
+        "q-1",
+        "q-2",
+        "q-3",
+        "q-4"
+      ],
+      "settings": {
+        "heading": "Frequently asked questions",
+        "heading_alignment": "center",
+        "style": "lines",
+        "one_at_a_time": true,
+        "enable_seo_schema": true,
+        "question_size_mobile": 16,
+        "question_size_desktop": 17,
+        "answer_size_mobile": 15,
+        "answer_size_desktop": 15,
+        "content_width": "narrow",
+        "padding_top": 56,
+        "padding_bottom": 56,
+        "padding_top_mobile": 36,
+        "padding_bottom_mobile": 36
+      }
+    },
+    "call-to-action": {
+      "type": "call-to-action",
+      "settings": {
+        "heading": "Better coffee, one click away",
+        "text": "<p>Join thousands of happy customers. Free shipping, 30-day returns and support that actually replies.</p>",
+        "footnote": "Secure checkout · Tracked delivery",
+        "text_alignment": "center",
+        "button_1_label": "Shop now",
+        "button_1_style": "primary",
+        "heading_size_mobile": 26,
+        "heading_size_desktop": 38,
+        "text_size_mobile": 15,
+        "text_size_desktop": 17,
+        "boxed": true,
+        "box_background": "#f6f6f4",
+        "content_width": "page",
+        "padding_top": 40,
+        "padding_bottom": 64,
+        "padding_top_mobile": 28,
+        "padding_bottom_mobile": 40
+      }
+    }
+  },
+  "order": [
+    "hero",
+    "trust-badges",
+    "featured-product",
+    "benefits",
+    "image-with-text",
+    "gallery-lifestyle",
+    "gallery-features",
+    "reviews",
+    "faq",
+    "call-to-action"
+  ]
+}

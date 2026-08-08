@@ -1,0 +1,153 @@
+{%- comment -%}
+  Renders an image inside a fixed-ratio box, with an optional separate mobile
+  image and separate mobile/desktop ratios so nothing is ever cropped badly.
+
+  Accepts:
+  - image:          {Object} desktop image (optional — falls back to a placeholder)
+  - image_mobile:   {Object} optional art-directed mobile image
+  - preset:         {String} handle of a bundled theme image, used only when no
+                    image has been uploaded. See PRESETS below.
+  - ratio_desktop:  {String} square | portrait | tall | xtall | landscape | wide | ultrawide
+  - ratio_mobile:   {String} same options (defaults to ratio_desktop)
+  - fit:            {String} cover | contain (default cover)
+  - radius:         {Number} border radius in px
+  - sizes:          {String} sizes attribute (default '100vw')
+  - loading:        {String} lazy | eager (default lazy)
+  - priority:       {Boolean} sets fetchpriority="high"
+  - alt:            {String} overrides the image alt text
+  - placeholder:    {String} Shopify placeholder name (default 'lifestyle-1')
+
+  Usage:
+  {% render 'responsive-image', image: block.settings.image, ratio_desktop: 'square' %}
+{%- endcomment -%}
+
+{%- liquid
+  assign fit_class = ''
+  if fit == 'contain'
+    assign fit_class = ' media--contain'
+  endif
+
+  assign img_loading = loading | default: 'lazy'
+  assign img_sizes = sizes | default: '100vw'
+  assign placeholder_name = placeholder | default: 'lifestyle-1'
+
+  assign ratio_css_desktop = '1 / 1'
+  case ratio_desktop
+    when 'portrait'
+      assign ratio_css_desktop = '4 / 5'
+    when 'tall'
+      assign ratio_css_desktop = '3 / 4'
+    when 'xtall'
+      assign ratio_css_desktop = '2 / 3'
+    when 'landscape'
+      assign ratio_css_desktop = '4 / 3'
+    when 'wide'
+      assign ratio_css_desktop = '16 / 9'
+    when 'ultrawide'
+      assign ratio_css_desktop = '21 / 9'
+  endcase
+
+  assign mobile_key = ratio_mobile | default: ratio_desktop
+  assign ratio_css_mobile = '1 / 1'
+  case mobile_key
+    when 'portrait'
+      assign ratio_css_mobile = '4 / 5'
+    when 'tall'
+      assign ratio_css_mobile = '3 / 4'
+    when 'xtall'
+      assign ratio_css_mobile = '2 / 3'
+    when 'landscape'
+      assign ratio_css_mobile = '4 / 3'
+    when 'wide'
+      assign ratio_css_mobile = '16 / 9'
+    when 'ultrawide'
+      assign ratio_css_mobile = '21 / 9'
+  endcase
+
+  # PRESETS — images shipped with the theme, in assets/ as <handle>-lg.jpg and
+  # <handle>-sm.jpg. They are only used when the merchant has not uploaded an
+  # image of their own, so an upload always wins.
+  assign use_preset = false
+  if image == blank and preset != blank and preset != 'none'
+    assign use_preset = true
+    assign preset_w = 1200
+    assign preset_h = 1500
+    assign preset_sm_w = 700
+    assign preset_alt = ''
+    case preset
+      when 'banner-elevate'
+        assign preset_w = 1122
+        assign preset_h = 1402
+        assign preset_alt = 'Elevate your everyday — the self-stirring smart mug on a marble surface'
+      when 'lifestyle-family'
+        assign preset_w = 1086
+        assign preset_h = 1448
+        assign preset_alt = 'A parent drinking from the smart mug at the breakfast table with two children'
+      when 'lifestyle-gym'
+        assign preset_w = 1086
+        assign preset_h = 1448
+        assign preset_alt = 'An athlete drinking from the smart mug during a gym session'
+      when 'feature-chart'
+        assign preset_w = 1024
+        assign preset_h = 1536
+        assign preset_sm_w = 800
+        assign preset_alt = 'Feature overview: automatic stirring, one-touch operation, battery powered, easy to clean'
+      when 'detail-lcd'
+        assign preset_w = 960
+        assign preset_h = 960
+        assign preset_alt = 'Close-up of the mug stirring coffee, with the LCD temperature display on the handle'
+    endcase
+    assign preset_lg = preset | append: '-lg.jpg'
+    assign preset_sm = preset | append: '-sm.jpg'
+  endif
+-%}
+
+<div
+  class="media media--responsive{{ fit_class }}"
+  style="--ratio-mobile: {{ ratio_css_mobile }}; --ratio-desktop: {{ ratio_css_desktop }};{% if radius %} border-radius: {{ radius }}px;{% endif %}"
+>
+  {%- if image != blank -%}
+    <picture>
+      {%- if image_mobile != blank -%}
+        <source
+          media="(max-width: 749px)"
+          srcset="
+            {{ image_mobile | image_url: width: 500 }} 500w,
+            {{ image_mobile | image_url: width: 750 }} 750w,
+            {{ image_mobile | image_url: width: 1100 }} 1100w
+          "
+          sizes="{{ img_sizes }}"
+        >
+      {%- endif -%}
+      <img
+        src="{{ image | image_url: width: 1400 }}"
+        srcset="
+          {{ image | image_url: width: 500 }} 500w,
+          {{ image | image_url: width: 750 }} 750w,
+          {{ image | image_url: width: 1000 }} 1000w,
+          {{ image | image_url: width: 1400 }} 1400w,
+          {{ image | image_url: width: 1800 }} 1800w
+        "
+        sizes="{{ img_sizes }}"
+        alt="{{ alt | default: image.alt | escape }}"
+        width="{{ image.width }}"
+        height="{{ image.height }}"
+        loading="{{ img_loading }}"
+        {% if priority %}fetchpriority="high"{% endif %}
+      >
+    </picture>
+  {%- elsif use_preset -%}
+    <img
+      src="{{ preset_lg | asset_url }}"
+      srcset="{{ preset_sm | asset_url }} {{ preset_sm_w }}w, {{ preset_lg | asset_url }} {{ preset_w }}w"
+      sizes="{{ img_sizes }}"
+      alt="{{ alt | default: preset_alt | escape }}"
+      width="{{ preset_w }}"
+      height="{{ preset_h }}"
+      loading="{{ img_loading }}"
+      {% if priority %}fetchpriority="high"{% endif %}
+    >
+  {%- else -%}
+    {{ placeholder_name | placeholder_svg_tag: 'placeholder-svg' }}
+  {%- endif -%}
+</div>

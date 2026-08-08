@@ -1,0 +1,66 @@
+{%- comment -%}
+  Prints the per-section spacing and colour rules driven by theme editor
+  settings. Every section that includes the standard spacing settings calls
+  this once, near the top of its markup.
+
+  Accepts:
+  - section: {Object} the section object (required)
+
+  Expected settings on the section (all optional):
+  - padding_top, padding_bottom               desktop, px
+  - padding_top_mobile, padding_bottom_mobile mobile, px
+  - background_color, text_color, heading_color
+  - section_radius                            px, rounds the whole section
+
+  Usage:
+  {% render 'section-style', section: section %}
+{%- endcomment -%}
+
+{%- liquid
+  assign st = section.settings
+
+  assign pt = st.padding_top | default: 56
+  assign pb = st.padding_bottom | default: 56
+  assign pt_m = st.padding_top_mobile | default: 40
+  assign pb_m = st.padding_bottom_mobile | default: 40
+-%}
+
+{%- style -%}
+  #shopify-section-{{ section.id }} .section {
+    padding-top: {{ pt_m }}px;
+    padding-bottom: {{ pb_m }}px;
+  }
+
+  {%- if st.background_color != blank and st.background_color != 'rgba(0,0,0,0)' %}
+    #shopify-section-{{ section.id }} .section {
+      background-color: {{ st.background_color }};
+    }
+  {% endif -%}
+
+  {%- if st.text_color != blank and st.text_color != 'rgba(0,0,0,0)' %}
+    #shopify-section-{{ section.id }} .section {
+      color: {{ st.text_color }};
+      --color-text: {{ st.text_color }};
+    }
+  {% endif -%}
+
+  {%- if st.heading_color != blank and st.heading_color != 'rgba(0,0,0,0)' %}
+    #shopify-section-{{ section.id }} .section :is(h1, h2, h3, h4, .h0, .h1, .h2, .h3) {
+      color: {{ st.heading_color }};
+    }
+  {% endif -%}
+
+  {%- if st.section_radius and st.section_radius > 0 %}
+    #shopify-section-{{ section.id }} .section {
+      border-radius: {{ st.section_radius }}px;
+      overflow: hidden;
+    }
+  {% endif -%}
+
+  @media screen and (min-width: 750px) {
+    #shopify-section-{{ section.id }} .section {
+      padding-top: {{ pt }}px;
+      padding-bottom: {{ pb }}px;
+    }
+  }
+{%- endstyle -%}

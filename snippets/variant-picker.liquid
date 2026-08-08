@@ -1,0 +1,109 @@
+{%- comment -%}
+  Renders the variant selector. Hidden automatically when a product has a
+  single variant, so single-product stores stay clean.
+
+  Accepts:
+  - product:     {Object} product (required)
+  - section_id:  {String} owning section id (required)
+  - picker_type: {String} button | dropdown (default button)
+  - update_url:  {Boolean} keep ?variant= in the address bar (default true)
+
+  Usage:
+  {% render 'variant-picker', product: product, section_id: section.id %}
+{%- endcomment -%}
+
+{%- unless product.has_only_default_variant -%}
+  {%- liquid
+    assign type = picker_type | default: 'button'
+    if update_url == nil
+      assign update_url = true
+    endif
+  -%}
+
+  <variant-picker
+    class="variant-picker"
+    data-section="{{ section_id }}"
+    data-url="{{ product.url }}"
+    data-update-url="{{ update_url }}"
+    data-button-label="{{ 'products.product.add_to_cart' | t | escape }}"
+  >
+    {%- for option in product.options_with_values -%}
+      <fieldset class="variant-option" style="border:0;padding:0;margin:0;">
+        <legend class="variant-option__label">
+          {{ option.name }}:
+          <span class="variant-option__value" data-selected-value="{{ forloop.index0 }}">
+            {{- option.selected_value -}}
+          </span>
+        </legend>
+
+        {%- if type == 'dropdown' -%}
+          <div class="select">
+            <select
+              class="select__select"
+              id="Option-{{ section_id }}-{{ forloop.index0 }}"
+              name="options[{{ option.name | escape }}]"
+              data-option-index="{{ forloop.index0 }}"
+              aria-label="{{ option.name | escape }}"
+            >
+              {%- for value in option.values -%}
+                <option value="{{ value | escape }}" {% if option.selected_value == value %}selected{% endif %}>
+                  {{ value }}
+                </option>
+              {%- endfor -%}
+            </select>
+            <span class="select__icon">{% render 'icon', name: 'chevron-down' %}</span>
+          </div>
+        {%- else -%}
+          <div class="variant-option__swatches">
+            {%- for value in option.values -%}
+              {%- assign input_id = section_id | append: '-' | append: forloop.parentloop.index0 | append: '-' | append: forloop.index0 -%}
+              <span>
+                <input
+                  type="radio"
+                  id="Variant-{{ input_id }}"
+                  name="{{ option.name | escape }}-{{ section_id }}-{{ forloop.parentloop.index0 }}"
+                  value="{{ value | escape }}"
+                  data-option-index="{{ forloop.parentloop.index0 }}"
+                  {% if option.selected_value == value %}checked{% endif %}
+                >
+                <label class="variant-option__swatch" for="Variant-{{ input_id }}">{{ value }}</label>
+              </span>
+            {%- endfor -%}
+          </div>
+        {%- endif -%}
+      </fieldset>
+    {%- endfor -%}
+
+    <script type="application/json">
+      {{ product.variants | json }}
+    </script>
+  </variant-picker>
+
+  <noscript>
+    <div class="field">
+      <label class="field__label" for="VariantSelect-{{ section_id }}">
+        {{ 'products.product.choose_options' | t }}
+      </label>
+      <div class="select">
+        <select
+          class="select__select"
+          id="VariantSelect-{{ section_id }}"
+          name="id"
+          form="product-form-{{ section_id }}"
+        >
+          {%- for variant in product.variants -%}
+            <option
+              value="{{ variant.id }}"
+              {% if variant == product.selected_or_first_available_variant %}selected{% endif %}
+              {% unless variant.available %}disabled{% endunless %}
+            >
+              {{ variant.title }}
+              {%- unless variant.available %} – {{ 'products.product.sold_out' | t }}{% endunless %}
+              – {{ variant.price | money }}
+            </option>
+          {%- endfor -%}
+        </select>
+      </div>
+    </div>
+  </noscript>
+{%- endunless -%}

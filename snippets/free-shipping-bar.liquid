@@ -1,0 +1,42 @@
+{%- comment -%}
+  Progress bar towards the free shipping threshold set in theme settings.
+  Renders nothing when the feature is off or no threshold is configured.
+
+  Usage:
+  {% render 'free-shipping-bar' %}
+{%- endcomment -%}
+
+{%- if settings.cart_show_free_shipping_bar and settings.cart_free_shipping_threshold != blank -%}
+  {%- liquid
+    assign threshold = settings.cart_free_shipping_threshold | times: 100 | round
+    assign remaining = threshold | minus: cart.total_price
+    assign percent = 100
+
+    if threshold > 0 and cart.total_price < threshold
+      assign percent = cart.total_price | times: 100 | divided_by: threshold
+    endif
+
+    assign remaining_money = remaining | money
+  -%}
+
+  {%- if threshold > 0 -%}
+    <div class="cart__shipping-bar">
+      <p class="text-small">
+        {%- if remaining > 0 -%}
+          {{ 'cart.general.free_shipping_progress_html' | t: amount: remaining_money }}
+        {%- else -%}
+          {{ 'cart.general.free_shipping_unlocked' | t }}
+        {%- endif -%}
+      </p>
+      <div
+        class="cart__shipping-bar-track"
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="{{ percent }}"
+      >
+        <div class="cart__shipping-bar-fill" style="width: {{ percent }}%;"></div>
+      </div>
+    </div>
+  {%- endif -%}
+{%- endif -%}

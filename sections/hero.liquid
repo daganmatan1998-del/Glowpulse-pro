@@ -1,0 +1,661 @@
+{%- liquid
+  assign st = section.settings
+
+  assign width_class = 'page-width'
+  if st.content_width == 'narrow'
+    assign width_class = 'page-width page-width--narrow'
+  elsif st.content_width == 'medium'
+    assign width_class = 'page-width page-width--medium'
+  elsif st.content_width == 'full'
+    assign width_class = 'page-width page-width--full'
+  endif
+
+  assign flex_align = 'center'
+  if st.text_alignment == 'left'
+    assign flex_align = 'flex-start'
+  elsif st.text_alignment == 'right'
+    assign flex_align = 'flex-end'
+  endif
+
+  assign image_blocks = section.blocks | where: 'type', 'image'
+  assign image_count = image_blocks.size
+
+  assign columns_desktop = st.columns_desktop
+  if image_count < columns_desktop
+    assign columns_desktop = image_count
+  endif
+  if columns_desktop < 1
+    assign columns_desktop = 1
+  endif
+
+  assign overlay_decimal = st.overlay_opacity | divided_by: 100.0
+-%}
+
+{% render 'section-style', section: section %}
+
+{%- style -%}
+  #shopify-section-{{ section.id }} .hero__heading {
+    font-size: {{ st.heading_size_mobile }}px;
+  }
+  #shopify-section-{{ section.id }} .hero__text {
+    font-size: {{ st.text_size_mobile }}px;
+  }
+  #shopify-section-{{ section.id }} .hero {
+    gap: {{ st.content_gap_mobile }}px;
+  }
+
+  @media screen and (min-width: 750px) {
+    #shopify-section-{{ section.id }} .hero__heading {
+      font-size: {{ st.heading_size_desktop }}px;
+    }
+    #shopify-section-{{ section.id }} .hero__text {
+      font-size: {{ st.text_size_desktop }}px;
+    }
+    #shopify-section-{{ section.id }} .hero {
+      gap: {{ st.content_gap_desktop }}px;
+    }
+  }
+{%- endstyle -%}
+
+<div class="section">
+  <div class="{{ width_class }}">
+    <div
+      class="hero hero--text-{{ st.text_position }}{% if st.text_position == 'overlay' %} hero--overlay{% endif %}{% if settings.animations_enabled %} animate-in{% endif %}"
+      style="
+        --content-align: {{ flex_align }};
+        --content-text-align: {{ st.text_alignment }};
+        --hero-cols-mobile: {{ st.columns_mobile }};
+        --hero-cols-desktop: {{ columns_desktop }};
+        --hero-gap: {{ st.image_gap_mobile }}px;
+        --hero-gap-desktop: {{ st.image_gap_desktop }}px;
+        {% if st.media_max_width > 0 %}--hero-max-width: {{ st.media_max_width }}px;{% endif %}
+        --overlay-opacity: {{ overlay_decimal }};
+        --overlay-text-color: {{ st.overlay_text_color }};
+        --overlay-justify: {% if st.overlay_position == 'top' %}flex-start{% elsif st.overlay_position == 'bottom' %}flex-end{% else %}center{% endif %};
+      "
+    >
+      {%- comment -%} Heading, body copy and buttons {%- endcomment -%}
+      {%- if st.text_position != 'overlay' -%}
+        {%- if st.heading != blank or st.text != blank or st.button_1_label != blank or st.button_2_label != blank or st.eyebrow != blank -%}
+          <div class="hero__content">
+            {%- if st.eyebrow != blank -%}
+              <span class="eyebrow">{{ st.eyebrow }}</span>
+            {%- endif -%}
+
+            {%- if st.heading != blank -%}
+              <h2 class="hero__heading">{{ st.heading }}</h2>
+            {%- endif -%}
+
+            {%- if st.text != blank -%}
+              <div class="rte hero__text">{{ st.text }}</div>
+            {%- endif -%}
+
+            {%- if st.button_1_label != blank or st.button_2_label != blank -%}
+              <div class="hero__buttons">
+                {%- if st.button_1_label != blank -%}
+                  <a
+                    class="button{% if st.button_1_style == 'secondary' %} button--secondary{% endif %}"
+                    href="{{ st.button_1_link | default: '#' }}"
+                  >
+                    {{ st.button_1_label }}
+                  </a>
+                {%- endif -%}
+                {%- if st.button_2_label != blank -%}
+                  <a
+                    class="button{% if st.button_2_style == 'secondary' %} button--secondary{% endif %}"
+                    href="{{ st.button_2_link | default: '#' }}"
+                  >
+                    {{ st.button_2_label }}
+                  </a>
+                {%- endif -%}
+              </div>
+            {%- endif -%}
+          </div>
+        {%- endif -%}
+      {%- endif -%}
+
+      {%- comment -%} Images {%- endcomment -%}
+      {%- if image_count > 0 -%}
+        <div class="hero__media-grid">
+          {%- for block in image_blocks -%}
+            {%- liquid
+              if forloop.first
+                assign img_loading = 'eager'
+                assign img_priority = true
+              else
+                assign img_loading = 'lazy'
+                assign img_priority = false
+              endif
+
+              # The overlay carries its own buttons, so the image underneath it
+              # must not also be a link — nested links are invalid and untappable.
+              assign wrap_in_link = false
+              if block.settings.link != blank
+                assign wrap_in_link = true
+                if st.text_position == 'overlay' and forloop.first
+                  assign wrap_in_link = false
+                endif
+              endif
+            -%}
+            <div class="hero__media-item" {{ block.shopify_attributes }}>
+              {%- if wrap_in_link -%}
+                <a href="{{ block.settings.link }}" aria-label="{{ block.settings.link_label | escape }}">
+              {%- endif -%}
+
+              {% render 'responsive-image',
+                image: block.settings.image,
+                image_mobile: block.settings.image_mobile,
+                preset: block.settings.preset_image,
+                ratio_desktop: st.image_ratio_desktop,
+                ratio_mobile: st.image_ratio_mobile,
+                fit: st.image_fit,
+                radius: st.image_radius,
+                sizes: '(min-width: 990px) 60vw, 100vw',
+                loading: img_loading,
+                priority: img_priority,
+                alt: block.settings.alt,
+                placeholder: 'lifestyle-1'
+              %}
+
+              {%- if st.text_position == 'overlay' and forloop.first -%}
+                <span class="hero__overlay-scrim" style="border-radius: {{ st.image_radius }}px;"></span>
+                <div class="hero__overlay-content">
+                  {%- if st.eyebrow != blank -%}
+                    <span class="eyebrow" style="color: inherit; opacity: 0.8;">{{ st.eyebrow }}</span>
+                  {%- endif -%}
+                  {%- if st.heading != blank -%}
+                    <h2 class="hero__heading">{{ st.heading }}</h2>
+                  {%- endif -%}
+                  {%- if st.text != blank -%}
+                    <div class="rte hero__text">{{ st.text }}</div>
+                  {%- endif -%}
+                  {%- if st.button_1_label != blank or st.button_2_label != blank -%}
+                    <div class="hero__buttons">
+                      {%- if st.button_1_label != blank -%}
+                        <a
+                          class="button{% if st.button_1_style == 'secondary' %} button--secondary{% endif %}"
+                          href="{{ st.button_1_link | default: '#' }}"
+                        >
+                          {{ st.button_1_label }}
+                        </a>
+                      {%- endif -%}
+                      {%- if st.button_2_label != blank -%}
+                        <a
+                          class="button button--ghost"
+                          href="{{ st.button_2_link | default: '#' }}"
+                        >
+                          {{ st.button_2_label }}
+                        </a>
+                      {%- endif -%}
+                    </div>
+                  {%- endif -%}
+                </div>
+              {%- endif -%}
+
+              {%- if wrap_in_link -%}
+                </a>
+              {%- endif -%}
+
+              {%- if block.settings.caption != blank -%}
+                <p class="hero__caption">{{ block.settings.caption }}</p>
+              {%- endif -%}
+            </div>
+          {%- endfor -%}
+        </div>
+      {%- endif -%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Hero",
+  "tag": "section",
+  "class": "section-hero",
+  "max_blocks": 6,
+  "settings": [
+    {
+      "type": "header",
+      "content": "Content"
+    },
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Small label above heading"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Designed for everyday life"
+    },
+    {
+      "type": "richtext",
+      "id": "text",
+      "label": "Text",
+      "default": "<p>Free worldwide shipping, 30-day returns and a two-year guarantee on every order.</p>"
+    },
+    {
+      "type": "select",
+      "id": "text_position",
+      "label": "Text position",
+      "options": [
+        { "value": "above", "label": "Above the images" },
+        { "value": "below", "label": "Below the images" },
+        { "value": "overlay", "label": "On top of the first image" }
+      ],
+      "default": "above"
+    },
+    {
+      "type": "select",
+      "id": "text_alignment",
+      "label": "Text alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "header",
+      "content": "Buttons"
+    },
+    {
+      "type": "text",
+      "id": "button_1_label",
+      "label": "First button label",
+      "default": "Shop now"
+    },
+    {
+      "type": "url",
+      "id": "button_1_link",
+      "label": "First button link"
+    },
+    {
+      "type": "select",
+      "id": "button_1_style",
+      "label": "First button style",
+      "options": [
+        { "value": "primary", "label": "Primary" },
+        { "value": "secondary", "label": "Secondary" }
+      ],
+      "default": "primary"
+    },
+    {
+      "type": "text",
+      "id": "button_2_label",
+      "label": "Second button label"
+    },
+    {
+      "type": "url",
+      "id": "button_2_link",
+      "label": "Second button link"
+    },
+    {
+      "type": "select",
+      "id": "button_2_style",
+      "label": "Second button style",
+      "options": [
+        { "value": "primary", "label": "Primary" },
+        { "value": "secondary", "label": "Secondary" }
+      ],
+      "default": "secondary"
+    },
+    {
+      "type": "header",
+      "content": "Images"
+    },
+    {
+      "type": "paragraph",
+      "content": "Add an Image block for each picture. Each block has its own desktop and mobile image."
+    },
+    {
+      "type": "select",
+      "id": "image_ratio_desktop",
+      "label": "Image shape on desktop",
+      "options": [
+        { "value": "square", "label": "Square (1:1)" },
+        { "value": "portrait", "label": "Portrait (4:5)" },
+        { "value": "tall", "label": "Tall (3:4)" },
+        { "value": "xtall", "label": "Extra tall (2:3)" },
+        { "value": "landscape", "label": "Landscape (4:3)" },
+        { "value": "wide", "label": "Wide (16:9)" },
+        { "value": "ultrawide", "label": "Ultra wide (21:9)" }
+      ],
+      "default": "wide"
+    },
+    {
+      "type": "select",
+      "id": "image_ratio_mobile",
+      "label": "Image shape on mobile",
+      "options": [
+        { "value": "square", "label": "Square (1:1)" },
+        { "value": "portrait", "label": "Portrait (4:5)" },
+        { "value": "tall", "label": "Tall (3:4)" },
+        { "value": "xtall", "label": "Extra tall (2:3)" },
+        { "value": "landscape", "label": "Landscape (4:3)" },
+        { "value": "wide", "label": "Wide (16:9)" }
+      ],
+      "default": "square"
+    },
+    {
+      "type": "select",
+      "id": "image_fit",
+      "label": "Image fit",
+      "options": [
+        { "value": "cover", "label": "Fill the frame (crop)" },
+        { "value": "contain", "label": "Show the whole image" }
+      ],
+      "default": "cover"
+    },
+    {
+      "type": "range",
+      "id": "media_max_width",
+      "min": 0,
+      "max": 1400,
+      "step": 20,
+      "unit": "px",
+      "label": "Maximum image area width",
+      "default": 820,
+      "info": "Set to 0 to fill the section width. Keeps images from dominating large screens."
+    },
+    {
+      "type": "range",
+      "id": "image_radius",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "label": "Image corner radius",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "columns_mobile",
+      "min": 1,
+      "max": 3,
+      "step": 1,
+      "label": "Images per row on mobile",
+      "default": 1
+    },
+    {
+      "type": "range",
+      "id": "columns_desktop",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "label": "Images per row on desktop",
+      "default": 1
+    },
+    {
+      "type": "range",
+      "id": "image_gap_mobile",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "label": "Gap between images (mobile)",
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "image_gap_desktop",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "label": "Gap between images (desktop)",
+      "default": 16
+    },
+    {
+      "type": "header",
+      "content": "Overlay (only when text sits on the image)"
+    },
+    {
+      "type": "range",
+      "id": "overlay_opacity",
+      "min": 0,
+      "max": 80,
+      "step": 5,
+      "unit": "%",
+      "label": "Overlay darkness",
+      "default": 30
+    },
+    {
+      "type": "color",
+      "id": "overlay_text_color",
+      "label": "Overlay text colour",
+      "default": "#ffffff"
+    },
+    {
+      "type": "select",
+      "id": "overlay_position",
+      "label": "Overlay text position",
+      "options": [
+        { "value": "top", "label": "Top" },
+        { "value": "middle", "label": "Middle" },
+        { "value": "bottom", "label": "Bottom" }
+      ],
+      "default": "middle"
+    },
+    {
+      "type": "header",
+      "content": "Typography"
+    },
+    {
+      "type": "range",
+      "id": "heading_size_mobile",
+      "min": 18,
+      "max": 48,
+      "step": 1,
+      "unit": "px",
+      "label": "Heading size (mobile)",
+      "default": 27
+    },
+    {
+      "type": "range",
+      "id": "heading_size_desktop",
+      "min": 22,
+      "max": 80,
+      "step": 1,
+      "unit": "px",
+      "label": "Heading size (desktop)",
+      "default": 42
+    },
+    {
+      "type": "range",
+      "id": "text_size_mobile",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "label": "Text size (mobile)",
+      "default": 15
+    },
+    {
+      "type": "range",
+      "id": "text_size_desktop",
+      "min": 13,
+      "max": 26,
+      "step": 1,
+      "unit": "px",
+      "label": "Text size (desktop)",
+      "default": 17
+    },
+    {
+      "type": "header",
+      "content": "Section layout"
+    },
+    {
+      "type": "select",
+      "id": "content_width",
+      "label": "Section width",
+      "options": [
+        { "value": "page", "label": "Standard" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "narrow", "label": "Narrow" },
+        { "value": "full", "label": "Full width" }
+      ],
+      "default": "page"
+    },
+    {
+      "type": "range",
+      "id": "content_gap_mobile",
+      "min": 8,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "label": "Gap between text and images (mobile)",
+      "default": 20
+    },
+    {
+      "type": "range",
+      "id": "content_gap_desktop",
+      "min": 8,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "label": "Gap between text and images (desktop)",
+      "default": 28
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text"
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Heading"
+    },
+    {
+      "type": "range",
+      "id": "section_radius",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "label": "Section corner radius",
+      "default": 0
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 48
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 48
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 28
+    }
+  ],
+  "blocks": [
+    {
+      "type": "image",
+      "name": "Image",
+      "settings": [
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Image",
+          "info": "Square or 4:3 images work best."
+        },
+        {
+          "type": "image_picker",
+          "id": "image_mobile",
+          "label": "Mobile image",
+          "info": "Optional. Used on screens under 750px so nothing is cropped badly."
+        },
+        {
+          "type": "select",
+          "id": "preset_image",
+          "label": "Bundled image",
+          "info": "Used when no image is uploaded above. Uploading your own always wins.",
+          "options": [
+            { "value": "none", "label": "None" },
+            { "value": "banner-elevate", "label": "Banner — Elevate your everyday" },
+            { "value": "lifestyle-family", "label": "Lifestyle — Family breakfast" },
+            { "value": "lifestyle-gym", "label": "Lifestyle — Gym" },
+            { "value": "feature-chart", "label": "Feature chart — How it works" },
+            { "value": "detail-lcd", "label": "Detail — Stirring and LCD display" }
+          ],
+          "default": "none"
+        },
+        {
+          "type": "text",
+          "id": "alt",
+          "label": "Alt text",
+          "info": "Describes the image for screen readers and search engines."
+        },
+        {
+          "type": "text",
+          "id": "caption",
+          "label": "Caption"
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Link"
+        },
+        {
+          "type": "text",
+          "id": "link_label",
+          "label": "Link description",
+          "default": "View collection",
+          "info": "Read out by screen readers when the image is a link."
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Hero",
+      "blocks": [{ "type": "image" }]
+    }
+  ]
+}
+{% endschema %}

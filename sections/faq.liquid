@@ -1,0 +1,335 @@
+{%- liquid
+  assign st = section.settings
+
+  assign width_class = 'page-width page-width--narrow'
+  if st.content_width == 'page'
+    assign width_class = 'page-width'
+  elsif st.content_width == 'medium'
+    assign width_class = 'page-width page-width--medium'
+  endif
+
+  assign header_align_class = ''
+  if st.heading_alignment == 'center'
+    assign header_align_class = ' section__header--center'
+  elsif st.heading_alignment == 'right'
+    assign header_align_class = ' section__header--right'
+  endif
+-%}
+
+{% render 'section-style', section: section %}
+
+{%- style -%}
+  #shopify-section-{{ section.id }} .accordion__summary {
+    font-size: {{ st.question_size_mobile }}px;
+  }
+  #shopify-section-{{ section.id }} .accordion__content {
+    font-size: {{ st.answer_size_mobile }}px;
+  }
+  @media screen and (min-width: 750px) {
+    #shopify-section-{{ section.id }} .accordion__summary {
+      font-size: {{ st.question_size_desktop }}px;
+    }
+    #shopify-section-{{ section.id }} .accordion__content {
+      font-size: {{ st.answer_size_desktop }}px;
+    }
+  }
+{%- endstyle -%}
+
+<div class="section">
+  <div class="{{ width_class }}">
+    {%- if st.heading != blank or st.subheading != blank -%}
+      <div class="section__header{{ header_align_class }}">
+        {%- if st.subheading != blank -%}
+          <span class="eyebrow">{{ st.subheading }}</span>
+        {%- endif -%}
+        {%- if st.heading != blank -%}
+          <h2>{{ st.heading }}</h2>
+        {%- endif -%}
+        {%- if st.text != blank -%}
+          <div class="rte section__text">{{ st.text }}</div>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+    {%- if section.blocks.size > 0 -%}
+      <div
+        class="{% if st.style == 'boxed' %}accordion--boxed{% endif %}{% if settings.animations_enabled %} animate-in{% endif %}"
+        data-accordion-group
+      >
+        <div class="accordion">
+          {%- for block in section.blocks -%}
+            <details
+              class="accordion__item"
+              {{ block.shopify_attributes }}
+              {% if block.settings.open %}open{% endif %}
+              {% if st.one_at_a_time %}data-accordion-exclusive{% endif %}
+            >
+              <summary class="accordion__summary">
+                <span>{{ block.settings.question }}</span>
+                <span class="accordion__icon" aria-hidden="true"></span>
+              </summary>
+              <div class="accordion__content rte">
+                {{ block.settings.answer }}
+              </div>
+            </details>
+          {%- endfor -%}
+        </div>
+      </div>
+
+      {%- if st.enable_seo_schema -%}
+        <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+              {%- for block in section.blocks -%}
+                {
+                  "@type": "Question",
+                  "name": {{ block.settings.question | json }},
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": {{ block.settings.answer | strip_html | json }}
+                  }
+                }{% unless forloop.last %},{% endunless %}
+              {%- endfor -%}
+            ]
+          }
+        </script>
+      {%- endif -%}
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "FAQ",
+  "tag": "section",
+  "class": "section-faq",
+  "max_blocks": 20,
+  "settings": [
+    {
+      "type": "header",
+      "content": "Heading"
+    },
+    {
+      "type": "text",
+      "id": "subheading",
+      "label": "Small label above heading"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Frequently asked questions"
+    },
+    {
+      "type": "richtext",
+      "id": "text",
+      "label": "Text"
+    },
+    {
+      "type": "select",
+      "id": "heading_alignment",
+      "label": "Heading alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "style",
+      "label": "Style",
+      "options": [
+        { "value": "lines", "label": "Divider lines" },
+        { "value": "boxed", "label": "Boxed" }
+      ],
+      "default": "lines"
+    },
+    {
+      "type": "checkbox",
+      "id": "one_at_a_time",
+      "label": "Only one answer open at a time",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_seo_schema",
+      "label": "Add FAQ structured data for search engines",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "question_size_mobile",
+      "min": 13,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "label": "Question size (mobile)",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "question_size_desktop",
+      "min": 14,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "label": "Question size (desktop)",
+      "default": 17
+    },
+    {
+      "type": "range",
+      "id": "answer_size_mobile",
+      "min": 12,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "label": "Answer size (mobile)",
+      "default": 15
+    },
+    {
+      "type": "range",
+      "id": "answer_size_desktop",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "label": "Answer size (desktop)",
+      "default": 15
+    },
+    {
+      "type": "header",
+      "content": "Section layout"
+    },
+    {
+      "type": "select",
+      "id": "content_width",
+      "label": "Section width",
+      "options": [
+        { "value": "narrow", "label": "Narrow" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "page", "label": "Standard" }
+      ],
+      "default": "narrow"
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text"
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Heading"
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 36
+    }
+  ],
+  "blocks": [
+    {
+      "type": "question",
+      "name": "Question",
+      "settings": [
+        {
+          "type": "text",
+          "id": "question",
+          "label": "Question",
+          "default": "How long does shipping take?"
+        },
+        {
+          "type": "richtext",
+          "id": "answer",
+          "label": "Answer",
+          "default": "<p>Orders are dispatched within 24 hours. Delivery usually takes 5–9 business days, and every order includes tracking.</p>"
+        },
+        {
+          "type": "checkbox",
+          "id": "open",
+          "label": "Open by default",
+          "default": false
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "FAQ",
+      "blocks": [
+        { "type": "question" },
+        {
+          "type": "question",
+          "settings": {
+            "question": "What is your return policy?",
+            "answer": "<p>You have 30 days from delivery to request a return. Items must be unused and in their original packaging.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "How do I track my order?",
+            "answer": "<p>You will receive a tracking link by email as soon as your parcel leaves our warehouse.</p>"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

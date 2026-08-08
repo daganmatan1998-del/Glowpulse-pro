@@ -1,0 +1,163 @@
+{%- liquid
+  assign st = section.settings
+-%}
+
+{% render 'section-style', section: section %}
+
+<div class="section">
+  <div class="page-width">
+    <div class="section__header">
+      <h1>{{ 'cart.general.title' | t }}</h1>
+      {%- if cart.item_count > 0 -%}
+        <p class="text-muted">{{ 'cart.general.item_count' | t: count: cart.item_count }}</p>
+      {%- endif -%}
+    </div>
+
+    <div id="MainCartContent" data-cart-region>
+      {%- if cart.item_count > 0 -%}
+        <div class="cart-page__grid">
+          <div>
+            {% render 'cart-items', context: 'page' %}
+          </div>
+
+          <div class="cart-page__summary">
+            <form action="{{ routes.cart_url }}" method="post" id="cart-page-form">
+              {% render 'free-shipping-bar' %}
+
+              {%- if settings.cart_show_note -%}
+                <div class="field" style="margin-bottom:18px;">
+                  <label class="field__label" for="CartPageNote">{{ 'cart.general.note' | t }}</label>
+                  <textarea
+                    class="field__input"
+                    id="CartPageNote"
+                    name="note"
+                    placeholder="{{ 'cart.general.note_placeholder' | t | escape }}"
+                  >{{ cart.note }}</textarea>
+                </div>
+              {%- endif -%}
+
+              <div class="cart__totals">
+                <span class="cart__total-label">{{ 'cart.general.subtotal' | t }}</span>
+                <span class="cart__total-value">{{ cart.total_price | money_with_currency }}</span>
+              </div>
+
+              {%- for discount in cart.cart_level_discount_applications -%}
+                <p class="text-small text-muted" style="margin-bottom:6px;">
+                  {{ discount.title }} (-{{ discount.total_allocated_amount | money }})
+                </p>
+              {%- endfor -%}
+
+              <p class="cart__tax-note">{{ 'cart.general.taxes_and_shipping_at_checkout' | t }}</p>
+
+              <button type="submit" name="checkout" class="button button--full button--large">
+                {{ 'cart.general.checkout' | t }}
+              </button>
+            </form>
+
+            {%- if st.show_continue_shopping -%}
+              <a
+                class="link-arrow"
+                style="margin-top:16px;display:inline-flex;"
+                href="{{ st.continue_link | default: routes.all_products_collection_url }}"
+              >
+                {{ 'cart.general.continue_shopping' | t }}
+                {% render 'icon', name: 'arrow-right' %}
+              </a>
+            {%- endif -%}
+          </div>
+        </div>
+      {%- else -%}
+        <div class="cart__empty">
+          {% render 'icon', name: 'bag', class: 'cart__empty-icon' %}
+          <p class="h3">{{ 'cart.general.empty' | t }}</p>
+          <p class="text-muted">{{ 'cart.general.empty_subtext' | t }}</p>
+          <a
+            href="{{ st.continue_link | default: routes.all_products_collection_url }}"
+            class="button"
+          >
+            {{ 'cart.general.continue_shopping' | t }}
+          </a>
+        </div>
+      {%- endif -%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Cart",
+  "tag": "section",
+  "class": "section-main-cart",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "show_continue_shopping",
+      "label": "Show \"Continue shopping\" link",
+      "default": true
+    },
+    {
+      "type": "url",
+      "id": "continue_link",
+      "label": "\"Continue shopping\" link"
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text"
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 48
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 64
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 40
+    }
+  ]
+}
+{% endschema %}

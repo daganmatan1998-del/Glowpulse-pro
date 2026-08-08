@@ -1,0 +1,214 @@
+{%- liquid
+  assign st = section.settings
+
+  assign width_class = 'page-width page-width--narrow'
+  if st.content_width == 'page'
+    assign width_class = 'page-width'
+  elsif st.content_width == 'medium'
+    assign width_class = 'page-width page-width--medium'
+  endif
+
+  assign flex_align = 'center'
+  if st.text_alignment == 'left'
+    assign flex_align = 'flex-start'
+  elsif st.text_alignment == 'right'
+    assign flex_align = 'flex-end'
+  endif
+-%}
+
+{% render 'section-style', section: section %}
+
+<div class="section">
+  <div class="{{ width_class }}">
+    <div
+      class="cta{% if st.boxed %} cta--boxed color-background-alt{% endif %}"
+      style="--content-align: {{ flex_align }}; --content-text-align: {{ st.text_alignment }};"
+    >
+      {%- if st.subheading != blank -%}
+        <span class="eyebrow">{{ st.subheading }}</span>
+      {%- endif -%}
+
+      {%- if st.heading != blank -%}
+        <h2>{{ st.heading }}</h2>
+      {%- endif -%}
+
+      {%- if st.text != blank -%}
+        <div class="rte cta__text">{{ st.text }}</div>
+      {%- endif -%}
+
+      {%- form 'customer', class: 'newsletter-form newsletter-form--inline' -%}
+        <input type="hidden" name="contact[tags]" value="newsletter">
+        <div class="field">
+          <label class="visually-hidden" for="Newsletter-{{ section.id }}">
+            {{ 'general.newsletter_form.email_placeholder' | t }}
+          </label>
+          <input
+            class="field__input"
+            id="Newsletter-{{ section.id }}"
+            type="email"
+            name="contact[email]"
+            autocomplete="email"
+            placeholder="{{ 'general.newsletter_form.email_placeholder' | t | escape }}"
+            required
+          >
+        </div>
+        <button type="submit" class="button">
+          {{ st.button_label | default: 'Subscribe' }}
+        </button>
+
+        {%- if form.posted_successfully? -%}
+          <p class="form__message form__message--success">
+            {{ 'general.newsletter_form.confirmation' | t }}
+          </p>
+        {%- elsif form.errors -%}
+          <p class="form__message form__message--error">
+            {{ 'general.newsletter_form.error' | t }}
+          </p>
+        {%- endif -%}
+      {%- endform -%}
+
+      {%- if st.footnote != blank -%}
+        <p class="text-small text-muted">{{ st.footnote }}</p>
+      {%- endif -%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Newsletter",
+  "tag": "section",
+  "class": "section-newsletter",
+  "settings": [
+    {
+      "type": "text",
+      "id": "subheading",
+      "label": "Small label above heading"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Get 10% off your first order"
+    },
+    {
+      "type": "richtext",
+      "id": "text",
+      "label": "Text",
+      "default": "<p>Subscribe for early access to new products and subscriber-only offers.</p>"
+    },
+    {
+      "type": "text",
+      "id": "button_label",
+      "label": "Button label",
+      "default": "Subscribe"
+    },
+    {
+      "type": "text",
+      "id": "footnote",
+      "label": "Small print",
+      "default": "No spam. Unsubscribe any time."
+    },
+    {
+      "type": "select",
+      "id": "text_alignment",
+      "label": "Alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "checkbox",
+      "id": "boxed",
+      "label": "Show content in a box",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Section layout"
+    },
+    {
+      "type": "select",
+      "id": "content_width",
+      "label": "Section width",
+      "options": [
+        { "value": "narrow", "label": "Narrow" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "page", "label": "Standard" }
+      ],
+      "default": "medium"
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text"
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Heading"
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 36
+    }
+  ],
+  "presets": [
+    {
+      "name": "Newsletter"
+    }
+  ]
+}
+{% endschema %}

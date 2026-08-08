@@ -1,0 +1,237 @@
+{%- liquid
+  assign st = section.settings
+
+  assign width_class = 'page-width page-width--narrow'
+  if st.content_width == 'page'
+    assign width_class = 'page-width'
+  elsif st.content_width == 'medium'
+    assign width_class = 'page-width page-width--medium'
+  endif
+
+  assign form_id = 'ContactForm-' | append: section.id
+-%}
+
+{% render 'section-style', section: section %}
+
+<div class="section">
+  <div class="{{ width_class }}">
+    <div class="section__header{% if st.heading_alignment == 'center' %} section__header--center{% endif %}">
+      {%- if st.heading != blank -%}
+        <h2>{{ st.heading }}</h2>
+      {%- endif -%}
+      {%- if st.text != blank -%}
+        <div class="rte section__text">{{ st.text }}</div>
+      {%- endif -%}
+    </div>
+
+    {%- form 'contact', id: form_id, class: 'form-stack' -%}
+      {%- if form.posted_successfully? -%}
+        <p class="form__message form__message--success" role="status">
+          {% render 'icon', name: 'check-circle' %}
+          {{ 'contact.form.post_success' | t }}
+        </p>
+      {%- elsif form.errors -%}
+        <div class="form__message form__message--error" role="alert">
+          <div>
+            <strong>{{ 'contact.form.error_heading' | t }}</strong>
+            <ul style="margin:6px 0 0;padding-left:18px;">
+              {%- for field in form.errors -%}
+                <li>{{ form.errors.messages[field] }}</li>
+              {%- endfor -%}
+            </ul>
+          </div>
+        </div>
+      {%- endif -%}
+
+      <div class="field">
+        <label class="field__label" for="ContactName-{{ section.id }}">
+          {{ 'contact.form.name' | t }}
+        </label>
+        <input
+          class="field__input"
+          id="ContactName-{{ section.id }}"
+          type="text"
+          name="contact[{{ 'contact.form.name' | t }}]"
+          autocomplete="name"
+          value="{% if form.name %}{{ form.name }}{% elsif customer %}{{ customer.name }}{% endif %}"
+        >
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="ContactEmail-{{ section.id }}">
+          {{ 'contact.form.email' | t }}
+        </label>
+        <input
+          class="field__input"
+          id="ContactEmail-{{ section.id }}"
+          type="email"
+          name="contact[email]"
+          autocomplete="email"
+          required
+          value="{% if form.email %}{{ form.email }}{% elsif customer %}{{ customer.email }}{% endif %}"
+        >
+      </div>
+
+      {%- if st.show_phone -%}
+        <div class="field">
+          <label class="field__label" for="ContactPhone-{{ section.id }}">
+            {{ 'contact.form.phone' | t }}
+          </label>
+          <input
+            class="field__input"
+            id="ContactPhone-{{ section.id }}"
+            type="tel"
+            name="contact[{{ 'contact.form.phone' | t }}]"
+            autocomplete="tel"
+          >
+        </div>
+      {%- endif -%}
+
+      <div class="field">
+        <label class="field__label" for="ContactBody-{{ section.id }}">
+          {{ 'contact.form.message' | t }}
+        </label>
+        <textarea
+          class="field__input"
+          id="ContactBody-{{ section.id }}"
+          name="contact[body]"
+          required
+        >{{ form.body }}</textarea>
+      </div>
+
+      <button type="submit" class="button button--full">
+        {{ st.button_label | default: 'Send message' }}
+      </button>
+    {%- endform -%}
+
+    {%- if st.footer_text != blank -%}
+      <div class="rte text-center text-muted text-small" style="margin-top:20px;">
+        {{ st.footer_text }}
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Contact form",
+  "tag": "section",
+  "class": "section-contact",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Contact us"
+    },
+    {
+      "type": "richtext",
+      "id": "text",
+      "label": "Text",
+      "default": "<p>Send us a message and we will reply within 24 hours.</p>"
+    },
+    {
+      "type": "select",
+      "id": "heading_alignment",
+      "label": "Heading alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_phone",
+      "label": "Show phone number field",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "button_label",
+      "label": "Button label",
+      "default": "Send message"
+    },
+    {
+      "type": "richtext",
+      "id": "footer_text",
+      "label": "Text below the form",
+      "default": "<p>Prefer email? Write to us any time.</p>"
+    },
+    {
+      "type": "select",
+      "id": "content_width",
+      "label": "Section width",
+      "options": [
+        { "value": "narrow", "label": "Narrow" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "page", "label": "Standard" }
+      ],
+      "default": "narrow"
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text"
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 140,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 140,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 64
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 40
+    }
+  ],
+  "presets": [
+    {
+      "name": "Contact form"
+    }
+  ]
+}
+{% endschema %}

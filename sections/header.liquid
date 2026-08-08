@@ -1,0 +1,481 @@
+{%- liquid
+  assign st = section.settings
+  assign menu = st.menu
+  assign drawer_menu = st.drawer_menu | default: st.menu
+  assign logo_position = st.logo_position | default: 'left'
+  assign drawer_side = st.drawer_position | default: 'right'
+-%}
+
+{%- style -%}
+  #shopify-section-{{ section.id }} {
+    /* Sticky sits on the section element itself — a sticky child would stop
+       sticking as soon as its short parent scrolled out of view. */
+    {% if st.sticky %}position: sticky; top: 0;{% else %}position: relative;{% endif %}
+    z-index: 30;
+    --header-height: {{ st.header_height_mobile }}px;
+    --header-background: {{ st.background_color }};
+    --header-text: {{ st.text_color }};
+    --header-border-color: {{ st.border_color }};
+    --header-border-width: {{ st.border_width }}px;
+    --header-logo-width: {{ st.logo_width_mobile }}px;
+  }
+
+  @media screen and (min-width: 990px) {
+    #shopify-section-{{ section.id }} {
+      --header-height: {{ st.header_height_desktop }}px;
+      --header-logo-width: {{ st.logo_width_desktop }}px;
+    }
+  }
+{%- endstyle -%}
+
+<div
+  class="header-wrapper{% if st.sticky %} header-wrapper--sticky{% endif %}"
+  data-header-wrapper
+>
+  <div class="page-width">
+    <header class="header header--logo-{{ logo_position }}" role="banner">
+      {%- comment -%} Left slot {%- endcomment -%}
+      {%- if logo_position == 'center' -%}
+        <div class="header__icons header__icons--start">
+          {%- if drawer_side == 'left' -%}
+            <button
+              type="button"
+              class="header__icon"
+              data-drawer-open="MenuDrawer-{{ section.id }}"
+              aria-expanded="false"
+              aria-controls="MenuDrawer-{{ section.id }}"
+            >
+              {% render 'icon', name: 'menu' %}
+              <span class="visually-hidden">{{ 'general.accessibility.open_menu' | t }}</span>
+            </button>
+          {%- endif -%}
+
+          {%- if st.show_search -%}
+            <a class="header__icon" href="{{ routes.search_url }}">
+              {% render 'icon', name: 'search' %}
+              <span class="visually-hidden">{{ 'general.search.search' | t }}</span>
+            </a>
+          {%- endif -%}
+        </div>
+      {%- else -%}
+        {% render 'header-logo', section: section %}
+      {%- endif -%}
+
+      {%- comment -%} Centre slot {%- endcomment -%}
+      {%- if logo_position == 'center' -%}
+        {% render 'header-logo', section: section %}
+      {%- else -%}
+        <nav class="header__nav" role="navigation" aria-label="{{ 'general.accessibility.menu' | t }}">
+          <ul class="header__inline-menu" role="list">
+            {%- for link in menu.links -%}
+              <li>
+                <a
+                  class="header__menu-link"
+                  href="{{ link.url }}"
+                  {% if link.current %}aria-current="page"{% endif %}
+                >
+                  {{ link.title }}
+                </a>
+              </li>
+            {%- endfor -%}
+          </ul>
+        </nav>
+      {%- endif -%}
+
+      {%- comment -%} Right slot {%- endcomment -%}
+      <div class="header__icons">
+        {%- if st.show_search and logo_position != 'center' -%}
+          <a class="header__icon" href="{{ routes.search_url }}">
+            {% render 'icon', name: 'search' %}
+            <span class="visually-hidden">{{ 'general.search.search' | t }}</span>
+          </a>
+        {%- endif -%}
+
+        <a
+          class="header__icon"
+          href="{{ routes.cart_url }}"
+          data-cart-icon
+          {% if settings.cart_type == 'drawer' %}
+            data-drawer-open="CartDrawer"
+            aria-expanded="false"
+            aria-controls="CartDrawer"
+          {% endif %}
+        >
+          {% render 'icon', name: 'bag' %}
+          <span id="CartCountBubble" data-cart-region>
+            {%- if cart.item_count > 0 -%}
+              <span class="header__cart-count" aria-hidden="true">{{ cart.item_count }}</span>
+            {%- endif -%}
+          </span>
+          <span class="visually-hidden">
+            {{ 'sections.header.cart_count' | t: count: cart.item_count }}
+          </span>
+        </a>
+
+        {%- if drawer_side == 'right' or logo_position != 'center' -%}
+          <button
+            type="button"
+            class="header__icon"
+            data-drawer-open="MenuDrawer-{{ section.id }}"
+            aria-expanded="false"
+            aria-controls="MenuDrawer-{{ section.id }}"
+          >
+            {% render 'icon', name: 'menu' %}
+            <span class="visually-hidden">{{ 'general.accessibility.open_menu' | t }}</span>
+          </button>
+        {%- endif -%}
+      </div>
+    </header>
+  </div>
+</div>
+
+{%- comment -%} Slide-out navigation {%- endcomment -%}
+<div
+  class="drawer drawer--{{ drawer_side }}"
+  id="MenuDrawer-{{ section.id }}"
+  data-drawer
+  role="dialog"
+  aria-modal="true"
+  aria-label="{{ 'general.accessibility.menu' | t }}"
+  aria-hidden="true"
+>
+  <div class="drawer__overlay" data-drawer-close></div>
+
+  <div class="drawer__panel">
+    <div class="drawer__header">
+      <span class="drawer__title">{{ st.drawer_heading | default: 'Menu' }}</span>
+      <button type="button" class="drawer__close" data-drawer-close>
+        {% render 'icon', name: 'close' %}
+        <span class="visually-hidden">{{ 'general.accessibility.close_menu' | t }}</span>
+      </button>
+    </div>
+
+    <div class="drawer__body">
+      <nav aria-label="{{ 'general.accessibility.menu' | t }}">
+        <ul class="menu-drawer__nav" role="list">
+          {%- for link in drawer_menu.links -%}
+            <li class="menu-drawer__item">
+              {%- if link.links.size > 0 -%}
+                <details class="menu-drawer__details">
+                  <summary class="menu-drawer__summary">
+                    {{ link.title }}
+                    {% render 'icon', name: 'chevron-down' %}
+                  </summary>
+                  <ul class="menu-drawer__submenu" role="list">
+                    {%- for child in link.links -%}
+                      <li class="menu-drawer__item">
+                        {%- if child.links.size > 0 -%}
+                          <details class="menu-drawer__details">
+                            <summary class="menu-drawer__summary">
+                              {{ child.title }}
+                              {% render 'icon', name: 'chevron-down' %}
+                            </summary>
+                            <ul class="menu-drawer__submenu" role="list">
+                              {%- for grandchild in child.links -%}
+                                <li class="menu-drawer__item">
+                                  <a class="menu-drawer__link" href="{{ grandchild.url }}">
+                                    {{ grandchild.title }}
+                                  </a>
+                                </li>
+                              {%- endfor -%}
+                            </ul>
+                          </details>
+                        {%- else -%}
+                          <a class="menu-drawer__link" href="{{ child.url }}">{{ child.title }}</a>
+                        {%- endif -%}
+                      </li>
+                    {%- endfor -%}
+                  </ul>
+                </details>
+              {%- else -%}
+                <a
+                  class="menu-drawer__link"
+                  href="{{ link.url }}"
+                  {% if link.current %}aria-current="page"{% endif %}
+                >
+                  {{ link.title }}
+                </a>
+              {%- endif -%}
+            </li>
+          {%- endfor -%}
+        </ul>
+      </nav>
+
+      {%- if section.blocks.size > 0 -%}
+        <div class="menu-drawer__footer">
+          {%- for block in section.blocks -%}
+            {%- case block.type -%}
+              {%- when 'contact' -%}
+                <div class="menu-drawer__contact" {{ block.shopify_attributes }}>
+                  {%- if block.settings.heading != blank -%}
+                    <p class="menu-drawer__footer-heading">{{ block.settings.heading }}</p>
+                  {%- endif -%}
+                  {%- if block.settings.email != blank -%}
+                    <a class="link" href="mailto:{{ block.settings.email }}">{{ block.settings.email }}</a>
+                  {%- endif -%}
+                  {%- if block.settings.phone != blank -%}
+                    <a class="link" href="tel:{{ block.settings.phone | replace: ' ', '' }}">
+                      {{- block.settings.phone -}}
+                    </a>
+                  {%- endif -%}
+                  {%- if block.settings.text != blank -%}
+                    <div class="rte text-small text-muted">{{ block.settings.text }}</div>
+                  {%- endif -%}
+                </div>
+
+              {%- when 'social' -%}
+                <div class="menu-drawer__contact" {{ block.shopify_attributes }}>
+                  {%- if block.settings.heading != blank -%}
+                    <p class="menu-drawer__footer-heading">{{ block.settings.heading }}</p>
+                  {%- endif -%}
+                  {% render 'social-icons' %}
+                </div>
+
+              {%- when 'button' -%}
+                {%- if block.settings.label != blank -%}
+                  <div style="margin-top:20px;" {{ block.shopify_attributes }}>
+                    <a
+                      class="button button--full{% if block.settings.style == 'secondary' %} button--secondary{% endif %}"
+                      href="{{ block.settings.link | default: '#' }}"
+                    >
+                      {{ block.settings.label }}
+                    </a>
+                  </div>
+                {%- endif -%}
+            {%- endcase -%}
+          {%- endfor -%}
+        </div>
+      {%- endif -%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Header",
+  "tag": "section",
+  "class": "section-header",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Logo"
+    },
+    {
+      "type": "image_picker",
+      "id": "logo",
+      "label": "Logo image"
+    },
+    {
+      "type": "select",
+      "id": "logo_position",
+      "label": "Logo position",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Centre" }
+      ],
+      "default": "left"
+    },
+    {
+      "type": "range",
+      "id": "logo_width_mobile",
+      "min": 60,
+      "max": 200,
+      "step": 5,
+      "unit": "px",
+      "label": "Logo width on mobile",
+      "default": 110
+    },
+    {
+      "type": "range",
+      "id": "logo_width_desktop",
+      "min": 70,
+      "max": 300,
+      "step": 5,
+      "unit": "px",
+      "label": "Logo width on desktop",
+      "default": 140
+    },
+    {
+      "type": "header",
+      "content": "Navigation"
+    },
+    {
+      "type": "link_list",
+      "id": "menu",
+      "label": "Desktop menu",
+      "default": "main-menu",
+      "info": "Shown inline on large screens."
+    },
+    {
+      "type": "link_list",
+      "id": "drawer_menu",
+      "label": "Hamburger menu",
+      "default": "main-menu",
+      "info": "Opens from the menu icon. Add Contact us, Reviews, Product specifications and a Policies group with your policy pages in Online Store → Navigation."
+    },
+    {
+      "type": "text",
+      "id": "drawer_heading",
+      "label": "Menu drawer title",
+      "default": "Menu"
+    },
+    {
+      "type": "select",
+      "id": "drawer_position",
+      "label": "Menu opens from",
+      "options": [
+        { "value": "right", "label": "Right" },
+        { "value": "left", "label": "Left" }
+      ],
+      "default": "right"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_search",
+      "label": "Show search icon",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "checkbox",
+      "id": "sticky",
+      "label": "Stick header to top when scrolling",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "header_height_mobile",
+      "min": 48,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "label": "Header height on mobile",
+      "default": 62
+    },
+    {
+      "type": "range",
+      "id": "header_height_desktop",
+      "min": 56,
+      "max": 140,
+      "step": 2,
+      "unit": "px",
+      "label": "Header height on desktop",
+      "default": 76
+    },
+    {
+      "type": "header",
+      "content": "Colours"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text and icons",
+      "default": "#14161a"
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "Bottom border",
+      "default": "#e4e4e1"
+    },
+    {
+      "type": "range",
+      "id": "border_width",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "unit": "px",
+      "label": "Bottom border width",
+      "default": 1
+    }
+  ],
+  "blocks": [
+    {
+      "type": "contact",
+      "name": "Menu — contact details",
+      "limit": 2,
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Heading",
+          "default": "Need help?"
+        },
+        {
+          "type": "text",
+          "id": "email",
+          "label": "Email address"
+        },
+        {
+          "type": "text",
+          "id": "phone",
+          "label": "Phone number"
+        },
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Text",
+          "default": "<p>We reply within 24 hours.</p>"
+        }
+      ]
+    },
+    {
+      "type": "social",
+      "name": "Menu — social links",
+      "limit": 1,
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Heading",
+          "default": "Follow us"
+        },
+        {
+          "type": "paragraph",
+          "content": "Links are managed in Theme settings → Social media."
+        }
+      ]
+    },
+    {
+      "type": "button",
+      "name": "Menu — button",
+      "limit": 2,
+      "settings": [
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Button label",
+          "default": "Shop now"
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Button link"
+        },
+        {
+          "type": "select",
+          "id": "style",
+          "label": "Style",
+          "options": [
+            { "value": "primary", "label": "Primary" },
+            { "value": "secondary", "label": "Secondary" }
+          ],
+          "default": "primary"
+        }
+      ]
+    }
+  ],
+  "enabled_on": {
+    "groups": ["header"]
+  }
+}
+{% endschema %}

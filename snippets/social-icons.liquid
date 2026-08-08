@@ -1,0 +1,82 @@
+{%- comment -%}
+  Renders the social links configured in Theme settings → Social media.
+  Outputs nothing when no links are set.
+
+  Usage:
+  {% render 'social-icons' %}
+{%- endcomment -%}
+
+{%- liquid
+  assign has_social = false
+  if settings.social_instagram_link != blank
+    assign has_social = true
+  elsif settings.social_facebook_link != blank
+    assign has_social = true
+  elsif settings.social_tiktok_link != blank
+    assign has_social = true
+  elsif settings.social_youtube_link != blank
+    assign has_social = true
+  elsif settings.social_x_link != blank
+    assign has_social = true
+  elsif settings.social_pinterest_link != blank
+    assign has_social = true
+  endif
+-%}
+
+{%- if has_social -%}
+  <ul class="social-list" role="list">
+    {%- if settings.social_instagram_link != blank -%}
+      <li>
+        <a href="{{ settings.social_instagram_link }}" target="_blank" rel="noopener noreferrer">
+          <span class="visually-hidden">Instagram</span>
+          {% render 'icon', name: 'instagram' %}
+        </a>
+      </li>
+    {%- endif -%}
+
+    {%- if settings.social_facebook_link != blank -%}
+      <li>
+        <a href="{{ settings.social_facebook_link }}" target="_blank" rel="noopener noreferrer">
+          <span class="visually-hidden">Facebook</span>
+          {% render 'icon', name: 'facebook' %}
+        </a>
+      </li>
+    {%- endif -%}
+
+    {%- if settings.social_tiktok_link != blank -%}
+      <li>
+        <a href="{{ settings.social_tiktok_link }}" target="_blank" rel="noopener noreferrer">
+          <span class="visually-hidden">TikTok</span>
+          {% render 'icon', name: 'tiktok' %}
+        </a>
+      </li>
+    {%- endif -%}
+
+    {%- if settings.social_youtube_link != blank -%}
+      <li>
+        <a href="{{ settings.social_youtube_link }}" target="_blank" rel="noopener noreferrer">
+          <span class="visually-hidden">YouTube</span>
+          {% render 'icon', name: 'youtube' %}
+        </a>
+      </li>
+    {%- endif -%}
+
+    {%- if settings.social_x_link != blank -%}
+      <li>
+        <a href="{{ settings.social_x_link }}" target="_blank" rel="noopener noreferrer">
+          <span class="visually-hidden">X</span>
+          {% render 'icon', name: 'x' %}
+        </a>
+      </li>
+    {%- endif -%}
+
+    {%- if settings.social_pinterest_link != blank -%}
+      <li>
+        <a href="{{ settings.social_pinterest_link }}" target="_blank" rel="noopener noreferrer">
+          <span class="visually-hidden">Pinterest</span>
+          {% render 'icon', name: 'pinterest' %}
+        </a>
+      </li>
+    {%- endif -%}
+  </ul>
+{%- endif -%}

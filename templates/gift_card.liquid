@@ -1,0 +1,118 @@
+{% layout none %}
+<!doctype html>
+<html class="no-js" lang="{{ request.locale.iso_code }}">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {%- assign gift_card_value = gift_card.initial_value | money -%}
+    <title>{{ 'gift_cards.issued.title' | t: value: gift_card_value, shop: shop.name }}</title>
+
+    {%- if settings.favicon != blank -%}
+      <link rel="icon" type="image/png" href="{{ settings.favicon | image_url: width: 32, height: 32 }}">
+    {%- endif -%}
+
+    {%- liquid
+      assign body_font = settings.font_body
+      assign heading_font = settings.font_heading
+    -%}
+    <style>
+      /* font_face emits a bare CSS rule, so it must sit inside this style tag. */
+      {{ body_font | font_face: font_display: 'swap' }}
+      {{ heading_font | font_face: font_display: 'swap' }}
+
+      :root {
+        --page-width: {{ settings.page_width }}px;
+        --page-gutter: {{ settings.page_gutter_mobile }}px;
+        --radius-base: {{ settings.radius_base }}px;
+        --radius-button: {{ settings.radius_button }}px;
+        --radius-input: {{ settings.radius_input }}px;
+        --color-background: {{ settings.color_background }};
+        --color-background-alt: {{ settings.color_background_alt }};
+        --color-text: {{ settings.color_text }};
+        --color-text-muted: {{ settings.color_text_muted }};
+        --color-border: {{ settings.color_border }};
+        --color-accent: {{ settings.color_accent }};
+        --color-button-background: {{ settings.color_button_background }};
+        --color-button-text: {{ settings.color_button_text }};
+        --color-button-alt-background: {{ settings.color_button_alt_background }};
+        --color-button-alt-text: {{ settings.color_button_alt_text }};
+        --color-sale: {{ settings.color_sale }};
+        --color-badge-background: {{ settings.color_badge_background }};
+        --color-badge-text: {{ settings.color_badge_text }};
+        --color-star: {{ settings.color_star }};
+        --font-body-family: {{ body_font.family }}, {{ body_font.fallback_families }};
+        --font-body-style: {{ body_font.style }};
+        --font-body-weight: {{ body_font.weight }};
+        --font-body-size: {{ settings.font_body_size_mobile }}px;
+        --font-body-line-height: {{ settings.font_body_line_height | divided_by: 100.0 }};
+        --font-heading-family: {{ heading_font.family }}, {{ heading_font.fallback_families }};
+        --font-heading-style: {{ heading_font.style }};
+        --font-heading-weight: {{ settings.font_heading_weight }};
+        --font-heading-scale: {{ settings.font_heading_scale_mobile | divided_by: 100.0 }};
+        --font-heading-letter-spacing: {{ settings.font_heading_letter_spacing }}px;
+        --font-heading-transform: {{ settings.font_heading_transform }};
+        --button-height: {{ settings.button_height_mobile }}px;
+        --button-weight: {{ settings.button_weight }};
+        --button-letter-spacing: {{ settings.button_letter_spacing }}px;
+        --button-transform: {{ settings.button_transform }};
+      }
+
+      .gift-card {
+        max-width: 480px;
+        margin: 48px auto;
+        padding: 0 var(--page-gutter);
+        text-align: center;
+      }
+
+      .gift-card__code {
+        display: inline-block;
+        margin: 20px 0;
+        padding: 14px 22px;
+        border: 1px dashed var(--color-border);
+        border-radius: var(--radius-base);
+        font-size: 1.375rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+
+      @media print {
+        .gift-card__actions {
+          display: none;
+        }
+      }
+    </style>
+
+    <link rel="stylesheet" href="{{ 'base.css' | asset_url }}">
+    {{ content_for_header }}
+  </head>
+
+  <body>
+    <main class="gift-card" role="main">
+      <h1 class="h2">{{ shop.name }}</h1>
+      <p class="text-muted">{{ 'gift_cards.issued.subtext' | t }}</p>
+
+      <p class="h1" style="margin: 20px 0;">{{ gift_card.balance | money }}</p>
+
+      {%- if gift_card.expired and gift_card.enabled -%}
+        <p class="form__message form__message--error">{{ 'gift_cards.issued.expired' | t }}</p>
+      {%- elsif gift_card.expires_on -%}
+        <p class="text-small text-muted">
+          {{ 'gift_cards.issued.expiration_date' | t: expires_on: gift_card.expires_on }}
+        </p>
+      {%- endif -%}
+
+      <p class="text-small text-muted">{{ 'gift_cards.issued.gift_card_code' | t }}</p>
+      <div class="gift-card__code">{{ gift_card.code | format_code }}</div>
+
+      <div class="gift-card__actions">
+        <a href="{{ shop.url }}" class="button button--full">
+          {{ 'gift_cards.issued.shop_link' | t }}
+        </a>
+        <button type="button" class="button button--secondary button--full" style="margin-top:10px;" onclick="window.print()">
+          {{ 'gift_cards.issued.print_gift_card' | t }}
+        </button>
+      </div>
+    </main>
+  </body>
+</html>

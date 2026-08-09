@@ -19,7 +19,7 @@ namespace Glowpulse.Core.Characters
     /// <summary>All keys for one joint.</summary>
     public struct BoneTrack
     {
-        public HumanBone Bone;
+        public RigBone Bone;
         public PoseKey[] Keys;
     }
 
@@ -65,7 +65,7 @@ namespace Glowpulse.Core.Characters
         }
 
         /// <summary>Adds a joint track. Keys must be supplied in ascending time order.</summary>
-        public PoseClip Track(HumanBone bone, params PoseKey[] keys)
+        public PoseClip Track(RigBone bone, params PoseKey[] keys)
         {
             if (keys == null || keys.Length == 0) return this;
             _tracks.Add(new BoneTrack { Bone = bone, Keys = keys });
@@ -73,7 +73,7 @@ namespace Glowpulse.Core.Characters
         }
 
         /// <summary>Mirrors a track onto the opposite limb, negating yaw and roll.</summary>
-        public PoseClip Mirror(HumanBone source, HumanBone destination)
+        public PoseClip Mirror(RigBone source, RigBone destination)
         {
             for (int i = 0; i < _tracks.Count; i++)
             {

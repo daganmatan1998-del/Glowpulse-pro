@@ -37,7 +37,7 @@ namespace Glowpulse.Core.Characters
             var rig = owner.GetComponent<CharacterRig>() ?? owner.AddComponent<CharacterRig>();
 
             Transform root = NewJoint("Rig", owner.transform, Vector3.zero);
-            rig.Set(HumanBone.Root, root);
+            rig.Set(RigBone.Root, root);
 
             // ---- proportions, all derived from total height -------------------
             float hipY = 0.525f * h;
@@ -57,11 +57,11 @@ namespace Glowpulse.Core.Characters
             Transform neck = NewJoint("Neck", chest, new Vector3(0f, 0.105f * h, 0f));
             Transform head = NewJoint("Head", neck, new Vector3(0f, 0.055f * h, 0f));
 
-            rig.Set(HumanBone.Hips, hips);
-            rig.Set(HumanBone.Spine, spine);
-            rig.Set(HumanBone.Chest, chest);
-            rig.Set(HumanBone.Neck, neck);
-            rig.Set(HumanBone.Head, head);
+            rig.Set(RigBone.Hips, hips);
+            rig.Set(RigBone.Spine, spine);
+            rig.Set(RigBone.Chest, chest);
+            rig.Set(RigBone.Neck, neck);
+            rig.Set(RigBone.Head, head);
 
             // pelvis + torso blocks
             MeshLibrary.CreatePart("Pelvis", hips, MeshLibrary.Cube, legs,
@@ -105,16 +105,16 @@ namespace Glowpulse.Core.Characters
             // ---- arms ---------------------------------------------------------
             BuildArm(rig, chest, +1f, shoulderHalfWidth, upperArmLen, lowerArmLen, limbR, h,
                 skin, torso, accent, castShadows,
-                HumanBone.ShoulderL, HumanBone.UpperArmL, HumanBone.LowerArmL, HumanBone.HandL, "L");
+                RigBone.ShoulderL, RigBone.UpperArmL, RigBone.LowerArmL, RigBone.HandL, "L");
             BuildArm(rig, chest, -1f, shoulderHalfWidth, upperArmLen, lowerArmLen, limbR, h,
                 skin, torso, accent, castShadows,
-                HumanBone.ShoulderR, HumanBone.UpperArmR, HumanBone.LowerArmR, HumanBone.HandR, "R");
+                RigBone.ShoulderR, RigBone.UpperArmR, RigBone.LowerArmR, RigBone.HandR, "R");
 
             // ---- legs ---------------------------------------------------------
             BuildLeg(rig, hips, +1f, hipHalfWidth, thighLen, shinLen, ankleY, limbR, h,
-                legs, shoes, castShadows, HumanBone.ThighL, HumanBone.ShinL, HumanBone.FootL, "L");
+                legs, shoes, castShadows, RigBone.ThighL, RigBone.ShinL, RigBone.FootL, "L");
             BuildLeg(rig, hips, -1f, hipHalfWidth, thighLen, shinLen, ankleY, limbR, h,
-                legs, shoes, castShadows, HumanBone.ThighR, HumanBone.ShinR, HumanBone.FootR, "R");
+                legs, shoes, castShadows, RigBone.ThighR, RigBone.ShinR, RigBone.FootR, "R");
 
             // A neutral fighting-game A-pose reads better than a stiff T-pose and
             // becomes the rest pose everything else is layered on top of.
@@ -127,7 +127,7 @@ namespace Glowpulse.Core.Characters
         private static void BuildArm(CharacterRig rig, Transform chest, float side,
             float shoulderHalfWidth, float upperLen, float lowerLen, float limbR, float h,
             Material skin, Material sleeve, Material accent, bool shadows,
-            HumanBone shoulderBone, HumanBone upperBone, HumanBone lowerBone, HumanBone handBone, string suffix)
+            RigBone shoulderBone, RigBone upperBone, RigBone lowerBone, RigBone handBone, string suffix)
         {
             Transform shoulder = NewJoint("Shoulder" + suffix, chest,
                 new Vector3(side * shoulderHalfWidth, 0.085f * h, 0f));
@@ -156,7 +156,7 @@ namespace Glowpulse.Core.Characters
         private static void BuildLeg(CharacterRig rig, Transform hips, float side,
             float hipHalfWidth, float thighLen, float shinLen, float ankleY, float limbR, float h,
             Material trousers, Material shoes, bool shadows,
-            HumanBone thighBone, HumanBone shinBone, HumanBone footBone, string suffix)
+            RigBone thighBone, RigBone shinBone, RigBone footBone, string suffix)
         {
             Transform thigh = NewJoint("Thigh" + suffix, hips, new Vector3(side * hipHalfWidth, -0.02f * h, 0f));
             Transform shin = NewJoint("Shin" + suffix, thigh, new Vector3(0f, -thighLen, 0f));
@@ -182,17 +182,17 @@ namespace Glowpulse.Core.Characters
         /// <summary>Slight A-pose with softly bent elbows and knees.</summary>
         private static void ApplyBaseStance(CharacterRig rig)
         {
-            SetLocalEuler(rig, HumanBone.UpperArmL, new Vector3(-6f, 0f, -7f));
-            SetLocalEuler(rig, HumanBone.UpperArmR, new Vector3(-6f, 0f, 7f));
-            SetLocalEuler(rig, HumanBone.LowerArmL, new Vector3(-14f, 0f, -3f));
-            SetLocalEuler(rig, HumanBone.LowerArmR, new Vector3(-14f, 0f, 3f));
-            SetLocalEuler(rig, HumanBone.ThighL, new Vector3(-1.5f, 0f, 1.5f));
-            SetLocalEuler(rig, HumanBone.ThighR, new Vector3(-1.5f, 0f, -1.5f));
-            SetLocalEuler(rig, HumanBone.ShinL, new Vector3(3f, 0f, 0f));
-            SetLocalEuler(rig, HumanBone.ShinR, new Vector3(3f, 0f, 0f));
+            SetLocalEuler(rig, RigBone.UpperArmL, new Vector3(-6f, 0f, -7f));
+            SetLocalEuler(rig, RigBone.UpperArmR, new Vector3(-6f, 0f, 7f));
+            SetLocalEuler(rig, RigBone.LowerArmL, new Vector3(-14f, 0f, -3f));
+            SetLocalEuler(rig, RigBone.LowerArmR, new Vector3(-14f, 0f, 3f));
+            SetLocalEuler(rig, RigBone.ThighL, new Vector3(-1.5f, 0f, 1.5f));
+            SetLocalEuler(rig, RigBone.ThighR, new Vector3(-1.5f, 0f, -1.5f));
+            SetLocalEuler(rig, RigBone.ShinL, new Vector3(3f, 0f, 0f));
+            SetLocalEuler(rig, RigBone.ShinR, new Vector3(3f, 0f, 0f));
         }
 
-        private static void SetLocalEuler(CharacterRig rig, HumanBone bone, Vector3 euler)
+        private static void SetLocalEuler(CharacterRig rig, RigBone bone, Vector3 euler)
         {
             Transform t = rig.Get(bone);
             if (t != null) t.localRotation = Quaternion.Euler(euler);

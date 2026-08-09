@@ -4,7 +4,7 @@ A third-person open-world beat 'em up built in Unity with the Universal Render
 Pipeline. Explore a dense city, fight with a combo-driven melee system, take
 missions, and level up.
 
-Current status: **Phase 1 complete** - player, movement, camera and lock-on.
+Current status: **Phase 2 complete** - player, camera, and a full melee combat system.
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the phase plan and what is done.
 
 ## Getting started
@@ -40,8 +40,10 @@ keeps the whole game in reviewable source rather than in a binary scene file.
 | Grab | `G` | LT |
 | Pause | `Esc` | Start |
 
-Attack, block and grab are wired through the input layer and take effect in
-Phase 2.
+Combos: light, light, heavy and light, light, light, heavy end the string
+differently. Block just as a hit lands to parry it, then attack for a counter.
+Dodge through an attack for the same counter. Grab, then heavy, to throw. Heavy
+next to a downed enemy is a finisher.
 
 ## Verification without the Unity Editor
 
@@ -68,9 +70,11 @@ Both require the .NET 8 SDK.
 ```
 Assets/Scripts/
   Core/          shared foundations: input, math, rendering, characters, bootstrap
-  Player/        player controller, locomotion config, player combatant
-  Combat/        health, stamina, the damage pipeline
+  Player/        player controller, combat controller, locomotion config
+  Combat/        moves, hitboxes, damage pipeline, health, stamina, hit feel
   CameraSystem/  third-person camera, shake, lock-on
+  VFX/           procedural impact effects
+  Audio/         audio manager and procedural placeholder sounds
   World/         environment lighting and world building
   Editor/        project setup, URP setup, scene creation
 Tools/           offline compile and logic-test harnesses

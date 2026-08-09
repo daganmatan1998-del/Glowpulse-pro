@@ -7,7 +7,7 @@ namespace Glowpulse.Core.Characters
     /// HumanBodyBones so a real rigged model can be mapped onto it one-to-one
     /// when authored art replaces the placeholders.
     /// </summary>
-    public enum HumanBone
+    public enum RigBone
     {
         Root = 0,
         Hips,
@@ -39,7 +39,7 @@ namespace Glowpulse.Core.Characters
     /// </summary>
     public sealed class CharacterRig : MonoBehaviour
     {
-        [SerializeField] private Transform[] _bones = new Transform[(int)HumanBone.Count];
+        [SerializeField] private Transform[] _bones = new Transform[(int)RigBone.Count];
 
         private Vector3[] _restPos;
         private Quaternion[] _restRot;
@@ -50,22 +50,22 @@ namespace Glowpulse.Core.Characters
         /// <summary>Roughly chest height in local space - the point attacks aim at.</summary>
         public float AimHeight { get; private set; } = 1.25f;
 
-        public Transform Root => Get(HumanBone.Root);
-        public Transform Hips => Get(HumanBone.Hips);
-        public Transform Chest => Get(HumanBone.Chest);
-        public Transform Head => Get(HumanBone.Head);
-        public Transform HandL => Get(HumanBone.HandL);
-        public Transform HandR => Get(HumanBone.HandR);
-        public Transform FootL => Get(HumanBone.FootL);
-        public Transform FootR => Get(HumanBone.FootR);
+        public Transform Root => Get(RigBone.Root);
+        public Transform Hips => Get(RigBone.Hips);
+        public Transform Chest => Get(RigBone.Chest);
+        public Transform Head => Get(RigBone.Head);
+        public Transform HandL => Get(RigBone.HandL);
+        public Transform HandR => Get(RigBone.HandR);
+        public Transform FootL => Get(RigBone.FootL);
+        public Transform FootR => Get(RigBone.FootR);
 
-        public Transform Get(HumanBone bone)
+        public Transform Get(RigBone bone)
         {
             int i = (int)bone;
             return i >= 0 && i < _bones.Length ? _bones[i] : null;
         }
 
-        public void Set(HumanBone bone, Transform t)
+        public void Set(RigBone bone, Transform t)
         {
             int i = (int)bone;
             if (i >= 0 && i < _bones.Length) _bones[i] = t;
@@ -91,13 +91,13 @@ namespace Glowpulse.Core.Characters
             }
         }
 
-        public Vector3 RestPosition(HumanBone bone)
+        public Vector3 RestPosition(RigBone bone)
         {
             int i = (int)bone;
             return _restPos != null && i < _restPos.Length ? _restPos[i] : Vector3.zero;
         }
 
-        public Quaternion RestRotation(HumanBone bone)
+        public Quaternion RestRotation(RigBone bone)
         {
             int i = (int)bone;
             return _restRot != null && i < _restRot.Length ? _restRot[i] : Quaternion.identity;

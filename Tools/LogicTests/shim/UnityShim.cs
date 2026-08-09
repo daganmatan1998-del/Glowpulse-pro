@@ -445,6 +445,12 @@ namespace UnityEngine
         public string name = string.Empty;
         public override string ToString() => name;
         public static implicit operator bool(Object o) => !ReferenceEquals(o, null);
+
+        // Destruction is a no-op under test: nothing here owns native resources,
+        // and tests assert on state rather than on object lifetime.
+        public static void Destroy(Object o) { }
+        public static void Destroy(Object o, float delay) { }
+        public static void DestroyImmediate(Object o) { }
     }
 
     public class Transform : Object

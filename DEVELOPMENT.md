@@ -6,8 +6,8 @@ the next one starts.
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | Player, movement, third-person camera, lock-on, health and stamina | **Done** |
-| 2 | Combat: light/heavy attacks, combos, block, parry, counter, grab, hit feel | Next |
-| 3 | Enemy AI: three archetypes, state machine, encounter coordination | |
+| 2 | Combat: light/heavy attacks, combos, block, parry, counter, grab, hit feel | **Done** |
+| 3 | Enemy AI: three archetypes, state machine, encounter coordination | Next |
 | 4 | Open-world city | |
 | 5 | Civilian NPCs | |
 | 6 | Mission system, "Clear the Street" | |
@@ -56,6 +56,58 @@ the character can act again.
 **Input.** Everything reads through `IInputProvider`, so the new Input System, a
 rebinding layer or a replay driver can be dropped in. The shipped implementation
 uses only Unity's default input axes, so a clean clone works with no setup.
+
+## Phase 2 - what exists
+
+**Move data.** Every attack is an `AttackDefinition`: a wind-up / active /
+recovery timeline in seconds, a hitbox, what it does on contact, what it chains
+into, and how much it should shake the screen. Timings are in seconds rather
+than animation frames so the data survives replacing placeholder animation with
+imported clips. `MoveSet` holds them and resolves button presses into moves;
+`MoveSet.Validate` catches dangling chains and missing clips, and the test suite
+runs it.
+
+**Strings.** Three chaining light attacks, each of which can be cashed out into
+a heavy, so `light light heavy` and `light light light heavy` are both real and
+end differently. Heavies are their own two-hit string. Heavy attacks deal about
+three times the damage of a light, take twice as long to start, cost four times
+the stamina and hit stop harder - that trade is the core of the combat loop.
+Follow-ups are buffered during a combo window and fire the instant the previous
+move ends.
+
+**Hit detection.** `MeleeHitbox` sweeps a sphere or capsule during the active
+frames rather than toggling trigger colliders, which is frame-accurate,
+allocation free and cannot miss between fixed steps. Each swing remembers who it
+already hit, so a multi-frame hitbox never double-dips.
+
+**Defence.** Holding block absorbs frontal attacks for chip damage and stamina;
+running the stamina bar out breaks the guard and leaves a long punish window.
+Blocking within a window of *raising* the guard is a parry, which staggers the
+attacker, refunds stamina and opens a counter. A clean dodge through i-frames
+opens the same counter window. Counters and finishers ignore guards entirely.
+
+**Grappling and finishers.** A grab seizes an enemy and holds them; light hits
+them, heavy throws them for knockdown damage. Heavy near a downed enemy is a
+finisher with its own slow-motion beat.
+
+**Feel.** `CombatFeedback` is the one place a landed hit turns into hit stop,
+camera shake, a directional camera kick, particles and sound, so a hit can never
+land with only half its feedback. `TimeController` owns `Time.timeScale` for the
+whole game with a strict priority - pause beats hit stop beats slow motion -
+which is what stops a hit landing during a pause from leaving the game in slow
+motion forever.
+
+**Effects and audio, without assets.** Impact particles are pooled,
+procedurally built systems using procedurally generated textures. Sound effects
+are synthesised at runtime - noise cracks over low thumps for impacts,
+inharmonic partials for the parry ring. They are placeholders, but they land on
+the right frame with the right weight, which is what tuning combat feel actually
+needs. `AudioManager.OverrideClip` swaps in real recordings later without
+touching any gameplay code.
+
+**Training dummies.** The proving ground spawns dummies that take hits, react,
+fall, get up and reset, one of which blocks. They exist so combat could be tuned
+and verified before enemy AI arrived.
 
 ## Conventions
 

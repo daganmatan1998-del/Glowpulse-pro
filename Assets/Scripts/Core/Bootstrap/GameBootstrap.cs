@@ -1,6 +1,10 @@
+using Glowpulse.Audio;
 using Glowpulse.CameraSystem;
+using Glowpulse.Core.Characters;
 using Glowpulse.Core.InputSystem;
+using Glowpulse.Core.Timing;
 using Glowpulse.Player;
+using Glowpulse.VFX;
 using Glowpulse.World;
 using UnityEngine;
 
@@ -40,6 +44,12 @@ namespace Glowpulse.Core.Bootstrap
         [Header("Camera")]
         [SerializeField] private CameraConfig _cameraConfig;
 
+        [Header("Training")]
+        [Tooltip("Spawns practice dummies in the proving ground so combat can be tested.")]
+        [SerializeField] private bool _spawnTrainingDummies = true;
+
+        [SerializeField] private int _trainingDummyCount = 4;
+
         [Header("Options")]
         [Tooltip("Locks and hides the cursor on start. Turn off when profiling in the editor.")]
         [SerializeField] private bool _captureCursor = true;
@@ -70,11 +80,14 @@ namespace Glowpulse.Core.Bootstrap
             _instance = this;
 
             ApplyQualityDefaults();
+            CombatFeedbackDefaults();
             GameLayers.ApplyCollisionMatrix();
 
             BuildServices();
             BuildWorld();
             BuildPlayerAndCamera();
+
+            StartAmbience();
 
             if (_captureCursor) SetCursorCaptured(true);
 
@@ -84,6 +97,15 @@ namespace Glowpulse.Core.Bootstrap
         private void OnDestroy()
         {
             if (_instance == this) _instance = null;
+        }
+
+        private static void CombatFeedbackDefaults()
+        {
+            // Reset from whatever the settings menu last applied, so entering play
+            // mode never inherits a previous session's accessibility overrides.
+            Combat.CombatFeedback.HitStopScale = 1f;
+            Combat.CombatFeedback.ShakeScale = 1f;
+            Combat.CombatFeedback.SlowMotionEnabled = true;
         }
 
         private void ApplyQualityDefaults()
@@ -103,7 +125,13 @@ namespace Glowpulse.Core.Bootstrap
         {
             var services = new GameObject("~Services");
             services.transform.SetParent(transform, false);
+
             InputPump.Install(services);
+            TimeController.Install(services);
+            AudioManager.Install(services);
+            ImpactEffects.Install(services);
+
+            Combat.CombatPoses.EnsureRegistered();
         }
 
         private void BuildWorld()
@@ -141,6 +169,38 @@ namespace Glowpulse.Core.Bootstrap
 
             var link = GameCamera.gameObject.AddComponent<PlayerCameraLink>();
             link.Bind(Player, GameCamera);
+
+            if (_spawnTrainingDummies) SpawnTrainingDummies(spawn);
+        }
+
+        /// <summary>
+        /// Puts a few dummies in a loose arc in front of the spawn: one that
+        /// blocks, and the rest open, which covers most of what needs checking
+        /// when tuning a move.
+        /// </summary>
+        private void SpawnTrainingDummies(Vector3 playerSpawn)
+        {
+            var root = new GameObject("~Training Dummies");
+            root.transform.SetParent(WorldRoot, false);
+
+            int count = Mathf.Clamp(_trainingDummyCount, 0, 12);
+            for (int i = 0; i < count; i++)
+            {
+                float angle = Mathf.Lerp(-52f, 52f, count <= 1 ? 0.5f : i / (float)(count - 1));
+                Vector3 direction = Quaternion.Euler(0f, angle, 0f) * Vector3.forward;
+                Vector3 position = playerSpawn + direction * Mathf.Lerp(5.5f, 8.5f, (i % 3) / 2f);
+
+                if (MathUtil.GroundPoint(position, out Vector3 grounded, 6f, 30f, GameLayers.WorldMask))
+                    position = grounded;
+
+                CharacterStyle style = i % 3 == 0
+                    ? CharacterStyle.Bruiser()
+                    : (i % 3 == 1 ? CharacterStyle.Thug() : CharacterStyle.Runner());
+
+                DummyFactory.Create($"Training Dummy {i + 1}", position,
+                    Quaternion.LookRotation(-direction, Vector3.up), style, root.transform,
+                    blocks: i == count - 1);
+            }
         }
 
         /// <summary>Drops the spawn point onto the ground so a bad Y never buries the player.</summary>
@@ -149,6 +209,13 @@ namespace Glowpulse.Core.Bootstrap
             if (MathUtil.GroundPoint(_spawnPosition, out Vector3 point, 6f, 40f, GameLayers.WorldMask))
                 return point + Vector3.up * 0.05f;
             return _spawnPosition;
+        }
+
+        private static void StartAmbience()
+        {
+            AudioManager audio = AudioManager.Instance;
+            if (audio == null) return;
+            audio.PlayAmbience(ProceduralAudio.CityAmbience());
         }
 
         public static void SetCursorCaptured(bool captured)

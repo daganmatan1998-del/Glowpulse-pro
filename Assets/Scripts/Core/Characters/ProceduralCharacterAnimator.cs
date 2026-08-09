@@ -69,8 +69,8 @@ namespace Glowpulse.Core.Characters
         public void Bind(CharacterRig rig)
         {
             _rig = rig;
-            _accum = new Quaternion[(int)HumanBone.Count];
-            _touched = new bool[(int)HumanBone.Count];
+            _accum = new Quaternion[(int)RigBone.Count];
+            _touched = new bool[(int)RigBone.Count];
             _seed = Random.value * 100f;
         }
 
@@ -197,25 +197,25 @@ namespace Glowpulse.Core.Characters
 
             // Legs: thighs swing in opposition, knees only bend backwards.
             float swing = _legSwing * groundGait;
-            Add(HumanBone.ThighL, new Vector3(-s * swing, 0f, 0f));
-            Add(HumanBone.ThighR, new Vector3(s * swing, 0f, 0f));
-            Add(HumanBone.ShinL, new Vector3(Mathf.Max(0f, Mathf.Sin(_phase - 0.7f)) * swing * 1.35f, 0f, 0f));
-            Add(HumanBone.ShinR, new Vector3(Mathf.Max(0f, Mathf.Sin(_phase + Mathf.PI - 0.7f)) * swing * 1.35f, 0f, 0f));
-            Add(HumanBone.FootL, new Vector3(s * swing * 0.35f, 0f, 0f));
-            Add(HumanBone.FootR, new Vector3(-s * swing * 0.35f, 0f, 0f));
+            Add(RigBone.ThighL, new Vector3(-s * swing, 0f, 0f));
+            Add(RigBone.ThighR, new Vector3(s * swing, 0f, 0f));
+            Add(RigBone.ShinL, new Vector3(Mathf.Max(0f, Mathf.Sin(_phase - 0.7f)) * swing * 1.35f, 0f, 0f));
+            Add(RigBone.ShinR, new Vector3(Mathf.Max(0f, Mathf.Sin(_phase + Mathf.PI - 0.7f)) * swing * 1.35f, 0f, 0f));
+            Add(RigBone.FootL, new Vector3(s * swing * 0.35f, 0f, 0f));
+            Add(RigBone.FootR, new Vector3(-s * swing * 0.35f, 0f, 0f));
 
             // Arms counter-swing; guarding suppresses it so the hands stay up.
             float armGait = groundGait * (1f - _guardWeight * 0.85f);
             float arm = _armSwing * armGait;
-            Add(HumanBone.UpperArmL, new Vector3(s * arm, 0f, 0f));
-            Add(HumanBone.UpperArmR, new Vector3(-s * arm, 0f, 0f));
-            Add(HumanBone.LowerArmL, new Vector3(-Mathf.Abs(s) * arm * 0.45f - armGait * 10f, 0f, 0f));
-            Add(HumanBone.LowerArmR, new Vector3(-Mathf.Abs(s) * arm * 0.45f - armGait * 10f, 0f, 0f));
+            Add(RigBone.UpperArmL, new Vector3(s * arm, 0f, 0f));
+            Add(RigBone.UpperArmR, new Vector3(-s * arm, 0f, 0f));
+            Add(RigBone.LowerArmL, new Vector3(-Mathf.Abs(s) * arm * 0.45f - armGait * 10f, 0f, 0f));
+            Add(RigBone.LowerArmR, new Vector3(-Mathf.Abs(s) * arm * 0.45f - armGait * 10f, 0f, 0f));
 
             // Pelvis and torso counter-rotate, which is what makes a walk read as a walk.
-            Add(HumanBone.Hips, new Vector3(0f, s * 5.5f * groundGait, c * 2.5f * groundGait));
-            Add(HumanBone.Chest, new Vector3(groundGait * 5f, -s * 7f * groundGait, 0f));
-            Add(HumanBone.Spine, new Vector3(groundGait * 4f, 0f, 0f));
+            Add(RigBone.Hips, new Vector3(0f, s * 5.5f * groundGait, c * 2.5f * groundGait));
+            Add(RigBone.Chest, new Vector3(groundGait * 5f, -s * 7f * groundGait, 0f));
+            Add(RigBone.Spine, new Vector3(groundGait * 4f, 0f, 0f));
 
             // Vertical bob, twice per stride.
             hipsOffset.y += -Mathf.Abs(c) * 0.05f * groundGait * scale;
@@ -225,14 +225,14 @@ namespace Glowpulse.Core.Characters
             if (idle > 0.01f)
             {
                 float breath = Mathf.Sin(Time.time * 1.25f + _seed);
-                Add(HumanBone.Chest, new Vector3(breath * 1.4f * idle, 0f, 0f));
-                Add(HumanBone.Head, new Vector3(breath * -0.8f * idle, Mathf.Sin(Time.time * 0.4f + _seed) * 2.5f * idle, 0f));
+                Add(RigBone.Chest, new Vector3(breath * 1.4f * idle, 0f, 0f));
+                Add(RigBone.Head, new Vector3(breath * -0.8f * idle, Mathf.Sin(Time.time * 0.4f + _seed) * 2.5f * idle, 0f));
                 hipsOffset.y += breath * 0.006f * idle * scale;
             }
 
             // Bank into turns and lean into a sprint.
             float lean = Mathf.Clamp(-_turnRate * _leanIntoTurns, -_maxTurnLean, _maxTurnLean) * _gait;
-            Add(HumanBone.Root, new Vector3(_gait * 5.5f * (1f - _airborne), 0f, lean));
+            Add(RigBone.Root, new Vector3(_gait * 5.5f * (1f - _airborne), 0f, lean));
         }
 
         private void ApplyStance(ref Vector3 hipsOffset)
@@ -243,25 +243,25 @@ namespace Glowpulse.Core.Characters
             {
                 float w = _combatWeight;
                 // Bladed, slightly crouched fighting stance.
-                Blend(HumanBone.Hips, new Vector3(0f, 16f, 0f), w * 0.8f);
-                Blend(HumanBone.Chest, new Vector3(4f, -12f, 0f), w);
-                Blend(HumanBone.Head, new Vector3(3f, 10f, 0f), w * 0.7f);
-                Blend(HumanBone.UpperArmL, new Vector3(-40f, 0f, 24f), w);
-                Blend(HumanBone.LowerArmL, new Vector3(-78f, 0f, -10f), w);
-                Blend(HumanBone.UpperArmR, new Vector3(-30f, 0f, -20f), w);
-                Blend(HumanBone.LowerArmR, new Vector3(-66f, 0f, 8f), w);
+                Blend(RigBone.Hips, new Vector3(0f, 16f, 0f), w * 0.8f);
+                Blend(RigBone.Chest, new Vector3(4f, -12f, 0f), w);
+                Blend(RigBone.Head, new Vector3(3f, 10f, 0f), w * 0.7f);
+                Blend(RigBone.UpperArmL, new Vector3(-40f, 0f, 24f), w);
+                Blend(RigBone.LowerArmL, new Vector3(-78f, 0f, -10f), w);
+                Blend(RigBone.UpperArmR, new Vector3(-30f, 0f, -20f), w);
+                Blend(RigBone.LowerArmR, new Vector3(-66f, 0f, 8f), w);
                 hipsOffset.y -= 0.045f * w * scale;
             }
 
             if (_guardWeight > 0.01f)
             {
                 float w = _guardWeight;
-                Blend(HumanBone.UpperArmL, new Vector3(-62f, 0f, 30f), w);
-                Blend(HumanBone.LowerArmL, new Vector3(-104f, 0f, -18f), w);
-                Blend(HumanBone.UpperArmR, new Vector3(-62f, 0f, -30f), w);
-                Blend(HumanBone.LowerArmR, new Vector3(-104f, 0f, 18f), w);
-                Blend(HumanBone.Chest, new Vector3(9f, 0f, 0f), w);
-                Blend(HumanBone.Head, new Vector3(7f, 0f, 0f), w);
+                Blend(RigBone.UpperArmL, new Vector3(-62f, 0f, 30f), w);
+                Blend(RigBone.LowerArmL, new Vector3(-104f, 0f, -18f), w);
+                Blend(RigBone.UpperArmR, new Vector3(-62f, 0f, -30f), w);
+                Blend(RigBone.LowerArmR, new Vector3(-104f, 0f, 18f), w);
+                Blend(RigBone.Chest, new Vector3(9f, 0f, 0f), w);
+                Blend(RigBone.Head, new Vector3(7f, 0f, 0f), w);
                 hipsOffset.y -= 0.035f * w * scale;
             }
         }
@@ -312,9 +312,9 @@ namespace Glowpulse.Core.Characters
             if (_impulse.sqrMagnitude < 1e-6f && _impulseVelocity.sqrMagnitude < 1e-6f) return;
 
             // A push along +Z (into the character) tips the chest backwards.
-            Add(HumanBone.Spine, new Vector3(-_impulse.z * 14f, _impulse.x * 9f, _impulse.x * 7f));
-            Add(HumanBone.Chest, new Vector3(-_impulse.z * 10f, _impulse.x * 12f, _impulse.x * 8f));
-            Add(HumanBone.Head, new Vector3(-_impulse.z * 16f, _impulse.x * 14f, _impulse.x * 10f));
+            Add(RigBone.Spine, new Vector3(-_impulse.z * 14f, _impulse.x * 9f, _impulse.x * 7f));
+            Add(RigBone.Chest, new Vector3(-_impulse.z * 10f, _impulse.x * 12f, _impulse.x * 8f));
+            Add(RigBone.Head, new Vector3(-_impulse.z * 16f, _impulse.x * 14f, _impulse.x * 10f));
         }
 
         private void Commit(Vector3 hipsOffset, float pivot01)
@@ -322,26 +322,26 @@ namespace Glowpulse.Core.Characters
             for (int i = 0; i < _accum.Length; i++)
             {
                 if (!_touched[i]) continue;
-                Transform bone = _rig.Get((HumanBone)i);
+                Transform bone = _rig.Get((RigBone)i);
                 if (bone == null) continue;
-                bone.localRotation = _rig.RestRotation((HumanBone)i) * _accum[i];
+                bone.localRotation = _rig.RestRotation((RigBone)i) * _accum[i];
             }
 
             Transform hips = _rig.Hips;
             if (hips != null && hipsOffset.sqrMagnitude > 1e-8f)
-                hips.localPosition = _rig.RestPosition(HumanBone.Hips) + hipsOffset;
+                hips.localPosition = _rig.RestPosition(RigBone.Hips) + hipsOffset;
 
             Transform root = _rig.Root;
-            if (root == null || !_touched[(int)HumanBone.Root]) return;
+            if (root == null || !_touched[(int)RigBone.Root]) return;
 
             // Rotating the Root about the character's origin would swing the body
             // around its ankles. Offsetting the root position makes the same
             // rotation appear to pivot around a point further up the body.
-            Vector3 restRoot = _rig.RestPosition(HumanBone.Root);
+            Vector3 restRoot = _rig.RestPosition(RigBone.Root);
             if (pivot01 > 0.001f)
             {
                 Vector3 pivot = new Vector3(0f, _rig.Height * pivot01, 0f);
-                root.localPosition = restRoot + pivot - _accum[(int)HumanBone.Root] * pivot;
+                root.localPosition = restRoot + pivot - _accum[(int)RigBone.Root] * pivot;
             }
             else
             {
@@ -375,14 +375,14 @@ namespace Glowpulse.Core.Characters
 
         // ---- layer helpers -------------------------------------------------------
 
-        private void Add(HumanBone bone, Vector3 euler)
+        private void Add(RigBone bone, Vector3 euler)
         {
             int i = (int)bone;
             _accum[i] = _accum[i] * Quaternion.Euler(euler);
             _touched[i] = true;
         }
 
-        private void Blend(HumanBone bone, Vector3 euler, float weight)
+        private void Blend(RigBone bone, Vector3 euler, float weight)
         {
             if (weight <= 0.001f) return;
             int i = (int)bone;

@@ -80,6 +80,33 @@ namespace Glowpulse.Combat
         /// <summary>True while a stagger or knockdown has taken control away.</summary>
         public bool IsReacting => Time.time < _controlReturnsAt;
 
+        /// <summary>The character currently holding this one in a grapple, or null.</summary>
+        public Transform GrabbedBy { get; private set; }
+
+        public bool IsGrabbed => GrabbedBy != null;
+
+        /// <summary>Whether a grab can be started on this character right now.</summary>
+        public virtual bool CanBeGrabbed => IsAlive && !IsDown && !IsGrabbed;
+
+        /// <summary>
+        /// Puts the character into a held state. The holder is responsible for
+        /// positioning them until <see cref="Release"/> is called.
+        /// </summary>
+        public virtual void Grabbed(Transform holder)
+        {
+            if (holder == null) return;
+            GrabbedBy = holder;
+            Motor?.ClearImpulse();
+            Animator?.SetStance(CharacterStance.Guarding);
+        }
+
+        public virtual void Release()
+        {
+            if (GrabbedBy == null) return;
+            GrabbedBy = null;
+            Animator?.SetStance(CharacterStance.Combat);
+        }
+
         protected CharacterMotor Motor => _motor != null ? _motor : _motor = GetComponent<CharacterMotor>();
 
         public float AimHeight => _aimHeight > 0.01f ? _aimHeight : (Rig != null ? Rig.AimHeight : 1.2f);
@@ -127,7 +154,15 @@ namespace Glowpulse.Combat
 
             Health health = Health;
             if (health == null) return HitResult.Immune;
-            if (health.IsInvulnerable) return HitResult.Immune;
+
+            if (health.IsInvulnerable)
+            {
+                // Dodge i-frames swallowed the attack. The defender wants to know:
+                // a clean evade is what opens a counter.
+                OnEvaded(in info);
+                HitTaken?.Invoke(info, HitResult.Immune);
+                return HitResult.Immune;
+            }
 
             HitResult result = EvaluateDefence(in info);
 
@@ -154,7 +189,7 @@ namespace Glowpulse.Combat
                 }
             }
 
-            float applied = health.Damage(info.Amount);
+            float applied = health.Damage(ModifyIncomingDamage(info.Amount, in info));
             bool killed = !health.IsAlive;
 
             OnHitTaken(in info, applied, killed);
@@ -177,6 +212,15 @@ namespace Glowpulse.Combat
         protected virtual void OnBlocked(in DamageInfo info) { }
 
         protected virtual void OnParried(in DamageInfo info) { }
+
+        /// <summary>Called when invulnerability frames caused the hit to pass through.</summary>
+        protected virtual void OnEvaded(in DamageInfo info) { }
+
+        /// <summary>
+        /// Last chance to change how much damage actually lands. Armour, difficulty
+        /// scaling and resistances all hook in here so the rule lives in one place.
+        /// </summary>
+        protected virtual float ModifyIncomingDamage(float amount, in DamageInfo info) => amount;
 
         // ---- physical reactions --------------------------------------------------
 
@@ -244,6 +288,7 @@ namespace Glowpulse.Combat
 
         protected virtual void HandleDeath()
         {
+            Release();
             _down = true;
             _controlReturnsAt = 0f;
             Animator?.SetStance(CharacterStance.Dead);

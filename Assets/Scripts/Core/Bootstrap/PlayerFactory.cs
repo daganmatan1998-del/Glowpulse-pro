@@ -1,80 +1,49 @@
 using Glowpulse.CameraSystem;
-using Glowpulse.Combat;
 using Glowpulse.Core.Characters;
-using Glowpulse.Core.Movement;
 using Glowpulse.Player;
 using UnityEngine;
 
 namespace Glowpulse.Core.Bootstrap
 {
-    /// <summary>
-    /// Assembles the player from its parts. Building the object while it is
-    /// inactive matters: Unity runs Awake the instant a component is added to a
-    /// live GameObject, so components would otherwise wake up before their
-    /// siblings exist and fail to find each other.
-    /// </summary>
+    /// <summary>Assembles the player from the shared character shell plus its own controllers.</summary>
     public static class PlayerFactory
     {
         public static PlayerController Create(Vector3 position, Quaternion rotation,
             PlayerLocomotionConfig config = null)
         {
-            var go = new GameObject("Player");
-            go.SetActive(false);
-            go.transform.SetPositionAndRotation(position, rotation);
-            go.layer = GameLayers.Player;
-            TrySetTag(go, GameTags.Player);
-
             PlayerLocomotionConfig cfg = config != null ? config : PlayerLocomotionConfig.Default;
-
-            var controller = go.AddComponent<CharacterController>();
-            controller.height = cfg.Height;
-            controller.radius = cfg.Radius;
-            controller.center = new Vector3(0f, cfg.Height * 0.5f, 0f);
-            controller.slopeLimit = cfg.SlopeLimit;
-            controller.stepOffset = cfg.StepOffset;
-
-            go.AddComponent<CharacterMotor>();
-            go.AddComponent<Health>();
-            go.AddComponent<Stamina>();
 
             CharacterStyle style = CharacterStyle.Player();
             style.Height = cfg.Height;
-            CharacterRig rig = CharacterRigFactory.Build(go, style);
 
-            var animator = go.AddComponent<ProceduralCharacterAnimator>();
-            animator.Bind(rig);
+            CharacterFactory.Spec spec = CharacterFactory.Spec.For("Player", style,
+                GameLayers.Player, GameTags.Player);
+            spec.Radius = cfg.Radius;
+            spec.StepOffset = cfg.StepOffset;
+            spec.SlopeLimit = cfg.SlopeLimit;
+            spec.Gravity = cfg.Gravity;
+            spec.FallMultiplier = cfg.FallMultiplier;
+
+            CharacterFactory.Build build = CharacterFactory.Begin(spec, position, rotation);
+            GameObject go = build.GameObject;
 
             var combatant = go.AddComponent<PlayerCombatant>();
             var player = go.AddComponent<PlayerController>();
+            var combat = go.AddComponent<PlayerCombatController>();
             var lockOn = go.AddComponent<LockOnSystem>();
 
-            go.SetActive(true);
+            CharacterFactory.Finish(build, combatant);
 
-            combatant.BindVisuals(rig, animator);
-            player.BindAnimator(animator);
+            player.BindAnimator(build.Animator);
+            combat.BindAnimator(build.Animator);
 
-            // The camera is wired in by the caller once it exists.
+            // The camera does not exist yet; the bootstrap re-binds once it does.
             lockOn.Bind(player, null);
 
             return player;
         }
 
-        /// <summary>
-        /// Sets a tag only if the project actually defines it, so a fresh clone
-        /// with a regenerated TagManager logs a warning instead of throwing.
-        /// </summary>
-        public static void TrySetTag(GameObject go, string tag)
-        {
-            if (go == null || string.IsNullOrEmpty(tag)) return;
-            try
-            {
-                go.tag = tag;
-            }
-            catch (UnityException)
-            {
-                Debug.LogWarning($"[PlayerFactory] Tag '{tag}' is not defined in this project. " +
-                                 "Open Glowpulse > Validate Project Setup to add it.");
-            }
-        }
+        /// <summary>Kept for callers that only need the tag helper.</summary>
+        public static void TrySetTag(GameObject go, string tag) => CharacterFactory.TrySetTag(go, tag);
     }
 }

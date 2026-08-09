@@ -3,6 +3,7 @@ using Glowpulse.Combat;
 using Glowpulse.Core;
 using Glowpulse.Core.Characters;
 using Glowpulse.Core.InputSystem;
+using Glowpulse.Core.Timing;
 using UnityEngine;
 
 namespace Glowpulse.LogicTests
@@ -21,6 +22,9 @@ namespace Glowpulse.LogicTests
             HealthTests();
             StaminaTests();
             CombatDataTests();
+            AttackTests();
+            MoveSetTests();
+            TimeControlTests();
 
             return Check.Report();
         }
@@ -163,8 +167,8 @@ namespace Glowpulse.LogicTests
 
         private static void PoseTests()
         {
-            var accumulator = new Quaternion[(int)HumanBone.Count];
-            var touched = new bool[(int)HumanBone.Count];
+            var accumulator = new Quaternion[(int)RigBone.Count];
+            var touched = new bool[(int)RigBone.Count];
 
             void Reset()
             {
@@ -175,14 +179,14 @@ namespace Glowpulse.LogicTests
                 }
             }
 
-            float PitchOf(HumanBone bone)
+            float PitchOf(RigBone bone)
             {
                 float x = accumulator[(int)bone].eulerAngles.x;
                 return x > 180f ? x - 360f : x;
             }
 
             PoseClip Clip() => PoseClip.New("test", 1f)
-                .Track(HumanBone.Chest,
+                .Track(RigBone.Chest,
                     new PoseKey(0f, new Vector3(0f, 0f, 0f)),
                     new PoseKey(0.5f, new Vector3(40f, 0f, 0f)),
                     new PoseKey(1f, new Vector3(-20f, 0f, 0f)));
@@ -193,15 +197,15 @@ namespace Glowpulse.LogicTests
 
                 Reset();
                 Clip().Sample(0f, 1f, accumulator, touched, ref hips);
-                Check.Near(PitchOf(HumanBone.Chest), 0f, "first key");
+                Check.Near(PitchOf(RigBone.Chest), 0f, "first key");
 
                 Reset();
                 Clip().Sample(0.5f, 1f, accumulator, touched, ref hips);
-                Check.Near(PitchOf(HumanBone.Chest), 40f, "middle key", 0.05f);
+                Check.Near(PitchOf(RigBone.Chest), 40f, "middle key", 0.05f);
 
                 Reset();
                 Clip().Sample(1f, 1f, accumulator, touched, ref hips);
-                Check.Near(PitchOf(HumanBone.Chest), -20f, "last key", 0.05f);
+                Check.Near(PitchOf(RigBone.Chest), -20f, "last key", 0.05f);
             });
 
             Check.Run("Clip sampling clamps outside its duration", () =>
@@ -210,11 +214,11 @@ namespace Glowpulse.LogicTests
 
                 Reset();
                 Clip().Sample(-5f, 1f, accumulator, touched, ref hips);
-                Check.Near(PitchOf(HumanBone.Chest), 0f, "before the start holds the first key");
+                Check.Near(PitchOf(RigBone.Chest), 0f, "before the start holds the first key");
 
                 Reset();
                 Clip().Sample(99f, 1f, accumulator, touched, ref hips);
-                Check.Near(PitchOf(HumanBone.Chest), -20f, "after the end holds the last key", 0.05f);
+                Check.Near(PitchOf(RigBone.Chest), -20f, "after the end holds the last key", 0.05f);
             });
 
             Check.Run("Clip interpolation stays between neighbouring keys", () =>
@@ -222,9 +226,9 @@ namespace Glowpulse.LogicTests
                 Vector3 hips = Vector3.zero;
                 Reset();
                 Clip().Sample(0.25f, 1f, accumulator, touched, ref hips);
-                Check.InRange(PitchOf(HumanBone.Chest), 0f, 40f, "quarter way is between the keys");
-                Check.True(touched[(int)HumanBone.Chest], "track marks its bone as touched");
-                Check.False(touched[(int)HumanBone.Head], "untouched bones stay untouched");
+                Check.InRange(PitchOf(RigBone.Chest), 0f, 40f, "quarter way is between the keys");
+                Check.True(touched[(int)RigBone.Chest], "track marks its bone as touched");
+                Check.False(touched[(int)RigBone.Head], "untouched bones stay untouched");
             });
 
             Check.Run("Zero weight leaves the pose alone", () =>
@@ -232,8 +236,8 @@ namespace Glowpulse.LogicTests
                 Vector3 hips = Vector3.zero;
                 Reset();
                 Clip().Sample(0.5f, 0f, accumulator, touched, ref hips);
-                Check.Near(PitchOf(HumanBone.Chest), 0f, "no rotation applied");
-                Check.False(touched[(int)HumanBone.Chest], "bone not marked");
+                Check.Near(PitchOf(RigBone.Chest), 0f, "no rotation applied");
+                Check.False(touched[(int)RigBone.Chest], "bone not marked");
             });
 
             Check.Run("Partial weight blends toward the clip", () =>
@@ -241,19 +245,19 @@ namespace Glowpulse.LogicTests
                 Vector3 hips = Vector3.zero;
                 Reset();
                 Clip().Sample(0.5f, 0.5f, accumulator, touched, ref hips);
-                Check.InRange(PitchOf(HumanBone.Chest), 15f, 25f, "half way to the 40 degree key");
+                Check.InRange(PitchOf(RigBone.Chest), 15f, 25f, "half way to the 40 degree key");
             });
 
             Check.Run("Mirror flips yaw and roll but keeps pitch", () =>
             {
                 PoseClip clip = PoseClip.New("mirror", 1f)
-                    .Track(HumanBone.UpperArmL, new PoseKey(0f, new Vector3(10f, 20f, 30f)))
-                    .Mirror(HumanBone.UpperArmL, HumanBone.UpperArmR);
+                    .Track(RigBone.UpperArmL, new PoseKey(0f, new Vector3(10f, 20f, 30f)))
+                    .Mirror(RigBone.UpperArmL, RigBone.UpperArmR);
 
                 Check.Equal(clip.Tracks.Count, 2, "a mirrored track was added");
 
                 BoneTrack mirrored = clip.Tracks[1];
-                Check.True(mirrored.Bone == HumanBone.UpperArmR, "mirrored onto the right arm");
+                Check.True(mirrored.Bone == RigBone.UpperArmR, "mirrored onto the right arm");
                 Check.Near(mirrored.Keys[0].Euler.x, 10f, "pitch preserved");
                 Check.Near(mirrored.Keys[0].Euler.y, -20f, "yaw negated");
                 Check.Near(mirrored.Keys[0].Euler.z, -30f, "roll negated");
@@ -283,7 +287,7 @@ namespace Glowpulse.LogicTests
                 Vector3 hips = Vector3.zero;
                 Reset();
                 clip.Sample(2.5f, 1f, accumulator, touched, ref hips);
-                Check.Near(PitchOf(HumanBone.Chest), 40f, "2.5s wraps to 0.5s", 0.05f);
+                Check.Near(PitchOf(RigBone.Chest), 40f, "2.5s wraps to 0.5s", 0.05f);
             });
         }
 
@@ -347,7 +351,7 @@ namespace Glowpulse.LogicTests
             Check.Run("Custom clips can be registered", () =>
             {
                 PoseLibrary.Register(PoseClip.New("custom_move", 0.5f)
-                    .Track(HumanBone.Head, new PoseKey(0f, Vector3.zero)));
+                    .Track(RigBone.Head, new PoseKey(0f, Vector3.zero)));
                 Check.True(PoseLibrary.Has("custom_move"), "registered clip is found");
             });
         }
@@ -662,6 +666,293 @@ namespace Glowpulse.LogicTests
                 DamageInfo info = DamageInfo.Create(10f, HitImpact.Light, Vector3.zero, Vector3.zero,
                     null, Faction.Hostile);
                 Check.Near(info.Direction.magnitude, 1f, "falls back to a unit vector");
+            });
+        }
+
+        // ---- attack definitions ----------------------------------------------------------
+
+        private static AttackDefinition SampleMove()
+        {
+            return new AttackDefinition
+            {
+                Id = "test", Windup = 0.2f, Active = 0.1f, Recovery = 0.3f,
+                ComboWindowStart = 0.5f, ComboWindowEnd = 1f,
+                Damage = 20f, Impact = HitImpact.Heavy, KnockbackMultiplier = 2f,
+                ChipDamage = 0.25f, GuardStaminaDamage = 30f
+            };
+        }
+
+        private static void AttackTests()
+        {
+            Check.Run("Move phases add up and the hitbox opens on time", () =>
+            {
+                AttackDefinition move = SampleMove();
+
+                Check.Near(move.Duration, 0.6f, "duration is windup + active + recovery");
+                Check.Near(move.ActiveStart, 0.2f, "active starts after the windup");
+                Check.Near(move.ActiveEnd, 0.3f, "active ends after its own length");
+
+                Check.False(move.IsActiveAt(0f), "no hitbox at the very start");
+                Check.False(move.IsActiveAt(0.19f), "no hitbox during the windup");
+                Check.True(move.IsActiveAt(0.2f), "hitbox opens exactly at the windup boundary");
+                Check.True(move.IsActiveAt(0.25f), "hitbox live mid-swing");
+                Check.True(move.IsActiveAt(0.3f), "hitbox live at the final active instant");
+                Check.False(move.IsActiveAt(0.31f), "hitbox closed in recovery");
+            });
+
+            Check.Run("The combo window opens partway through and stays open to the end", () =>
+            {
+                AttackDefinition move = SampleMove();
+
+                Check.False(move.InComboWindow(0.1f), "too early to chain");
+                Check.False(move.InComboWindow(0.29f), "still too early");
+                Check.True(move.InComboWindow(0.3f), "opens at half the duration");
+                Check.True(move.InComboWindow(0.6f), "open until the move ends");
+                Check.False(move.InComboWindow(0.7f), "closed once the move is over");
+            });
+
+            Check.Run("Clip playback is rescaled to the move's length", () =>
+            {
+                AttackDefinition move = SampleMove();
+
+                // A 1.2s clip has to run at 2x to fit a 0.6s move.
+                Check.Near(move.ClipSpeed(1.2f), 2f, "a long clip is sped up");
+                Check.Near(move.ClipSpeed(0.3f), 0.5f, "a short clip is slowed down");
+                Check.Near(move.ClipSpeed(0f), 1f, "a missing clip falls back to normal speed");
+            });
+
+            Check.Run("BuildDamage carries the move's properties into the hit", () =>
+            {
+                AttackDefinition move = SampleMove();
+                move.Unblockable = true;
+
+                DamageInfo info = move.BuildDamage(null, Faction.Player,
+                    new Vector3(0f, 1f, 0f), Vector3.forward);
+
+                Check.Near(info.Amount, 20f, "damage carried");
+                Check.Near(info.KnockbackForce,
+                    DamageInfo.DefaultKnockback(HitImpact.Heavy) * 2f, "knockback multiplied");
+                Check.True(info.Unblockable, "unblockable carried");
+                Check.Near(info.BlockedDamageFraction, 0.25f, "chip damage carried");
+                Check.Near(info.BlockStaminaCost, 30f, "guard stamina damage carried");
+            });
+
+            Check.Run("The damage multiplier scales damage but not knockback", () =>
+            {
+                AttackDefinition move = SampleMove();
+
+                DamageInfo baseline = move.BuildDamage(null, Faction.Player, Vector3.zero, Vector3.forward);
+                DamageInfo doubled = move.BuildDamage(null, Faction.Player, Vector3.zero, Vector3.forward, 2f);
+
+                Check.Near(doubled.Amount, baseline.Amount * 2f, "damage doubles");
+                Check.Near(doubled.KnockbackForce, baseline.KnockbackForce,
+                    "knockback is a property of the move, not of the attacker's power");
+            });
+
+            Check.Run("Finishers are the only moves flagged as finishing", () =>
+            {
+                var finisher = new AttackDefinition { Kind = AttackKind.Finisher };
+                var light = new AttackDefinition { Kind = AttackKind.Light };
+
+                Check.True(finisher.BuildDamage(null, Faction.Player, Vector3.zero, Vector3.forward).CanFinish,
+                    "a finisher can finish");
+                Check.False(light.BuildDamage(null, Faction.Player, Vector3.zero, Vector3.forward).CanFinish,
+                    "a jab cannot");
+            });
+        }
+
+        // ---- move set --------------------------------------------------------------------
+
+        private static void MoveSetTests()
+        {
+            Check.Run("The player's move set is internally consistent", () =>
+            {
+                MoveSet set = MoveSet.Player();
+                System.Collections.Generic.List<string> problems = set.Validate();
+
+                foreach (string problem in problems) Check.True(false, problem);
+                Check.Equal(problems.Count, 0, "no validation problems");
+                Check.Greater(set.Count, 6, "the set has a real number of moves");
+            });
+
+            Check.Run("Light, light, heavy is reachable", () =>
+            {
+                MoveSet set = MoveSet.Player();
+
+                AttackDefinition first = set.Resolve(null, heavy: false);
+                Check.Equal(first.Id, "light_1", "light opens with the jab");
+
+                AttackDefinition second = set.Resolve(first, heavy: false);
+                Check.Equal(second.Id, "light_2", "the jab chains into the cross");
+
+                AttackDefinition third = set.Resolve(second, heavy: true);
+                Check.True(third.Kind == AttackKind.Heavy, "heavy cashes the string out");
+            });
+
+            Check.Run("Light, light, light, heavy is a different, bigger ending", () =>
+            {
+                MoveSet set = MoveSet.Player();
+
+                AttackDefinition a = set.Resolve(null, false);
+                AttackDefinition b = set.Resolve(a, false);
+                AttackDefinition c = set.Resolve(b, false);
+                Check.Equal(c.Id, "light_3", "three lights reach the kick");
+
+                AttackDefinition ender = set.Resolve(c, true);
+                Check.True(ender.Kind == AttackKind.Heavy, "the fourth input is a heavy");
+                Check.Greater(ender.Damage, set.Resolve(b, true).Damage,
+                    "the longer string ends harder than the shorter one");
+            });
+
+            Check.Run("Heavy attacks are meaningfully stronger and slower than light ones", () =>
+            {
+                MoveSet set = MoveSet.Player();
+                AttackDefinition light = set.Get(set.LightOpener);
+                AttackDefinition heavy = set.Get(set.HeavyOpener);
+
+                Check.Greater(heavy.Damage, light.Damage * 2.5f, "a heavy hits far harder");
+                Check.Greater(heavy.Windup, light.Windup * 2f, "and is far slower to start");
+                Check.Greater(heavy.Recovery, light.Recovery, "and leaves you exposed longer");
+                Check.Greater(heavy.StaminaCost, light.StaminaCost * 2f, "and costs real stamina");
+                Check.Greater(heavy.HitStop, light.HitStop, "and freezes the frame harder");
+            });
+
+            Check.Run("Running off the end of a string restarts it rather than dropping the input", () =>
+            {
+                MoveSet set = MoveSet.Player();
+                AttackDefinition last = set.Get("light_3");
+                Check.True(string.IsNullOrEmpty(last.NextLight), "the light string ends at the kick");
+
+                AttackDefinition wrapped = set.Resolve(last, heavy: false);
+                Check.Equal(wrapped.Id, "light_1", "another light restarts the string");
+            });
+
+            Check.Run("Counters and finishers cannot be blocked", () =>
+            {
+                MoveSet set = MoveSet.Player();
+                Check.True(set.Get(set.CounterMove).Unblockable, "a counter goes through a guard");
+                Check.True(set.Get(set.FinisherMove).Unblockable, "so does a finisher");
+                Check.False(set.Get(set.LightOpener).Unblockable, "a jab does not");
+            });
+
+            Check.Run("Validation catches a broken chain", () =>
+            {
+                var broken = new MoveSet { LightOpener = "a", HeavyOpener = "a" };
+                broken.Add(new AttackDefinition
+                {
+                    Id = "a", Windup = 0.1f, Active = 0.1f, Recovery = 0.1f,
+                    NextLight = "does_not_exist"
+                });
+
+                System.Collections.Generic.List<string> problems = broken.Validate();
+                Check.Greater(problems.Count, 0, "a dangling chain is reported");
+            });
+        }
+
+        // ---- time control -----------------------------------------------------------------
+
+        private static void TimeControlTests()
+        {
+            Check.Run("Hit stop slows time and then releases it", () =>
+            {
+                TimeController controller = Lifecycle.Create<TimeController>();
+                Time.Advance(1f);
+
+                controller.HitStop(0.1f, 0.05f);
+                Lifecycle.Invoke(controller, "Update");
+                Check.True(controller.IsHitStopped, "hit stop is active");
+                Check.Near(Time.timeScale, 0.05f, "time is nearly frozen");
+
+                Time.Advance(0.2f);
+                Lifecycle.Invoke(controller, "Update");
+                Check.False(controller.IsHitStopped, "hit stop expired");
+                Check.Near(Time.timeScale, 1f, "time is back to normal");
+            });
+
+            Check.Run("Overlapping hit stops extend rather than cut each other short", () =>
+            {
+                TimeController controller = Lifecycle.Create<TimeController>();
+                Time.Advance(1f);
+
+                controller.HitStop(0.2f);
+                Time.Advance(0.1f);
+                controller.HitStop(0.05f);
+                Lifecycle.Invoke(controller, "Update");
+
+                Time.Advance(0.06f);
+                Lifecycle.Invoke(controller, "Update");
+                Check.True(controller.IsHitStopped, "the shorter request did not end the longer one");
+            });
+
+            Check.Run("Pause outranks hit stop and slow motion", () =>
+            {
+                TimeController controller = Lifecycle.Create<TimeController>();
+                Time.Advance(1f);
+
+                controller.SlowMotion(2f, 0.3f);
+                controller.HitStop(1f);
+                controller.SetPaused(true);
+                Check.Near(Time.timeScale, 0f, "paused means stopped");
+
+                controller.SetPaused(false);
+                Lifecycle.Invoke(controller, "Update");
+                Check.Greater(Time.timeScale, 0f, "unpausing restores the underlying effect");
+            });
+
+            Check.Run("Hit stop outranks slow motion while both are running", () =>
+            {
+                TimeController controller = Lifecycle.Create<TimeController>();
+                Time.Advance(1f);
+
+                controller.SlowMotion(2f, 0.4f);
+                controller.HitStop(0.1f, 0.02f);
+                Lifecycle.Invoke(controller, "Update");
+                Check.Near(Time.timeScale, 0.02f, "the freeze wins");
+
+                Time.Advance(0.15f);
+                Lifecycle.Invoke(controller, "Update");
+                Check.InRange(Time.timeScale, 0.35f, 0.45f, "slow motion resumes underneath");
+            });
+
+            Check.Run("Slow motion eases in instead of snapping", () =>
+            {
+                TimeController controller = Lifecycle.Create<TimeController>();
+                Time.Advance(1f);
+
+                controller.SlowMotion(1f, 0.2f, blendIn: 0.1f);
+                Time.Advance(0.02f);
+                Lifecycle.Invoke(controller, "Update");
+                Check.Greater(Time.timeScale, 0.5f, "barely slowed on the first frames");
+
+                Time.Advance(0.2f);
+                Lifecycle.Invoke(controller, "Update");
+                Check.Near(Time.timeScale, 0.2f, "fully slowed once blended in", 0.02f);
+            });
+
+            Check.Run("Clearing effects restores normal time immediately", () =>
+            {
+                TimeController controller = Lifecycle.Create<TimeController>();
+                Time.Advance(1f);
+
+                controller.HitStop(5f);
+                controller.SlowMotion(5f, 0.1f);
+                controller.ClearEffects();
+
+                Check.Near(Time.timeScale, 1f, "back to full speed");
+                Check.False(controller.IsAltered, "nothing is bending time");
+            });
+
+            Check.Run("Physics steps in sync with the visible world", () =>
+            {
+                TimeController controller = Lifecycle.Create<TimeController>();
+                Time.Advance(1f);
+
+                controller.HitStop(0.1f, 0.1f);
+                Lifecycle.Invoke(controller, "Update");
+
+                // Otherwise characters keep sliding through a freeze.
+                Check.Near(Time.fixedDeltaTime / Time.timeScale, 0.02f,
+                    "fixed step scales with time scale", 1e-4f);
             });
         }
     }

@@ -52,6 +52,7 @@ namespace Glowpulse.Player
         private Vector3 _dodgeDirection;
         private bool _jumpCut;
         private bool _sprinting;
+        private Vector3 _combatVelocity;
 
         private float _stateLockUntil;
 
@@ -79,7 +80,12 @@ namespace Glowpulse.Player
         /// <summary>True while the player cannot start a new action.</summary>
         public bool IsBusy => _state == PlayerState.Dodging || _state == PlayerState.Staggered
                               || _state == PlayerState.Downed || _state == PlayerState.Dead
-                              || Time.time < _stateLockUntil;
+                              || CombatOwnsMovement || Time.time < _stateLockUntil;
+
+        /// <summary>True when the player is free to start an attack, block or grab.</summary>
+        public bool CanAct => _state != PlayerState.Dodging && _state != PlayerState.Staggered
+                              && _state != PlayerState.Downed && _state != PlayerState.Dead
+                              && Time.time >= _stateLockUntil;
 
         /// <summary>Target the player is locked onto, or null. Set by the lock-on system.</summary>
         public ITargetable LockTarget { get; set; }
@@ -87,7 +93,47 @@ namespace Glowpulse.Player
         public bool HasLockTarget => LockTarget != null && LockTarget.IsTargetable;
 
         /// <summary>Set by the combat system while an attack owns the character.</summary>
-        public bool CombatOwnsMovement { get; set; }
+        public bool CombatOwnsMovement { get; private set; }
+
+        /// <summary>
+        /// Hands movement and facing to the combat system for the duration of an
+        /// attack. Locomotion input is ignored until <see cref="EndCombatAction"/>,
+        /// so an attack's lunge is never fought by the player's stick.
+        /// </summary>
+        public void BeginCombatAction()
+        {
+            CombatOwnsMovement = true;
+            _combatVelocity = Vector3.zero;
+            _sprinting = false;
+            SetState(PlayerState.Attacking);
+        }
+
+        public void EndCombatAction()
+        {
+            if (!CombatOwnsMovement) return;
+            CombatOwnsMovement = false;
+            _combatVelocity = Vector3.zero;
+            if (_state == PlayerState.Attacking)
+                SetState(_motor.IsGrounded ? PlayerState.Locomotion : PlayerState.Airborne);
+        }
+
+        /// <summary>World-space velocity an attack wants this frame, e.g. its lunge.</summary>
+        public void SetCombatVelocity(Vector3 velocity) => _combatVelocity = MathUtil.Flat(velocity);
+
+        /// <summary>Turns the body during an attack. Bypasses the normal rotation rules.</summary>
+        public void FaceDirection(Vector3 direction, float degreesPerSecond, float dt)
+        {
+            ApplyRotationImmediate(direction, degreesPerSecond, dt);
+        }
+
+        /// <summary>Snaps the body to face a direction with no turn time at all.</summary>
+        public void SnapFacing(Vector3 direction)
+        {
+            if (direction.sqrMagnitude < 0.0001f) return;
+            _currentYaw = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
+            _previousYaw = _currentYaw;
+            transform.rotation = Quaternion.Euler(0f, _currentYaw, 0f);
+        }
 
         public Transform CameraTransform
         {
@@ -172,13 +218,27 @@ namespace Glowpulse.Player
         {
             PlayerLocomotionConfig c = Config;
 
+            if (CombatOwnsMovement)
+            {
+                // An attack's lunge is exact: no acceleration curve, no input
+                // blending, and the combat controller owns the facing too.
+                _planarVelocity = _combatVelocity;
+                _sprinting = false;
+                _motor.Tick(_planarVelocity, dt);
+                if (_motor.JustLanded) OnLanded();
+                return;
+            }
+
             Vector3 wish = ResolveMoveDirection(input.Move);
             bool wantsToMove = wish.sqrMagnitude > 0.0001f;
 
             UpdateSprint(input, wantsToMove, dt);
 
             float targetSpeed = ResolveTargetSpeed(input.Move, wish, c);
-            if (CombatOwnsMovement) targetSpeed = 0f;
+
+            // Holding a guard slows the player to a defensive shuffle.
+            if (_combatant != null && _combatant.IsBlocking)
+                targetSpeed = Mathf.Min(targetSpeed, c.WalkSpeed * 0.8f);
 
             Vector3 targetVelocity = wish * targetSpeed;
 
@@ -188,8 +248,8 @@ namespace Glowpulse.Player
             _planarVelocity = Vector3.MoveTowards(_planarVelocity, targetVelocity, accel * dt);
 
             // Dodge takes priority over jumping so a panic input always evades.
-            if (!CombatOwnsMovement && TryStartDodge(wish)) return;
-            if (!CombatOwnsMovement) TryJump(c);
+            if (TryStartDodge(wish)) return;
+            TryJump(c);
 
             ApplyRotation(wish, dt);
 
@@ -417,6 +477,8 @@ namespace Glowpulse.Player
         private void HandleStaggered(float duration)
         {
             if (_state == PlayerState.Dead) return;
+            CombatOwnsMovement = false;
+            _combatVelocity = Vector3.zero;
             _planarVelocity = Vector3.zero;
             _stateLockUntil = Time.time + duration;
             SetState(PlayerState.Staggered);
@@ -425,6 +487,8 @@ namespace Glowpulse.Player
         private void HandleKnockedDown(float duration)
         {
             if (_state == PlayerState.Dead) return;
+            CombatOwnsMovement = false;
+            _combatVelocity = Vector3.zero;
             _planarVelocity = Vector3.zero;
             _stateLockUntil = Time.time + duration;
             SetState(PlayerState.Downed);
@@ -439,6 +503,8 @@ namespace Glowpulse.Player
 
         private void HandleDied()
         {
+            CombatOwnsMovement = false;
+            _combatVelocity = Vector3.zero;
             _planarVelocity = Vector3.zero;
             _sprinting = false;
             SetState(PlayerState.Dead);
@@ -452,6 +518,8 @@ namespace Glowpulse.Player
             _currentYaw = rotation.eulerAngles.y;
             _previousYaw = _currentYaw;
             _stateLockUntil = 0f;
+            CombatOwnsMovement = false;
+            _combatVelocity = Vector3.zero;
             _jumpBuffer.Clear();
             _dodgeBuffer.Clear();
             _animator?.ResetPose();
@@ -483,6 +551,9 @@ namespace Glowpulse.Player
                     break;
                 case PlayerState.Downed:
                     stance = CharacterStance.Downed;
+                    break;
+                case PlayerState.Attacking:
+                    stance = CharacterStance.Combat;
                     break;
                 default:
                     stance = HasLockTarget ? CharacterStance.Combat : CharacterStance.Relaxed;

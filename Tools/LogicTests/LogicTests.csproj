@@ -45,6 +45,10 @@
     <Compile Include="../../Assets/Scripts/Core/Characters/PoseLibrary.cs" />
     <Compile Include="../../Assets/Scripts/Combat/Health.cs" />
     <Compile Include="../../Assets/Scripts/Combat/Stamina.cs" />
+    <Compile Include="../../Assets/Scripts/Combat/AttackDefinition.cs" />
+    <Compile Include="../../Assets/Scripts/Combat/CombatPoses.cs" />
+    <Compile Include="../../Assets/Scripts/Combat/MoveSet.cs" />
+    <Compile Include="../../Assets/Scripts/Core/Timing/TimeController.cs" />
   </ItemGroup>
 
 </Project>

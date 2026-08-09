@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Executes the project's pure-logic classes for real.
+
+    Unity's reference assemblies are metadata only, so they can be compiled
+    against but not run. This project instead compiles a selected set of
+    Glowpulse sources against shim/UnityShim.cs - a small real implementation of
+    the Unity math and component types - and asserts on actual behaviour.
+
+    Only classes whose behaviour is engine independent are included. Anything
+    that genuinely needs the engine (physics sweeps, rendering, the character
+    controller) is verified by the type-check in ../CompileCheck instead.
+
+    Usage: Tools/LogicTests/run.sh
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>Glowpulse.LogicTests</AssemblyName>
+    <RootNamespace>Glowpulse.LogicTests</RootNamespace>
+    <NoWarn>CS0169;CS0649;CS0414;CS0067;CS0108;CS0114</NoWarn>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="shim/UnityShim.cs" />
+    <Compile Include="Assert.cs" />
+    <Compile Include="Lifecycle.cs" />
+    <Compile Include="Tests.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="Project sources under test">
+    <Compile Include="../../Assets/Scripts/Core/Faction.cs" />
+    <Compile Include="../../Assets/Scripts/Core/DamageInfo.cs" />
+    <Compile Include="../../Assets/Scripts/Core/Utils/MathUtil.cs" />
+    <Compile Include="../../Assets/Scripts/Core/Input/InputBuffer.cs" />
+    <Compile Include="../../Assets/Scripts/Core/Characters/CharacterRig.cs" />
+    <Compile Include="../../Assets/Scripts/Core/Characters/PoseClip.cs" />
+    <Compile Include="../../Assets/Scripts/Core/Characters/PoseLibrary.cs" />
+    <Compile Include="../../Assets/Scripts/Combat/Health.cs" />
+    <Compile Include="../../Assets/Scripts/Combat/Stamina.cs" />
+  </ItemGroup>
+
+</Project>

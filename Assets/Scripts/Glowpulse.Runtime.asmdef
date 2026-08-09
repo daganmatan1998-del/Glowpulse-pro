@@ -1,0 +1,30 @@
+{
+    "name": "Glowpulse.Runtime",
+    "rootNamespace": "Glowpulse",
+    "references": [
+        "UnityEngine.UI",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.AI.Navigation"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "",
+            "define": "URP_PRESENT"
+        },
+        {
+            "name": "com.unity.ai.navigation",
+            "expression": "",
+            "define": "AI_NAVIGATION_PRESENT"
+        }
+    ],
+    "noEngineReferences": false
+}

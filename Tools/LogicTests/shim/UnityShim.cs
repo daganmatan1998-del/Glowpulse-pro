@@ -393,6 +393,59 @@ namespace UnityEngine
         public override string ToString() => $"({x:F3}, {y:F3}, {z:F3}, {w:F3})";
     }
 
+    public struct Color
+    {
+        public float r, g, b, a;
+
+        public Color(float r, float g, float b, float a = 1f)
+        {
+            this.r = r; this.g = g; this.b = b; this.a = a;
+        }
+
+        public static Color white => new Color(1f, 1f, 1f);
+        public static Color black => new Color(0f, 0f, 0f);
+        public static Color clear => new Color(0f, 0f, 0f, 0f);
+        public static Color red => new Color(1f, 0f, 0f);
+        public static Color green => new Color(0f, 1f, 0f);
+        public static Color blue => new Color(0f, 0f, 1f);
+        public static Color magenta => new Color(1f, 0f, 1f);
+
+        public static Color operator *(Color c, float s) => new Color(c.r * s, c.g * s, c.b * s, c.a);
+        public static Color operator *(float s, Color c) => c * s;
+
+        public override string ToString() => $"RGBA({r:F3}, {g:F3}, {b:F3}, {a:F3})";
+    }
+
+    public static class ColorUtility
+    {
+        public static bool TryParseHtmlString(string html, out Color color)
+        {
+            color = Color.magenta;
+            if (string.IsNullOrEmpty(html)) return false;
+            if (html[0] == '#') html = html.Substring(1);
+            if (html.Length != 6 && html.Length != 8) return false;
+
+            try
+            {
+                int r = Convert.ToInt32(html.Substring(0, 2), 16);
+                int g = Convert.ToInt32(html.Substring(2, 2), 16);
+                int b = Convert.ToInt32(html.Substring(4, 2), 16);
+                int a = html.Length == 8 ? Convert.ToInt32(html.Substring(6, 2), 16) : 255;
+                color = new Color(r / 255f, g / 255f, b / 255f, a / 255f);
+                return true;
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+        }
+
+        public static string ToHtmlStringRGB(Color c)
+        {
+            return $"{(int)(c.r * 255):X2}{(int)(c.g * 255):X2}{(int)(c.b * 255):X2}";
+        }
+    }
+
     /// <summary>Test-controllable clock. Advance it explicitly with <see cref="Advance"/>.</summary>
     public static class Time
     {

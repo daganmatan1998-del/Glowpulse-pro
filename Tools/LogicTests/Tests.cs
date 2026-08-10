@@ -4,6 +4,8 @@ using Glowpulse.Core;
 using Glowpulse.Core.Characters;
 using Glowpulse.Core.InputSystem;
 using Glowpulse.Core.Timing;
+using Glowpulse.AI;
+using Glowpulse.Enemies;
 using UnityEngine;
 
 namespace Glowpulse.LogicTests
@@ -25,6 +27,9 @@ namespace Glowpulse.LogicTests
             AttackTests();
             MoveSetTests();
             TimeControlTests();
+            StateMachineTests();
+            ArchetypeTests();
+            DirectorTests();
 
             return Check.Report();
         }
@@ -611,6 +616,370 @@ namespace Glowpulse.LogicTests
             });
         }
 
+        // ---- state machine ------------------------------------------------------------------
+
+        private static void StateMachineTests()
+        {
+            Check.Run("Entering a state runs Enter exactly once", () =>
+            {
+                var owner = new ProbeOwner();
+                var machine = new AiStateMachine<ProbeOwner>(owner);
+                var a = new ProbeState("A");
+
+                machine.ChangeNow(a);
+                Check.Equal(a.Entered, 1, "entered once");
+                Check.Equal(machine.CurrentName, "A", "current state reported");
+
+                machine.ChangeNow(a);
+                Check.Equal(a.Entered, 1, "re-entering the same state is a no-op");
+            });
+
+            Check.Run("Transitions requested during a tick apply after it finishes", () =>
+            {
+                var owner = new ProbeOwner();
+                var machine = new AiStateMachine<ProbeOwner>(owner);
+                var a = new ProbeState("A");
+                var b = new ProbeState("B");
+
+                // The whole point of deferring: a state must be allowed to finish
+                // its own update after asking to leave.
+                a.OnTick = _ => machine.Change(b);
+
+                machine.ChangeNow(a);
+                owner.Log.Clear();
+                machine.Tick(0.016f);
+
+                Check.Equal(string.Join(",", owner.Log), "tick:A,exit:A,enter:B",
+                    "the state ticks, then exits, then the next one enters");
+                Check.Equal(machine.CurrentName, "B", "landed in B");
+            });
+
+            Check.Run("Exit and Enter fire in the right order on a transition", () =>
+            {
+                var owner = new ProbeOwner();
+                var machine = new AiStateMachine<ProbeOwner>(owner);
+                var a = new ProbeState("A");
+                var b = new ProbeState("B");
+
+                machine.ChangeNow(a);
+                machine.ChangeNow(b);
+
+                Check.Equal(a.Exited, 1, "A exited");
+                Check.Equal(b.Entered, 1, "B entered");
+                Check.Equal(string.Join(",", owner.Log), "enter:A,exit:A,enter:B", "in order");
+            });
+
+            Check.Run("TimeInState measures the current state only", () =>
+            {
+                var owner = new ProbeOwner();
+                var machine = new AiStateMachine<ProbeOwner>(owner);
+                var a = new ProbeState("A");
+                var b = new ProbeState("B");
+
+                Time.Advance(5f);
+                machine.ChangeNow(a);
+                Time.Advance(2f);
+                Check.Near(machine.TimeInState, 2f, "two seconds in A");
+
+                machine.ChangeNow(b);
+                Check.Near(machine.TimeInState, 0f, "reset on entering B");
+            });
+
+            Check.Run("Transitions raise an event with both state names", () =>
+            {
+                var owner = new ProbeOwner();
+                var machine = new AiStateMachine<ProbeOwner>(owner);
+                string captured = null;
+                machine.Changed += (from, to) => captured = from + "->" + to;
+
+                machine.ChangeNow(new ProbeState("A"));
+                Check.Equal(captured, "none->A", "first transition reports no previous state");
+
+                machine.ChangeNow(new ProbeState("B"));
+                Check.Equal(captured, "A->B", "subsequent transitions report both");
+            });
+
+            Check.Run("A null transition is ignored", () =>
+            {
+                var owner = new ProbeOwner();
+                var machine = new AiStateMachine<ProbeOwner>(owner);
+                var a = new ProbeState("A");
+
+                machine.ChangeNow(a);
+                machine.ChangeNow(null);
+                machine.Change(null);
+                machine.Tick(0.016f);
+
+                Check.Equal(machine.CurrentName, "A", "still in A");
+            });
+        }
+
+        // ---- enemy archetypes -----------------------------------------------------------------
+
+        private static void ArchetypeTests()
+        {
+            Check.Run("Each archetype has a working move set", () =>
+            {
+                EnemyKind[] kinds = { EnemyKind.Brawler, EnemyKind.Bruiser, EnemyKind.Runner };
+
+                foreach (EnemyKind kind in kinds)
+                {
+                    EnemyArchetype archetype = EnemyArchetype.Get(kind);
+                    Check.True(archetype.Moves != null, $"{kind} has moves");
+                    Check.Greater(archetype.Health, 0f, $"{kind} has health");
+
+                    System.Collections.Generic.List<string> problems = archetype.Moves.Validate();
+                    foreach (string problem in problems) Check.True(false, $"{kind}: {problem}");
+                }
+            });
+
+            Check.Run("The three archetypes actually play differently", () =>
+            {
+                EnemyArchetype brawler = EnemyArchetype.Brawler();
+                EnemyArchetype bruiser = EnemyArchetype.Bruiser();
+                EnemyArchetype runner = EnemyArchetype.Runner();
+
+                // Heavy: tough and slow.
+                Check.Greater(bruiser.Health, brawler.Health * 2f, "the bruiser is far tougher");
+                Check.Less(bruiser.ChaseSpeed, brawler.ChaseSpeed, "and slower");
+                Check.Greater(bruiser.Poise, brawler.Poise * 2f, "and much harder to stagger");
+                Check.Greater(bruiser.DamageResistance, 0f, "and armoured");
+
+                // Fast: fragile and quick.
+                Check.Less(runner.Health, brawler.Health, "the runner is fragile");
+                Check.Greater(runner.ChaseSpeed, brawler.ChaseSpeed, "and faster");
+                Check.Less(runner.Poise, brawler.Poise, "and easy to interrupt");
+                Check.Less(runner.AttackCooldown, brawler.AttackCooldown, "and attacks more often");
+                Check.Greater(runner.FlankPreference, brawler.FlankPreference, "and wants to flank");
+                Check.Greater(runner.RetreatChance, brawler.RetreatChance, "and hits and runs");
+
+                // Reward should track difficulty.
+                Check.Greater(bruiser.ExperienceReward, brawler.ExperienceReward,
+                    "the toughest enemy is worth the most");
+            });
+
+            Check.Run("Enemy attacks telegraph more than the player's", () =>
+            {
+                AttackDefinition playerJab = MoveSet.Player().Get("light_1");
+                AttackDefinition enemyJab = EnemyArchetype.Brawler().Moves.Get("e_jab");
+
+                // The wind-up is the tell. Without it, dodging is a guess.
+                Check.Greater(enemyJab.Windup, playerJab.Windup * 2f,
+                    "an enemy jab is readable where the player's is snappy");
+
+                AttackDefinition slam = EnemyArchetype.Bruiser().Moves.Get("b_slam");
+                Check.Greater(slam.Windup, 0.7f, "the unblockable slam is heavily telegraphed");
+                Check.True(slam.Unblockable, "and cannot simply be held against");
+            });
+
+            Check.Run("Attack cooldown jitter stays positive and near its mean", () =>
+            {
+                EnemyArchetype archetype = EnemyArchetype.Brawler();
+                float min = float.MaxValue, max = float.MinValue;
+
+                for (int i = 0; i < 200; i++)
+                {
+                    float value = archetype.RollAttackCooldown();
+                    Check.Greater(value, 0f, "never zero or negative");
+                    min = Mathf.Min(min, value);
+                    max = Mathf.Max(max, value);
+                }
+
+                Check.InRange(min, archetype.AttackCooldown - archetype.AttackCooldownVariance - 0.01f,
+                    archetype.AttackCooldown, "lower bound respected");
+                Check.InRange(max, archetype.AttackCooldown,
+                    archetype.AttackCooldown + archetype.AttackCooldownVariance + 0.01f,
+                    "upper bound respected");
+            });
+        }
+
+        // ---- combat director ----------------------------------------------------------------------
+
+        private static void DirectorTests()
+        {
+            CombatDirector NewDirector(out Transform focus)
+            {
+                // Each case needs its own director; the singleton would otherwise
+                // survive from the previous test and refuse to initialise.
+                Lifecycle.ResetStatics<CombatDirector>();
+                CombatDirector director = Lifecycle.Create<CombatDirector>();
+                focus = new Transform { position = Vector3.zero, rotation = Quaternion.identity };
+                director.Focus = focus;
+                return director;
+            }
+
+            Check.Run("Only a limited number of enemies may attack at once", () =>
+            {
+                CombatDirector director = NewDirector(out _);
+                director.MaxSimultaneousAttackers = 2;
+                Time.Advance(10f);
+
+                var a = new FakeParticipant(new Vector3(2f, 0f, 0f));
+                var b = new FakeParticipant(new Vector3(-2f, 0f, 0f));
+                var c = new FakeParticipant(new Vector3(0f, 0f, 2f));
+                director.Register(a);
+                director.Register(b);
+                director.Register(c);
+
+                Check.True(director.RequestAttack(a), "the first attacker is authorised");
+
+                // Spacing keeps two hits from landing on the same frame.
+                Time.Advance(1f);
+                Check.True(director.RequestAttack(b), "the second is authorised after the spacing gap");
+
+                Time.Advance(1f);
+                Check.False(director.RequestAttack(c), "the third has to wait");
+                Check.Equal(director.ActiveAttackers, 2, "two tokens are out");
+
+                director.ReleaseToken(a);
+                Time.Advance(1f);
+                Check.True(director.RequestAttack(c), "a freed token lets the next one in");
+            });
+
+            Check.Run("Attacks are spaced apart in time", () =>
+            {
+                CombatDirector director = NewDirector(out _);
+                director.MaxSimultaneousAttackers = 4;
+                Time.Advance(10f);
+
+                var a = new FakeParticipant(new Vector3(2f, 0f, 0f));
+                var b = new FakeParticipant(new Vector3(-2f, 0f, 0f));
+                director.Register(a);
+                director.Register(b);
+
+                Check.True(director.RequestAttack(a), "first attack authorised");
+                Check.False(director.RequestAttack(b), "a second on the same frame is refused");
+
+                Time.Advance(0.5f);
+                Check.True(director.RequestAttack(b), "allowed once the gap has passed");
+            });
+
+            Check.Run("Holding a token is idempotent", () =>
+            {
+                CombatDirector director = NewDirector(out _);
+                Time.Advance(10f);
+
+                var a = new FakeParticipant(Vector3.forward * 2f);
+                director.Register(a);
+
+                Check.True(director.RequestAttack(a), "granted");
+                Check.True(director.RequestAttack(a), "asking again while holding is still yes");
+                Check.Equal(director.ActiveAttackers, 1, "but it does not consume a second token");
+            });
+
+            Check.Run("Dead and disengaged attackers give their token back", () =>
+            {
+                CombatDirector director = NewDirector(out _);
+                director.MaxSimultaneousAttackers = 1;
+                Time.Advance(10f);
+
+                var a = new FakeParticipant(Vector3.forward * 2f);
+                var b = new FakeParticipant(Vector3.back * 2f);
+                director.Register(a);
+                director.Register(b);
+
+                Check.True(director.RequestAttack(a), "a is attacking");
+
+                a.IsAlive = false;
+                Lifecycle.Invoke(director, "Update");
+                Check.Equal(director.ActiveAttackers, 0, "a dead attacker's token is reclaimed");
+
+                Time.Advance(1f);
+                Check.True(director.RequestAttack(b), "so b can attack");
+            });
+
+            Check.Run("Unregistering releases the token and the slot", () =>
+            {
+                CombatDirector director = NewDirector(out _);
+                director.MaxSimultaneousAttackers = 1;
+                Time.Advance(10f);
+
+                var a = new FakeParticipant(Vector3.forward * 2f);
+                director.Register(a);
+                director.RequestAttack(a);
+
+                director.Unregister(a);
+                Check.Equal(director.ActiveAttackers, 0, "token released");
+                Check.Equal(director.ParticipantCount, 0, "no longer tracked");
+                Check.Equal(director.GetSlot(a), -1, "slot released");
+            });
+
+            Check.Run("Enemies are given distinct positions around the target", () =>
+            {
+                CombatDirector director = NewDirector(out Transform focus);
+                Time.Advance(10f);
+
+                var participants = new FakeParticipant[6];
+                for (int i = 0; i < participants.Length; i++)
+                {
+                    float angle = i / (float)participants.Length * Mathf.PI * 2f;
+                    participants[i] = new FakeParticipant(
+                        new Vector3(Mathf.Sin(angle) * 4f, 0f, Mathf.Cos(angle) * 4f));
+                    director.Register(participants[i]);
+                }
+
+                Lifecycle.Invoke(director, "Update");
+
+                // The whole purpose of slots: no two enemies stand in one place.
+                var seen = new System.Collections.Generic.HashSet<int>();
+                for (int i = 0; i < participants.Length; i++)
+                {
+                    int slot = director.GetSlot(participants[i]);
+                    Check.True(slot >= 0, $"participant {i} was given a slot");
+                    Check.True(seen.Add(slot), $"participant {i}'s slot is unique");
+                }
+
+                // And the positions are spread around the focus at a sane radius.
+                for (int i = 0; i < participants.Length; i++)
+                {
+                    Vector3 position = director.GetSlotPosition(participants[i]);
+                    float radius = MathUtil.FlatDistance(position, focus.position);
+                    Check.InRange(radius, 2f, 5f, "slot sits on the ring around the target");
+                }
+            });
+
+            Check.Run("Flankers are given slots behind the target", () =>
+            {
+                CombatDirector director = NewDirector(out Transform focus);
+                focus.rotation = Quaternion.identity;   // facing +Z
+                Time.Advance(10f);
+
+                // Both start beside the target, so position alone does not decide.
+                var frontal = new FakeParticipant(new Vector3(3f, 0f, 0.2f), flank: 0f);
+                var flanker = new FakeParticipant(new Vector3(3.1f, 0f, -0.2f), flank: 1f);
+                director.Register(frontal);
+                director.Register(flanker);
+
+                Lifecycle.Invoke(director, "Update");
+
+                Vector3 flankerSlot = director.GetSlotPosition(flanker);
+                Vector3 frontalSlot = director.GetSlotPosition(frontal);
+
+                // Behind the target means a negative Z offset when it faces +Z.
+                Check.Less(flankerSlot.z, frontalSlot.z,
+                    "the flanker takes the slot further behind the target");
+            });
+
+            Check.Run("Slot positions rotate with the target's facing", () =>
+            {
+                CombatDirector director = NewDirector(out Transform focus);
+                Time.Advance(10f);
+
+                var participant = new FakeParticipant(new Vector3(0f, 0f, -3f), flank: 1f);
+                director.Register(participant);
+                Lifecycle.Invoke(director, "Update");
+
+                Vector3 before = director.GetSlotPosition(participant);
+
+                focus.rotation = Quaternion.Euler(0f, 90f, 0f);
+                Vector3 after = director.GetSlotPosition(participant);
+
+                // "Behind the player" has to keep meaning behind the player.
+                Check.Greater((after - before).magnitude, 1f,
+                    "the ring turns with the target rather than staying world-locked");
+            });
+        }
+
         // ---- combat data ----------------------------------------------------------------
 
         private static void CombatDataTests()
@@ -955,5 +1324,61 @@ namespace Glowpulse.LogicTests
                     "fixed step scales with time scale", 1e-4f);
             });
         }
+    }
+}
+
+
+namespace Glowpulse.LogicTests
+{
+    /// <summary>A scripted state used to observe the state machine's behaviour.</summary>
+    internal sealed class ProbeState : AiState<ProbeOwner>
+    {
+        private readonly string _name;
+        public ProbeState(string name) { _name = name; }
+        public override string Name => _name;
+
+        public int Entered, Ticked, Exited;
+        public System.Action<ProbeOwner> OnTick;
+
+        public override void Enter(ProbeOwner owner) { Entered++; owner.Log.Add("enter:" + _name); }
+        public override void Exit(ProbeOwner owner) { Exited++; owner.Log.Add("exit:" + _name); }
+
+        public override void Tick(ProbeOwner owner, float dt)
+        {
+            Ticked++;
+            owner.Log.Add("tick:" + _name);
+            OnTick?.Invoke(owner);
+        }
+    }
+
+    internal sealed class ProbeOwner
+    {
+        public readonly System.Collections.Generic.List<string> Log =
+            new System.Collections.Generic.List<string>();
+        public AiStateMachine<ProbeOwner> Machine;
+    }
+
+    /// <summary>Stand-in enemy for exercising the combat director without a scene.</summary>
+    internal sealed class FakeParticipant : ICombatParticipant
+    {
+        private readonly Transform _transform = new Transform();
+
+        public FakeParticipant(Vector3 position, float flank = 0f)
+        {
+            _transform.position = position;
+            FlankPreference = flank;
+        }
+
+        public Transform Transform => _transform;
+        public bool IsAlive { get; set; } = true;
+        public bool IsEngaged { get; set; } = true;
+        public float AttackUrgency { get; set; } = 1f;
+        public float FlankPreference { get; set; }
+
+        public void MoveTo(Vector3 p) => _transform.position = p;
+    }
+
+    public static partial class AiTests
+    {
     }
 }

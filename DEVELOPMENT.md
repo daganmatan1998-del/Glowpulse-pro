@@ -7,8 +7,8 @@ the next one starts.
 | --- | --- | --- |
 | 1 | Player, movement, third-person camera, lock-on, health and stamina | **Done** |
 | 2 | Combat: light/heavy attacks, combos, block, parry, counter, grab, hit feel | **Done** |
-| 3 | Enemy AI: three archetypes, state machine, encounter coordination | Next |
-| 4 | Open-world city | |
+| 3 | Enemy AI: three archetypes, state machine, encounter coordination | **Done** |
+| 4 | Open-world city | Next |
 | 5 | Civilian NPCs | |
 | 6 | Mission system, "Clear the Street" | |
 | 7 | Progression: XP, levels, money, skill tree | |
@@ -108,6 +108,51 @@ touching any gameplay code.
 **Training dummies.** The proving ground spawns dummies that take hits, react,
 fall, get up and reset, one of which blocks. They exist so combat could be tuned
 and verified before enemy AI arrived.
+
+## Phase 3 - what exists
+
+**Three archetypes.** A `Brawler` that walks in and trades, a `Bruiser` that is
+slow, armoured and hits enormously hard, and a `Runner` that flanks, jabs and
+backs off. They share one brain and one move-execution path; everything that
+makes them feel different is data - speed, poise, reach, cooldowns, flanking
+preference. Enemy attacks have wind-ups two to four times longer than the
+player's, because the tell is what makes dodging and parrying a skill rather
+than a guess.
+
+**Poise.** Enemies absorb a budget of stagger before they flinch. Light attacks
+visibly rock a bruiser without interrupting him, so mashing does not work and
+the player has to use heavies, throws or openings. Poise only regenerates after
+a pause, so sustained pressure still suppresses an enemy even if no single hit
+breaks them. Knockdowns and launches always land regardless.
+
+**State machine.** A small generic `AiStateMachine` with shared, stateless state
+singletons - all per-enemy data lives on the brain, so the AI allocates nothing
+at runtime. Transitions requested mid-tick are applied after the tick finishes,
+so a state always gets to complete its own update. The flow is
+idle → patrol → alert → chase → combat → attack → react → recover → die, plus a
+search state for a lost target and a reposition state for hit-and-run.
+
+**Perception.** A vision cone with a line-of-sight check and a close-range
+"someone is behind me" exception, a memory of the last known position, and an
+alarm that spreads through nearby allies when a fight starts. Checks are
+staggered per enemy so a crowd never raycasts on the same frame.
+
+**Movement.** Local steering rather than pathfinding: arrive, orbit, separation
+from neighbours, and three-whisker obstacle avoidance. Enemies flow around each
+other instead of queueing along a computed path, which is what an open street
+fight needs.
+
+**The combat director.** The piece that makes a crowd feel designed rather than
+unfair. It hands out a small number of attack tokens with a minimum gap between
+them, so only one or two enemies swing at a time while the rest circle. It also
+assigns each enemy a slot on a ring around the player, laid out relative to the
+player's facing so "behind you" stays behind you, with flank-loving enemies
+biased toward the back. Slot assignment is greedy and stable, so the crowd does
+not constantly reshuffle.
+
+**Encounters.** `EncounterSpawner` owns a roster, spawns it when the player
+comes within range, and raises an event when the last enemy falls - which is
+what the mission system will hang objectives on.
 
 ## Conventions
 

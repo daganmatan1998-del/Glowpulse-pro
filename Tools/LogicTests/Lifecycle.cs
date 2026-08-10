@@ -14,6 +14,18 @@ namespace Glowpulse.LogicTests
         private const BindingFlags Flags =
             BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.FlattenHierarchy;
 
+        /// <summary>
+        /// Runs a type's RuntimeInitializeOnLoadMethod reset hook. Unity calls
+        /// these between play sessions; under test they give each case a clean
+        /// singleton to work with.
+        /// </summary>
+        public static void ResetStatics<T>()
+        {
+            MethodInfo m = typeof(T).GetMethod("ResetStatics",
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            m?.Invoke(null, null);
+        }
+
         public static T Create<T>(Action<T> configure = null) where T : Component, new()
         {
             var go = new GameObject(typeof(T).Name);

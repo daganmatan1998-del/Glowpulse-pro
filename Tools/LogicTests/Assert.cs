@@ -25,7 +25,12 @@ namespace Glowpulse.LogicTests
             }
             catch (Exception e)
             {
-                Failures.Add($"{name}: threw {e.GetType().Name}: {e.Message}");
+                // Anything invoked by reflection arrives wrapped; report the real one.
+                while (e is System.Reflection.TargetInvocationException && e.InnerException != null)
+                    e = e.InnerException;
+
+                string where = e.StackTrace != null ? e.StackTrace.Split('\n')[0].Trim() : "";
+                Failures.Add($"{name}: threw {e.GetType().Name}: {e.Message}  {where}");
             }
 
             Console.WriteLine((Failures.Count == before ? "  PASS  " : "  FAIL  ") + name);

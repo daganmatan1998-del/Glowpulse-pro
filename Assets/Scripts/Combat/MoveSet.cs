@@ -15,6 +15,10 @@ namespace Glowpulse.Combat
         private readonly Dictionary<string, AttackDefinition> _moves =
             new Dictionary<string, AttackDefinition>(24);
 
+        // A parallel list so callers can iterate without boxing a dictionary
+        // enumerator. Enemies scan their whole move set to pick an attack.
+        private readonly List<AttackDefinition> _ordered = new List<AttackDefinition>(24);
+
         public string LightOpener { get; set; }
         public string HeavyOpener { get; set; }
         public string CounterMove { get; set; }
@@ -22,13 +26,18 @@ namespace Glowpulse.Combat
         public string GrabMove { get; set; }
         public string ThrowMove { get; set; }
 
-        public IEnumerable<AttackDefinition> All => _moves.Values;
-        public int Count => _moves.Count;
+        public IReadOnlyList<AttackDefinition> All => _ordered;
+        public int Count => _ordered.Count;
 
         public MoveSet Add(AttackDefinition move)
         {
             if (move == null || string.IsNullOrEmpty(move.Id)) return this;
+
+            if (_moves.TryGetValue(move.Id, out AttackDefinition existing))
+                _ordered.Remove(existing);
+
             _moves[move.Id] = move;
+            _ordered.Add(move);
             return this;
         }
 
@@ -73,8 +82,9 @@ namespace Glowpulse.Combat
             CheckEntry("LightOpener", LightOpener);
             CheckEntry("HeavyOpener", HeavyOpener);
 
-            foreach (AttackDefinition move in _moves.Values)
+            for (int i = 0; i < _ordered.Count; i++)
             {
+                AttackDefinition move = _ordered[i];
                 if (!string.IsNullOrEmpty(move.NextLight) && !Has(move.NextLight))
                     problems.Add($"'{move.Id}' chains light into missing move '{move.NextLight}'");
 

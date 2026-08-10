@@ -49,6 +49,11 @@
     <Compile Include="../../Assets/Scripts/Combat/CombatPoses.cs" />
     <Compile Include="../../Assets/Scripts/Combat/MoveSet.cs" />
     <Compile Include="../../Assets/Scripts/Core/Timing/TimeController.cs" />
+    <Compile Include="../../Assets/Scripts/Core/Characters/CharacterStyle.cs" />
+    <Compile Include="../../Assets/Scripts/AI/AiStateMachine.cs" />
+    <Compile Include="../../Assets/Scripts/AI/CombatDirector.cs" />
+    <Compile Include="../../Assets/Scripts/Enemies/EnemyMoves.cs" />
+    <Compile Include="../../Assets/Scripts/Enemies/EnemyArchetype.cs" />
   </ItemGroup>
 
 </Project>

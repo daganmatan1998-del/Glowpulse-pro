@@ -1,8 +1,10 @@
+using Glowpulse.AI;
 using Glowpulse.Audio;
 using Glowpulse.CameraSystem;
 using Glowpulse.Core.Characters;
 using Glowpulse.Core.InputSystem;
 using Glowpulse.Core.Timing;
+using Glowpulse.Enemies;
 using Glowpulse.Player;
 using Glowpulse.VFX;
 using Glowpulse.World;
@@ -48,7 +50,10 @@ namespace Glowpulse.Core.Bootstrap
         [Tooltip("Spawns practice dummies in the proving ground so combat can be tested.")]
         [SerializeField] private bool _spawnTrainingDummies = true;
 
-        [SerializeField] private int _trainingDummyCount = 4;
+        [SerializeField] private int _trainingDummyCount = 2;
+
+        [Tooltip("Spawns a live encounter of real enemies in the proving ground.")]
+        [SerializeField] private bool _spawnTestEncounter = true;
 
         [Header("Options")]
         [Tooltip("Locks and hides the cursor on start. Turn off when profiling in the editor.")]
@@ -130,6 +135,7 @@ namespace Glowpulse.Core.Bootstrap
             TimeController.Install(services);
             AudioManager.Install(services);
             ImpactEffects.Install(services);
+            CombatDirector.Install(services);
 
             Combat.CombatPoses.EnsureRegistered();
         }
@@ -170,7 +176,29 @@ namespace Glowpulse.Core.Bootstrap
             var link = GameCamera.gameObject.AddComponent<PlayerCameraLink>();
             link.Bind(Player, GameCamera);
 
+            // Every enemy arranges itself around the player, so the director needs
+            // to know who that is before any of them spawn.
+            CombatDirector director = CombatDirector.Instance;
+            if (director != null) director.Focus = Player.transform;
+
             if (_spawnTrainingDummies) SpawnTrainingDummies(spawn);
+            if (_spawnTestEncounter) SpawnTestEncounter(spawn);
+        }
+
+        /// <summary>
+        /// One of each enemy type, far enough away that the player walks into the
+        /// fight rather than starting in it.
+        /// </summary>
+        private void SpawnTestEncounter(Vector3 playerSpawn)
+        {
+            Vector3 center = playerSpawn + new Vector3(0f, 0f, 22f);
+            if (MathUtil.GroundPoint(center, out Vector3 grounded, 8f, 40f, GameLayers.WorldMask))
+                center = grounded;
+
+            EncounterSpawner.Create("Test Encounter", center, WorldRoot, triggerRadius: 15f,
+                new EnemyGroup(EnemyKind.Brawler, 2),
+                new EnemyGroup(EnemyKind.Runner, 2),
+                new EnemyGroup(EnemyKind.Bruiser, 1));
         }
 
         /// <summary>

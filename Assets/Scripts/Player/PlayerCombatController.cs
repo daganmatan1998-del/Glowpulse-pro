@@ -65,14 +65,17 @@ namespace Glowpulse.Player
         private ICharacterAnimator _animator;
 
         private MoveSet _moveSet;
-        private readonly MeleeHitbox _hitbox = new MeleeHitbox();
-        private readonly List<Combatant> _victims = new List<Combatant>(8);
+
+        // The shared timeline runner: identical hit resolution for the player and
+        // every enemy, so a move behaves the same whoever throws it.
+        private readonly AttackRunner _runner = new AttackRunner();
+
+        // A separate probe for the single-target queries grabs and finishers make,
+        // which must not disturb the running swing's hit memory.
+        private readonly MeleeHitbox _probe = new MeleeHitbox();
         private readonly List<ITargetable> _facingCandidates = new List<ITargetable>(8);
 
         private CombatState _state = CombatState.Ready;
-        private AttackDefinition _move;
-        private float _moveTime;
-        private bool _swingOpened;
 
         private InputBuffer _lightBuffer = new InputBuffer(0.24f);
         private InputBuffer _heavyBuffer = new InputBuffer(0.24f);
@@ -99,7 +102,7 @@ namespace Glowpulse.Player
         public event Action<int> ComboChanged;
 
         public CombatState State => _state;
-        public AttackDefinition CurrentMove => _move;
+        public AttackDefinition CurrentMove => _runner.Move;
         public bool IsAttacking => _state == CombatState.Attacking;
         public bool IsHolding => _state == CombatState.Holding;
         public Combatant HeldEnemy => _held;
@@ -112,7 +115,11 @@ namespace Glowpulse.Player
         public float DamageMultiplier
         {
             get => _damageMultiplier;
-            set => _damageMultiplier = Mathf.Max(0.1f, value);
+            set
+            {
+                _damageMultiplier = Mathf.Max(0.1f, value);
+                _runner.DamageMultiplier = _damageMultiplier;
+            }
         }
 
         private void Awake()
@@ -124,6 +131,7 @@ namespace Glowpulse.Player
 
             CombatPoses.EnsureRegistered();
             _moveSet = MoveSet.Player();
+            _runner.Landed += HandleLanded;
         }
 
         private void OnEnable()
@@ -252,7 +260,7 @@ namespace Glowpulse.Player
             AttackDefinition probe = finisher.Clone();
             probe.HitboxRadius = _finisherRange;
 
-            Combatant victim = _hitbox.QuerySingle(transform, probe, _combatant.Faction, requireDowned: true);
+            Combatant victim = _probe.QuerySingle(transform, probe, _combatant.Faction, requireDowned: true);
             if (victim == null) return false;
 
             // Stand over them before the animation plays, so the kick connects.
@@ -270,9 +278,7 @@ namespace Glowpulse.Player
             if (stamina != null && move.StaminaCost > 0f && !stamina.TrySpend(move.StaminaCost))
                 return false;
 
-            _move = move;
-            _moveTime = 0f;
-            _swingOpened = false;
+            _runner.Begin(move);
             _queued = null;
             _state = CombatState.Attacking;
 
@@ -280,55 +286,44 @@ namespace Glowpulse.Player
             _player.BeginCombatAction();
 
             FaceAttackTarget(instant: true);
-            PlayMoveClip(move);
+            AttackRunner.PlayClip(_animator, move);
 
             stamina?.BlockRegen(move.Duration + 0.25f);
             AttackStarted?.Invoke(move);
             return true;
         }
 
-        private void PlayMoveClip(AttackDefinition move)
-        {
-            if (_animator == null || string.IsNullOrEmpty(move.ClipId)) return;
-
-            PoseClip clip = PoseLibrary.Get(move.ClipId);
-            float speed = clip != null ? move.ClipSpeed(clip.Duration) : 1f;
-            _animator.PlayAction(move.ClipId, speed, 0.04f);
-        }
-
         // ---- running a move ---------------------------------------------------------
 
         private void TickAttack(float dt)
         {
-            _moveTime += dt;
-            AttackDefinition move = _move;
-
-            ApplyLunge(move, dt);
-
-            // Keep tracking the target through the wind-up so a moving enemy does
-            // not simply walk out of a committed swing.
-            if (_moveTime < move.ActiveEnd) FaceAttackTarget(instant: false, dt: dt);
-
-            if (!_swingOpened && _moveTime >= move.ActiveStart)
-            {
-                _swingOpened = true;
-                _hitbox.BeginSwing();
-                CombatFeedback.Swing(move, MeleeHitbox.Center(transform, move));
-            }
-
-            if (move.IsActiveAt(_moveTime)) ResolveHits(move);
-
-            QueueFollowUp(move);
-
-            // Dodging out of the recovery frames is the escape hatch that keeps
-            // committing to a heavy from feeling like a trap.
-            if (_moveTime > move.ActiveEnd && InputService.Current.DodgePressed)
+            AttackDefinition move = _runner.Move;
+            if (move == null)
             {
                 EndAttack();
                 return;
             }
 
-            if (_moveTime < move.Duration) return;
+            // The runner advances the timeline, opens the hitbox, resolves hits
+            // and reports the lunge; everything left here is player-specific.
+            Vector3 lunge = _runner.Tick(dt, transform, _combatant.Faction, gameObject, _player.LockTarget);
+            _player.SetCombatVelocity(lunge);
+
+            // Keep tracking through the wind-up so a moving enemy cannot simply
+            // walk out of a committed swing.
+            if (_runner.Time < move.ActiveEnd) FaceAttackTarget(instant: false, dt: dt);
+
+            QueueFollowUp(move);
+
+            // Dodging out of the recovery frames is the escape hatch that keeps
+            // committing to a heavy from feeling like a trap.
+            if (_runner.InRecovery && InputService.Current.DodgePressed)
+            {
+                EndAttack();
+                return;
+            }
+
+            if (!_runner.Finished) return;
 
             if (_queued != null)
             {
@@ -340,85 +335,16 @@ namespace Glowpulse.Player
             EndAttack();
         }
 
-        private void ApplyLunge(AttackDefinition move, float dt)
+        private void HandleLanded(AttackDefinition move, Combatant victim, HitResult result,
+            DamageInfo info)
         {
-            // The lunge runs across the wind-up and active frames and stops dead
-            // in recovery, which is what makes a whiff feel over-committed.
-            float lungeEnd = move.ActiveEnd;
-            if (_moveTime > lungeEnd || lungeEnd <= 0f)
-            {
-                _player.SetCombatVelocity(Vector3.zero);
-                return;
-            }
-
-            float distance = move.LungeDistance;
-
-            // Close extra ground when the target is further away than the reach,
-            // so attacks do not fall short of a retreating enemy.
-            ITargetable target = _player.LockTarget;
-            if (target != null && target.IsTargetable && move.LungeTrackingBonus > 0f)
-            {
-                float gap = MathUtil.FlatDistance(transform.position, target.Transform.position);
-                float reach = move.HitboxOffset.z + move.HitboxRadius;
-                if (gap > reach)
-                    distance += Mathf.Min(gap - reach, move.LungeTrackingBonus);
-            }
-
-            // Front-load the lunge so the step happens with the swing.
-            float u = Mathf.Clamp01(_moveTime / lungeEnd);
-            float speedShape = Mathf.Sin(u * Mathf.PI);
-            float averageShape = 2f / Mathf.PI;
-            float speed = distance / lungeEnd * (speedShape / averageShape);
-
-            _player.SetCombatVelocity(transform.forward * speed);
-        }
-
-        private void ResolveHits(AttackDefinition move)
-        {
-            _victims.Clear();
-            if (_hitbox.Query(transform, move, _combatant.Faction, _victims) == 0) return;
-
-            for (int i = 0; i < _victims.Count; i++)
-            {
-                Combatant victim = _victims[i];
-
-                Vector3 point = ClosestPointOn(victim, MeleeHitbox.Center(transform, move));
-                Vector3 direction = MathUtil.FlatDirection(victim.transform.position - transform.position);
-                if (direction.sqrMagnitude < 0.0001f) direction = transform.forward;
-
-                DamageInfo info = move.BuildDamage(gameObject, _combatant.Faction, point, direction,
-                    _damageMultiplier);
-
-                HitResult result = victim.ApplyDamage(in info);
-
-                if (result == HitResult.Hit || result == HitResult.Killed)
-                {
-                    victim.ApplyStagger(info.StaggerDuration, direction, info.Impact);
-                    victim.ApplyKnockback(direction * info.KnockbackForce);
-                    RegisterComboHit();
-                }
-                else if (result == HitResult.Blocked)
-                {
-                    victim.ApplyKnockback(direction * (info.KnockbackForce * 0.3f));
-                }
-
-                CombatFeedback.Landed(move, in info, result, point, isPlayerAttacker: true);
-                AttackLanded?.Invoke(move, victim, result);
-            }
-        }
-
-        private static Vector3 ClosestPointOn(Combatant victim, Vector3 from)
-        {
-            // Spawning the spark on the surface of the victim rather than at their
-            // pivot is a small thing that makes hits look like contact.
-            var collider = victim.GetComponent<Collider>();
-            if (collider != null) return collider.ClosestPoint(from);
-            return victim.AimPoint;
+            if (result == HitResult.Hit || result == HitResult.Killed) RegisterComboHit();
+            AttackLanded?.Invoke(move, victim, result);
         }
 
         private void QueueFollowUp(AttackDefinition move)
         {
-            if (_queued != null || !move.InComboWindow(_moveTime)) return;
+            if (_queued != null || !_runner.InComboWindow) return;
 
             bool heavy = _heavyBuffer.Pending;
             bool light = _lightBuffer.Pending;
@@ -439,10 +365,8 @@ namespace Glowpulse.Player
         private void EndAttack()
         {
             _state = CombatState.Ready;
-            _move = null;
+            _runner.Cancel();
             _queued = null;
-            _moveTime = 0f;
-            _swingOpened = false;
             _player.SetCombatVelocity(Vector3.zero);
             _player.EndCombatAction();
         }
@@ -461,7 +385,7 @@ namespace Glowpulse.Player
         /// <summary>Called from the grab move's active frames to try to seize someone.</summary>
         private bool TrySeize(AttackDefinition move)
         {
-            Combatant victim = _hitbox.QuerySingle(transform, move, _combatant.Faction);
+            Combatant victim = _probe.QuerySingle(transform, move, _combatant.Faction);
             if (victim == null || !victim.CanBeGrabbed) return false;
 
             _held = victim;
@@ -564,10 +488,9 @@ namespace Glowpulse.Player
 
             _animator?.PlayAction(move.ClipId, 1f, 0.04f);
 
-            // The throw animation plays out as a normal recovery.
-            _move = move;
-            _moveTime = move.ActiveEnd + 0.001f;
-            _swingOpened = true;
+            // The throw was resolved by hand, so the runner picks the move up in
+            // recovery and simply plays out the rest of the animation.
+            _runner.SkipToRecovery(move);
             _state = CombatState.Attacking;
         }
 
@@ -613,10 +536,8 @@ namespace Glowpulse.Player
             if (_state == CombatState.Ready) return;
 
             _state = CombatState.Ready;
-            _move = null;
+            _runner.Cancel();
             _queued = null;
-            _moveTime = 0f;
-            _swingOpened = false;
             _comboCount = 0;
             ComboChanged?.Invoke(0);
 
@@ -630,11 +551,12 @@ namespace Glowpulse.Player
         {
             // The grab's active frames are checked after the move has advanced, so
             // the seize happens on the same frame the hitbox would have connected.
-            if (_state != CombatState.Attacking || _move == null) return;
-            if (_move.Kind != AttackKind.Grab) return;
-            if (!_move.IsActiveAt(_moveTime)) return;
+            AttackDefinition move = _runner.Move;
+            if (_state != CombatState.Attacking || move == null) return;
+            if (move.Kind != AttackKind.Grab) return;
+            if (!move.IsActiveAt(_runner.Time)) return;
 
-            TrySeize(_move);
+            TrySeize(move);
         }
 
         // ---- targeting -----------------------------------------------------------------------
@@ -707,7 +629,7 @@ namespace Glowpulse.Player
 
         private void OnDrawGizmosSelected()
         {
-            if (_move != null) MeleeHitbox.DrawGizmo(transform, _move);
+            if (_runner.Move != null) MeleeHitbox.DrawGizmo(transform, _runner.Move);
         }
     }
 }

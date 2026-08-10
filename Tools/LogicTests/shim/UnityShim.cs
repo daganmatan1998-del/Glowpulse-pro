@@ -553,6 +553,19 @@ namespace UnityEngine
         public T GetComponent<T>() where T : class => gameObject?.GetComponent<T>();
     }
 
+    public class ScriptableObject : Object
+    {
+        public static T CreateInstance<T>() where T : ScriptableObject, new() => new T();
+    }
+
+    [AttributeUsage(AttributeTargets.Class)]
+    public class CreateAssetMenuAttribute : Attribute
+    {
+        public string menuName { get; set; }
+        public string fileName { get; set; }
+        public int order { get; set; }
+    }
+
     public class GameObject : Object
     {
         private readonly List<Component> _components = new List<Component>();

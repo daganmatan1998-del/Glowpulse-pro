@@ -8,8 +8,8 @@ the next one starts.
 | 1 | Player, movement, third-person camera, lock-on, health and stamina | **Done** |
 | 2 | Combat: light/heavy attacks, combos, block, parry, counter, grab, hit feel | **Done** |
 | 3 | Enemy AI: three archetypes, state machine, encounter coordination | **Done** |
-| 4 | Open-world city | Next |
-| 5 | Civilian NPCs | |
+| 4 | Open-world city | **Done** |
+| 5 | Civilian NPCs | Next |
 | 6 | Mission system, "Clear the Street" | |
 | 7 | Progression: XP, levels, money, skill tree | |
 | 8 | HUD, pause, settings, mission and game-over screens | |
@@ -153,6 +153,51 @@ not constantly reshuffle.
 **Encounters.** `EncounterSpawner` owns a roster, spawns it when the player
 comes within range, and raises an event when the last enemy falls - which is
 what the mission system will hang objectives on.
+
+## Phase 4 - what exists
+
+**Plan first, build second.** `CityLayout` generates the city as pure data from
+a seed - road segments, junctions, building plots with a district, a height and
+a street-facing yaw, and named locations. No `GameObject` is touched, which is
+why the whole layout is testable: the suite checks the same seed always produces
+the same city, that different seeds differ, that no building ever stands in a
+carriageway, and that the player never spawns inside a wall. `CityBuilder` then
+realises that plan as geometry. Regenerating the city with a different seed is
+one field on `GameBootstrap`.
+
+**A block, not a plain.** Three by three blocks with a plaza cut into the
+middle, on roads wide enough to fight in, with pavements, kerbs, lane markings
+and crossings. Plots are subdivided along each block perimeter with occasional
+gaps left as alley mouths, so the back of a block is a genuinely different space
+from its frontage. This is deliberately a neighbourhood rather than a city -
+the brief asked for polish over size, and every street here is dressed.
+
+**Buildings.** `BuildingFactory` turns a plot into a mass with a ground floor
+that reads differently from the storeys above, a cornice line, a setback on the
+taller ones, and roof clutter so the skyline has texture. Detail is spent on the
+first six metres, because that is the only part the player stands next to:
+shopfront glazing divided into bays with mullions, a door, an awning, a lit
+sign. Districts change what the frontage is - commercial gets signage,
+industrial gets a roller shutter and a loading dock. Upper floors carry a window
+grid with a share of the panes lit, which is what stops facades reading as blank
+slabs at night.
+
+**Props.** Lamps with a real pool of light under them, benches with slats,
+bins, trees built from overlapping canopy masses, planters, hydrants, signs, bus
+shelters, parked cars, skips and crates. The cars and skips double as cover to
+fight around. Only a share of lamps carry an actual `Light`, because point
+lights are the expensive part and a warm pool every few metres is enough.
+
+**Performance.** `CityGeometry` collects every piece as a transform plus a mesh,
+batched by material, and welds them into combined meshes on build, so a street
+of several thousand boxes is a handful of draw calls. Batches are split before
+they overflow a 32-bit index buffer. Colliders are separate and much coarser
+than the visuals - one box per building, not one per window.
+
+**Arenas.** The layout marks open areas - the plaza, junctions, yards - as
+`CityLocation`s, and `PickArena` finds one near a point. Encounters are staged
+in real space in the city rather than on a flat proving ground, which is what
+the mission system will use to place fights.
 
 ## Conventions
 

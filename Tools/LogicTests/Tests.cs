@@ -6,6 +6,7 @@ using Glowpulse.Core.InputSystem;
 using Glowpulse.Core.Timing;
 using Glowpulse.AI;
 using Glowpulse.Enemies;
+using Glowpulse.World.City;
 using UnityEngine;
 
 namespace Glowpulse.LogicTests
@@ -30,6 +31,7 @@ namespace Glowpulse.LogicTests
             StateMachineTests();
             ArchetypeTests();
             DirectorTests();
+            CityTests();
 
             return Check.Report();
         }
@@ -790,6 +792,174 @@ namespace Glowpulse.LogicTests
                 Check.InRange(max, archetype.AttackCooldown,
                     archetype.AttackCooldown + archetype.AttackCooldownVariance + 0.01f,
                     "upper bound respected");
+            });
+        }
+
+        // ---- city layout ------------------------------------------------------------------------
+
+        private static CityLayout NewCity(int seed = 1234)
+        {
+            return CityLayout.Generate(CitySettings.Default, seed);
+        }
+
+        private static void CityTests()
+        {
+            Check.Run("A seed always produces the same city", () =>
+            {
+                CityLayout a = NewCity(777);
+                CityLayout b = NewCity(777);
+
+                Check.Equal(a.Plots.Count, b.Plots.Count, "same number of buildings");
+                Check.Equal(a.Locations.Count, b.Locations.Count, "same named places");
+
+                for (int i = 0; i < a.Plots.Count; i++)
+                {
+                    Check.Near(a.Plots[i].Center.x, b.Plots[i].Center.x, $"plot {i} x");
+                    Check.Near(a.Plots[i].Center.y, b.Plots[i].Center.y, $"plot {i} z");
+                    Check.Near(a.Plots[i].Height, b.Plots[i].Height, $"plot {i} height");
+                }
+            });
+
+            Check.Run("Different seeds produce different cities", () =>
+            {
+                CityLayout a = NewCity(1);
+                CityLayout b = NewCity(2);
+
+                bool identical = a.Plots.Count == b.Plots.Count;
+                if (identical)
+                {
+                    for (int i = 0; i < a.Plots.Count; i++)
+                    {
+                        if (Mathf.Abs(a.Plots[i].Height - b.Plots[i].Height) > 0.01f) { identical = false; break; }
+                    }
+                }
+
+                Check.False(identical, "two seeds do not generate the same layout");
+            });
+
+            Check.Run("The layout validates clean across many seeds", () =>
+            {
+                for (int seed = 0; seed < 25; seed++)
+                {
+                    CityLayout city = NewCity(seed * 9161 + 7);
+                    System.Collections.Generic.List<string> problems = city.Validate();
+                    foreach (string problem in problems) Check.True(false, $"seed {seed}: {problem}");
+                }
+            });
+
+            Check.Run("No building stands in the road", () =>
+            {
+                // The whole grid falls apart if a plot creeps into a carriageway,
+                // and it is invisible until you drive the camera into a wall.
+                for (int seed = 0; seed < 12; seed++)
+                {
+                    CityLayout city = NewCity(seed * 31 + 3);
+
+                    foreach (Plot plot in city.Plots)
+                    {
+                        foreach (RoadSegment road in city.Roads)
+                        {
+                            Vector2 delta = road.B - road.A;
+                            bool alongZ = Mathf.Abs(delta.y) > Mathf.Abs(delta.x);
+
+                            Vector2 roadCenter = (road.A + road.B) * 0.5f;
+                            Vector2 roadHalf = alongZ
+                                ? new Vector2(road.Width * 0.5f, Mathf.Abs(delta.y) * 0.5f)
+                                : new Vector2(Mathf.Abs(delta.x) * 0.5f, road.Width * 0.5f);
+
+                            float overlapX = plot.Size.x * 0.5f + roadHalf.x
+                                             - Mathf.Abs(plot.Center.x - roadCenter.x);
+                            float overlapZ = plot.Size.y * 0.5f + roadHalf.y
+                                             - Mathf.Abs(plot.Center.y - roadCenter.y);
+
+                            // Touching the kerb line is expected; crossing it is not.
+                            Check.False(overlapX > 0.05f && overlapZ > 0.05f,
+                                $"seed {seed}: a building overlaps the road by {overlapX:F2}");
+                        }
+                    }
+                }
+            });
+
+            Check.Run("The player never spawns inside a building", () =>
+            {
+                for (int seed = 0; seed < 20; seed++)
+                {
+                    CityLayout city = NewCity(seed * 101 + 5);
+                    var spawn = new Vector2(city.PlayerSpawn.x, city.PlayerSpawn.z);
+                    Check.False(city.IsInsideBuilding(spawn, 0.6f),
+                        $"seed {seed}: spawn point is inside a wall");
+                }
+            });
+
+            Check.Run("Every city has somewhere to stage a fight", () =>
+            {
+                for (int seed = 0; seed < 20; seed++)
+                {
+                    CityLayout city = NewCity(seed * 57 + 11);
+                    Check.Greater(city.Arenas.Count, 0, $"seed {seed}: has at least one arena");
+
+                    foreach (CityLocation arena in city.Arenas)
+                        Check.Greater(arena.Radius, 3f, $"seed {seed}: arena is big enough to fight in");
+                }
+            });
+
+            Check.Run("The square is always present and is the biggest arena", () =>
+            {
+                CityLayout city = NewCity(42);
+                CityLocation? plaza = city.NearestLocation(Vector3.zero, LocationKind.Plaza);
+                Check.True(plaza != null, "the city has a square");
+
+                foreach (CityLocation arena in city.Arenas)
+                    Check.True(plaza.Value.Radius >= arena.Radius - 0.01f,
+                        "nothing is more open than the square");
+            });
+
+            Check.Run("Arena selection respects the minimum distance", () =>
+            {
+                CityLayout city = NewCity(99);
+                Vector3 from = city.PlayerSpawn;
+
+                CityLocation? far = city.PickArena(from, minDistance: 25f);
+                Check.True(far != null, "an arena was chosen");
+                Check.Greater(Vector3.Distance(far.Value.Position, from), 24.9f,
+                    "the chosen arena is not on top of the player");
+            });
+
+            Check.Run("Building heights stay inside the configured range", () =>
+            {
+                CitySettings s = CitySettings.Default;
+                CityLayout city = NewCity(5150);
+
+                foreach (Plot plot in city.Plots)
+                {
+                    Check.InRange(plot.Height, s.MinHeight - 0.01f, s.MaxHeight + 0.01f,
+                        "height within range");
+                    Check.Greater(plot.Size.x, 0f, "footprint has width");
+                    Check.Greater(plot.Size.y, 0f, "footprint has depth");
+                }
+            });
+
+            Check.Run("The city is dense rather than sprawling", () =>
+            {
+                CityLayout city = NewCity(2024);
+
+                // The brief asks for a small, dense slice - so this is a real
+                // requirement, not an implementation detail.
+                Check.Greater(city.Plots.Count, 30, "the streets are actually built up");
+                Check.Less(city.Extent, 130f, "the slice stays walkable");
+                Check.Greater(city.Roads.Count, 5, "there is a street grid, not one road");
+            });
+
+            Check.Run("Junctions are named and evenly spread", () =>
+            {
+                CityLayout city = NewCity(8);
+                int junctions = 0;
+                foreach (CityLocation l in city.Locations)
+                    if (l.Kind == LocationKind.Intersection) junctions++;
+
+                CitySettings s = CitySettings.Default;
+                Check.Equal(junctions, (s.BlocksX + 1) * (s.BlocksZ + 1),
+                    "one junction per grid crossing");
             });
         }
 

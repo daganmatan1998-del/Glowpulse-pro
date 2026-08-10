@@ -4,7 +4,8 @@ A third-person open-world beat 'em up built in Unity with the Universal Render
 Pipeline. Explore a dense city, fight with a combo-driven melee system, take
 missions, and level up.
 
-Current status: **Phase 3 complete** - player, camera, melee combat, and enemy AI.
+Current status: **Phase 4 complete** - player, camera, melee combat, enemy AI, and
+the open-world city.
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the phase plan and what is done.
 
 ## Getting started
@@ -103,6 +104,8 @@ Assets/Scripts/
   VFX/           procedural impact effects
   Audio/         audio manager and procedural placeholder sounds
   World/         environment lighting and world building
+    City/        seeded city layout, geometry batching, buildings, palette
+    Props/       street furniture, trees, vehicles
   Editor/        project setup, URP setup, scene creation
 Tools/           offline compile and logic-test harnesses
 ```

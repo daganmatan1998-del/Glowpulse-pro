@@ -8,6 +8,7 @@ using Glowpulse.Enemies;
 using Glowpulse.Player;
 using Glowpulse.VFX;
 using Glowpulse.World;
+using Glowpulse.World.City;
 using UnityEngine;
 
 namespace Glowpulse.Core.Bootstrap
@@ -35,8 +36,13 @@ namespace Glowpulse.Core.Bootstrap
     public sealed class GameBootstrap : MonoBehaviour
     {
         [Header("World")]
-        [SerializeField] private WorldMode _worldMode = WorldMode.ProvingGround;
+        [SerializeField] private WorldMode _worldMode = WorldMode.City;
         [SerializeField] private TimeOfDayPreset _timeOfDay = TimeOfDayPreset.GoldenHour;
+
+        [Tooltip("Seed for the city layout. The same seed always produces the same city.")]
+        [SerializeField] private int _citySeed = 20260810;
+
+        [SerializeField] private CitySettings _citySettings;
 
         [Header("Player")]
         [SerializeField] private Vector3 _spawnPosition = new Vector3(0f, 1.5f, -6f);
@@ -47,8 +53,8 @@ namespace Glowpulse.Core.Bootstrap
         [SerializeField] private CameraConfig _cameraConfig;
 
         [Header("Training")]
-        [Tooltip("Spawns practice dummies in the proving ground so combat can be tested.")]
-        [SerializeField] private bool _spawnTrainingDummies = true;
+        [Tooltip("Spawns practice dummies. Useful in the proving ground, noise in the city.")]
+        [SerializeField] private bool _spawnTrainingDummies;
 
         [SerializeField] private int _trainingDummyCount = 2;
 
@@ -69,6 +75,9 @@ namespace Glowpulse.Core.Bootstrap
         public ThirdPersonCamera GameCamera { get; private set; }
         public EnvironmentLighting Lighting { get; private set; }
         public Transform WorldRoot { get; private set; }
+
+        /// <summary>The generated city, or null in the proving ground.</summary>
+        public CityLayout City { get; private set; }
 
         /// <summary>Raised once everything exists, for systems that need the assembled scene.</summary>
         public event System.Action<GameBootstrap> Ready;
@@ -150,16 +159,28 @@ namespace Glowpulse.Core.Bootstrap
             switch (_worldMode)
             {
                 case WorldMode.City:
-                    // The city arrives in the open-world phase. Until then the
-                    // proving ground stands in so the mode is already selectable.
-                    Debug.Log("[GameBootstrap] City mode is not built yet; using the proving ground.");
-                    ProvingGround.Build(WorldRoot);
+                    BuildCity();
                     break;
 
                 default:
                     ProvingGround.Build(WorldRoot);
                     break;
             }
+        }
+
+        private void BuildCity()
+        {
+            CitySettings settings = _citySettings != null ? _citySettings : CitySettings.Default;
+            City = CityLayout.Generate(settings, _citySeed);
+
+            // A malformed layout would show up as buildings inside each other, so
+            // it is worth one check at load rather than a puzzling screenshot.
+            System.Collections.Generic.List<string> problems = City.Validate();
+            if (problems.Count > 0)
+                Debug.LogWarning($"[City] layout problems:\n  - {string.Join("\n  - ", problems)}");
+
+            new CityBuilder(City).Build(WorldRoot);
+            _spawnPosition = City.PlayerSpawn + Vector3.up * 1.5f;
         }
 
         private void BuildPlayerAndCamera()
@@ -186,16 +207,30 @@ namespace Glowpulse.Core.Bootstrap
         }
 
         /// <summary>
-        /// One of each enemy type, far enough away that the player walks into the
-        /// fight rather than starting in it.
+        /// Stages encounters in the city's own open spaces - the square, the
+        /// loading docks - so a fight always has room to breathe, and always
+        /// somewhere the player has to walk to.
         /// </summary>
         private void SpawnTestEncounter(Vector3 playerSpawn)
         {
-            Vector3 center = playerSpawn + new Vector3(0f, 0f, 22f);
-            if (MathUtil.GroundPoint(center, out Vector3 grounded, 8f, 40f, GameLayers.WorldMask))
-                center = grounded;
+            if (City == null)
+            {
+                Vector3 center = playerSpawn + new Vector3(0f, 0f, 22f);
+                if (MathUtil.GroundPoint(center, out Vector3 grounded, 8f, 40f, GameLayers.WorldMask))
+                    center = grounded;
 
-            EncounterSpawner.Create("Test Encounter", center, WorldRoot, triggerRadius: 15f,
+                EncounterSpawner.Create("Test Encounter", center, WorldRoot, triggerRadius: 15f,
+                    new EnemyGroup(EnemyKind.Brawler, 2),
+                    new EnemyGroup(EnemyKind.Runner, 2),
+                    new EnemyGroup(EnemyKind.Bruiser, 1));
+                return;
+            }
+
+            CityLocation? arena = City.PickArena(playerSpawn, minDistance: 12f);
+            if (arena == null) return;
+
+            EncounterSpawner.Create($"Encounter - {arena.Value.Name}", arena.Value.Position,
+                WorldRoot, triggerRadius: Mathf.Max(14f, arena.Value.Radius + 6f),
                 new EnemyGroup(EnemyKind.Brawler, 2),
                 new EnemyGroup(EnemyKind.Runner, 2),
                 new EnemyGroup(EnemyKind.Bruiser, 1));

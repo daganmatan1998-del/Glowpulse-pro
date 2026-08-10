@@ -54,6 +54,8 @@
     <Compile Include="../../Assets/Scripts/AI/CombatDirector.cs" />
     <Compile Include="../../Assets/Scripts/Enemies/EnemyMoves.cs" />
     <Compile Include="../../Assets/Scripts/Enemies/EnemyArchetype.cs" />
+    <Compile Include="../../Assets/Scripts/World/City/CitySettings.cs" />
+    <Compile Include="../../Assets/Scripts/World/City/CityLayout.cs" />
   </ItemGroup>
 
 </Project>

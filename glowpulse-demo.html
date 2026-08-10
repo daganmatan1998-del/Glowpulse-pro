@@ -109,6 +109,83 @@
   button:focus-visible{outline:2px solid var(--cyan); outline-offset:3px}
   .hint{font-size:11.5px; color:var(--dim)}
   .tip{margin-top:18px; font-size:12px; color:var(--dim); line-height:1.6; border-left:2px solid var(--cyan); padding-left:12px}
+
+  /* ---- touch controls ---------------------------------------------- */
+  html,body{ touch-action:none; overscroll-behavior:none; -webkit-user-select:none; user-select:none;
+             -webkit-tap-highlight-color:transparent; }
+  #touch{ position:fixed; inset:0; display:none; pointer-events:none; z-index:10 }
+  body.touch #touch{ display:block }
+
+  #stick{ position:absolute; width:118px; height:118px; margin:-59px 0 0 -59px; border-radius:50%;
+          border:2px solid rgba(237,230,218,.3); background:rgba(11,12,14,.3);
+          opacity:0; transition:opacity .12s }
+  #stick.on{ opacity:1 }
+  #stick i{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px;
+            border-radius:50%; background:rgba(70,194,200,.5); border:1px solid rgba(237,230,218,.5) }
+  #stick.sprint{ border-color:var(--sun) }
+  #stick.sprint i{ background:rgba(255,210,161,.6) }
+
+  .pad{ position:absolute; right:calc(14px + env(safe-area-inset-right,0px)); bottom:calc(14px + env(safe-area-inset-bottom,0px));
+        display:grid; grid-template-columns:repeat(3,auto); gap:9px; align-items:end; justify-items:center;
+        pointer-events:auto }
+  .btn{ transform:none; border-radius:50%; display:grid; place-items:center; font-weight:900; letter-spacing:.02em;
+        color:var(--bone); background:rgba(20,22,26,.55); border:1.5px solid rgba(237,230,218,.28);
+        backdrop-filter:blur(4px); font-size:11px; text-transform:uppercase; line-height:1;
+        width:54px; height:54px; touch-action:none; transition:transform .07s, background .07s }
+  .btn.big{ width:78px; height:78px; font-size:13px; background:rgba(255,210,161,.16); border-color:rgba(255,210,161,.7) }
+  .btn.mid{ width:64px; height:64px; font-size:12px }
+  .btn.held,.btn:active{ transform:scale(.92); background:rgba(70,194,200,.35); border-color:var(--cyan) }
+  .btn.light{ border-color:rgba(255,210,161,.5) }
+  .btn.heavy{ border-color:rgba(216,86,63,.55) }
+  .btn.block{ border-color:rgba(70,194,200,.5) }
+
+  #pauseBtn{ position:absolute; right:calc(14px + env(safe-area-inset-right,0px)); top:calc(14px + env(safe-area-inset-top,0px));
+             width:42px; height:42px; font-size:14px; pointer-events:auto }
+
+  #rotate{ position:fixed; inset:0; z-index:40; display:none; place-items:center; text-align:center;
+           background:rgba(8,9,11,.96); padding:30px }
+  #rotate div{ max-width:26ch }
+  #rotate b{ display:block; font-size:20px; font-weight:900; letter-spacing:.02em; margin-bottom:8px }
+  #rotate span{ font-size:13px; color:var(--dim); line-height:1.6 }
+  body.portrait.touch #rotate{ display:grid }
+
+  /* ---- compact layout for phones ------------------------------------ */
+  body.touch #keys{ display:none }
+  @media (max-width: 960px), (pointer: coarse){
+    #obj{ left:12px; top:12px; padding:8px 14px 9px; min-width:0 }
+    #obj .t{ font-size:11.5px } #obj .c{ font-size:10.5px }
+    #vitals{ left:12px; top:74px; bottom:auto; width:210px; padding:9px 13px 10px }
+    #vitals .name{ font-size:12px } #vitals .lvl{ font-size:9.5px }
+    #vitals .bar{ height:9px } #vitals .bar.stam{ height:5px }
+    #foe{ width:min(300px,60vw); margin-left:calc(min(300px,60vw) / -2); top:12px; padding:7px 13px 9px }
+    #foe .fname{ font-size:11px } #foe .poise{ font-size:9px }
+    #combo{ right:16px; top:120px }
+    #comboN{ font-size:40px } #comboT{ font-size:9px; letter-spacing:.22em }
+    #banner{ top:32% } #banner div{ font-size:17px }
+    .card{ padding:22px 20px 20px } .brand h1{ font-size:clamp(34px,11vw,56px) }
+    .lede{ font-size:13px } .grid{ gap:5px 18px; margin-top:16px; padding-top:14px }
+    .grid dt,.grid dd{ font-size:10.5px }
+    .tip{ font-size:11px; margin-top:12px }
+    .veil{ padding:14px } button{ padding:12px 24px }
+  }
+  /* The whole page blocks touch scrolling so the game never pans, but the
+     start card still has to be readable and its button always reachable. */
+  .veil{ touch-action:pan-y }
+  .card{ display:flex; flex-direction:column; touch-action:pan-y; -webkit-overflow-scrolling:touch }
+  @media (max-height: 520px){
+    #vitals{ top:64px; width:186px }
+    .card{ max-height:94vh; overflow-y:auto; padding:16px 18px 0 }
+    .brand h1{ font-size:clamp(30px,8vw,44px) }
+    .lede{ font-size:12px; line-height:1.5; max-width:76ch }
+    .grid{ grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:3px 16px; margin-top:12px; padding-top:11px }
+    .grid dt,.grid dd{ font-size:10px }
+    .tip{ font-size:10.5px; margin-top:10px; line-height:1.5 }
+    /* Pinned so "Start fighting" is never scrolled out of reach. */
+    .go{ position:sticky; bottom:0; margin-top:12px; padding:12px 0 14px;
+         background:linear-gradient(180deg, rgba(14,16,19,0), rgba(14,16,19,.96) 28%) }
+    .go button{ padding:11px 24px; font-size:12px }
+    .hint{ font-size:10.5px }
+  }
   @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
 </style>
 
@@ -150,6 +227,25 @@
   </div></div>
 </div>
 
+
+<div id="touch">
+  <div id="stick"><i></i></div>
+  <div class="pad">
+    <button class="btn" data-act="grab">Grab</button>
+    <button class="btn" data-act="jump">Jump</button>
+    <button class="btn" data-act="dodge">Dodge</button>
+    <button class="btn block" data-act="block">Block</button>
+    <button class="btn mid heavy" data-act="heavy">Heavy</button>
+    <button class="btn big light" data-act="light">Hit</button>
+  </div>
+  <button class="btn" id="pauseBtn" data-act="pause">II</button>
+</div>
+
+<div id="rotate"><div>
+  <b>Turn your phone sideways</b>
+  <span>Glowpulse needs landscape — there is a street to see and a fight to read.</span>
+</div></div>
+
 <div class="veil" id="veil">
   <div class="card">
     <div class="brand"><h1>Glowpulse</h1><em>Combat Demo</em></div>
@@ -157,7 +253,7 @@
       Same move data, same combo chains, same <b>poise</b> and <b>hit-stop</b>, and the same
       <b>combat director</b> that lets only one or two enemies swing at a time while the rest circle you.</p>
 
-    <div class="grid">
+    <div class="grid" id="ctrlGrid">
       <div class="kv"><dt>W A S D</dt><dd>Move</dd></div>
       <div class="kv"><dt>Mouse</dt><dd>Look</dd></div>
       <div class="kv"><dt>Shift</dt><dd>Sprint</dd></div>
@@ -180,7 +276,7 @@
 
     <div class="go">
       <button id="play"><span>Start fighting</span></button>
-      <span class="hint">Click locks the mouse. Press Esc to release it.</span>
+      <span class="hint" id="startHint">Click locks the mouse. Press Esc to release it.</span>
     </div>
   </div>
 </div>
@@ -279,8 +375,13 @@ const cam = {
   right:v3(1,0,0), up:v3(0,1,0), fwd:v3(0,0,1)
 };
 
+/* Quality drops the internal resolution rather than the visual design, which
+   is what keeps a phone at a playable frame rate without the game looking
+   like a different game. */
+const Quality={ scale:1, cap:2, windowDist:52, boxDist:96, propDist:62, fx:1 };
+
 function resize(){
-  DPR = Math.min(devicePixelRatio||1, 2);
+  DPR = Math.min(devicePixelRatio||1, Quality.cap) * Quality.scale;
   VW = canvas.clientWidth; VH = canvas.clientHeight;
   canvas.width = Math.max(1,(VW*DPR)|0); canvas.height = Math.max(1,(VH*DPR)|0);
   ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -564,10 +665,10 @@ function drawCharacter(rig, alive){
   // arms
   drawLimb(jointPos(B.UpperArmL), jointPos(B.LowerArmL), r*0.85, torso);
   drawLimb(jointPos(B.LowerArmL), jointPos(B.HandL), r*0.72, skin);
-  drawBlob(matXform(W[B.HandL], v3(0,-r*0.85,0)), r*0.82, accent);
+  drawBlob(matXform(W[B.HandL], v3(0,-r*0.8,0)), r*0.78, skin);
   drawLimb(jointPos(B.UpperArmR), jointPos(B.LowerArmR), r*0.85, torso);
   drawLimb(jointPos(B.LowerArmR), jointPos(B.HandR), r*0.72, skin);
-  drawBlob(matXform(W[B.HandR], v3(0,-r*0.85,0)), r*0.82, accent);
+  drawBlob(matXform(W[B.HandR], v3(0,-r*0.8,0)), r*0.78, skin);
 
   // legs
   drawLimb(jointPos(B.ThighL), jointPos(B.ShinL), r*1.02, legs);
@@ -1023,6 +1124,7 @@ function sfx(name,pos,vol=1,jitter=.08){
 /* ---- particles --------------------------------------------------------- */
 const parts=[];
 function spark(pos,dir,count,speed,color,life,size,gravity=9){
+  count=Math.max(3,Math.round(count*Quality.fx));
   for(let i=0;i<count;i++){
     const spread=.55;
     const d={x:dir.x+rand(-spread,spread), y:dir.y+rand(-spread*.7,spread), z:dir.z+rand(-spread,spread)};
@@ -1032,6 +1134,7 @@ function spark(pos,dir,count,speed,color,life,size,gravity=9){
   }
 }
 function dust(pos,count,radius,life,size,color){
+  count=Math.max(2,Math.round(count*Quality.fx));
   for(let i=0;i<count;i++){
     const a=Math.random()*TAU, r=Math.random()*radius;
     parts.push({p:{x:pos.x+Math.cos(a)*r, y:pos.y+rand(0,.25), z:pos.z+Math.sin(a)*r},
@@ -1359,13 +1462,13 @@ function drawWorld(){
   for(const b of World.boxes){
     if(b.noDraw) continue;
     const d=flatDist(b,cam.pos);
-    if(d>96) continue;
+    if(d>Quality.boxDist) continue;
     const x={m:[1,0,0,0,1,0,0,0,1], p:{x:b.x,y:b.h/2,z:b.z}};
-    drawBox(x,{x:b.hw,y:b.h/2,z:b.hd}, b.rgb, d<52?b.windows:null);
+    drawBox(x,{x:b.hw,y:b.h/2,z:b.hd}, b.rgb, d<Quality.windowDist?b.windows:null);
   }
   const metal=hexRGB('#3A3D42'), glow=hexRGB('#FFD9A0');
   for(const p of World.props){
-    if(flatDist(p,cam.pos)>62) continue;
+    if(flatDist(p,cam.pos)>Quality.propDist) continue;
     if(p.type==='lamp'){
       const base={x:p.x,y:0,z:p.z};
       drawLimb(base,{x:p.x,y:4.4,z:p.z},.07,metal);
@@ -2524,7 +2627,7 @@ function sweepWorld(origin,dir,maxDist,radius){
 }
 
 /* ---- game state -------------------------------------------------------- */
-const Game={ running:false, over:false, won:false, kills:0, total:0, xp:0, money:0, started:0 };
+const Game={ running:false, over:false, won:false, kills:0, total:0, xp:0, money:0, started:0, manualPause:false };
 const el=id=>document.getElementById(id);
 const HUD={
   vitals(){
@@ -2607,7 +2710,7 @@ function startGame(){
   Director.focus=player;
   spawnEncounter();
   Game.running=true; Game.over=false; Game.won=false; Game.kills=0; Game.xp=0; Game.money=0;
-  Game.started=unscaled;
+  Game.started=unscaled; Game.manualPause=false; Time_.paused=false;
   CamState.init=false; cam.yaw=0; cam.pitch=14*DEG;
   el('banner').classList.remove('on'); bannerTimer=0;
   HUD.objective(); HUD.combo(); HUD.vitals();
@@ -2623,16 +2726,17 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyG') Input.grab=true;
   if(e.code==='Space'){ Input.jump=true; e.preventDefault(); }
   if(e.code==='ControlLeft'||e.code==='ControlRight'||e.code==='KeyC') Input.dodge=true;
-  if(e.code==='KeyR'&&Game.running){ startGame(); }
+  if(e.code==='KeyR'&&Game.running){ startGame(); Game.manualPause=false; Time_.paused=false; }
   if(e.code==='KeyM'){ Audio_.muted=!Audio_.muted; showBanner(Audio_.muted?'Sound off':'Sound on'); }
   if(e.code==='Escape') releasePointer();
   if(['Space','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup',e=>{ Keys[e.code]=false; });
 canvas.addEventListener('mousedown',e=>{
+  if(Touch.enabled) return;
   if(e.button===0){ Mouse.left=true; Input.light=true; }
   if(e.button===2){ Mouse.right=true; }
-  if(document.pointerLockElement!==canvas) canvas.requestPointerLock();
+  if(document.pointerLockElement!==canvas && !isCoarse()) canvas.requestPointerLock();
 });
 addEventListener('mouseup',e=>{ if(e.button===0) Mouse.left=false; if(e.button===2) Mouse.right=false; });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
@@ -2641,7 +2745,151 @@ addEventListener('mousemove',e=>{
   Mouse.dx+=e.movementX; Mouse.dy+=e.movementY;
 });
 function releasePointer(){ if(document.pointerLockElement) document.exitPointerLock(); }
+
+/* ---- touch controls ----------------------------------------------------
+   Left thumb drives a floating stick that appears wherever it lands; right
+   thumb drags the camera. Pushing the stick to its edge is sprint, which
+   keeps the button cluster down to the things you actually press. */
+const Touch={
+  enabled:false, stickId:null, lookId:null,
+  ox:0, oy:0, mx:0, my:0, sprint:false, block:false, jumpHeld:false,
+  lookDX:0, lookDY:0, lastX:0, lastY:0
+};
+const STICK_R=52;
+
+function enableTouch(){
+  if(Touch.enabled) return;
+  Touch.enabled=true;
+  document.body.classList.add('touch');
+  updateOrientation();
+  writeControlHints();
+}
+function isCoarse(){
+  return (window.matchMedia && matchMedia('(pointer: coarse)').matches) || (navigator.maxTouchPoints||0)>0;
+}
+function updateOrientation(){
+  const portrait = innerHeight > innerWidth;
+  document.body.classList.toggle('portrait', portrait);
+  if(Touch.enabled && Game.running && !Game.over) Time_.paused = portrait || Game.manualPause;
+}
+addEventListener('orientationchange', ()=>setTimeout(updateOrientation,120));
+addEventListener('resize', updateOrientation);
+
+const stickEl=()=>document.getElementById('stick');
+
+canvas.addEventListener('pointerdown', e=>{
+  if(e.pointerType==='mouse') return;
+  enableTouch();
+  // Capture keeps a finger that slides over a button still driving the stick.
+  // It can legitimately fail (a pointer that is already gone), and it must
+  // never abort the rest of this handler.
+  try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+  const half = VW*0.46;
+  if(e.clientX < half && Touch.stickId===null){
+    Touch.stickId=e.pointerId; Touch.ox=e.clientX; Touch.oy=e.clientY;
+    Touch.mx=0; Touch.my=0;
+    const st=stickEl();
+    st.style.left=Touch.ox+'px'; st.style.top=Touch.oy+'px';
+    st.classList.add('on'); st.firstElementChild.style.transform='translate(0,0)';
+  } else if(Touch.lookId===null){
+    Touch.lookId=e.pointerId; Touch.lastX=e.clientX; Touch.lastY=e.clientY;
+  }
+  e.preventDefault();
+},{passive:false});
+
+canvas.addEventListener('pointermove', e=>{
+  if(e.pointerType==='mouse') return;
+  if(e.pointerId===Touch.stickId){
+    let dx=e.clientX-Touch.ox, dy=e.clientY-Touch.oy;
+    const m=Math.hypot(dx,dy);
+    const clampM=Math.min(m,STICK_R);
+    if(m>1e-3){ dx=dx/m*clampM; dy=dy/m*clampM; }
+    Touch.mx=dx/STICK_R; Touch.my=-dy/STICK_R;
+    Touch.sprint = m > STICK_R*0.94;
+    const st=stickEl();
+    st.classList.toggle('sprint',Touch.sprint);
+    st.firstElementChild.style.transform=`translate(${dx}px,${dy}px)`;
+  } else if(e.pointerId===Touch.lookId){
+    Touch.lookDX+=e.clientX-Touch.lastX; Touch.lookDY+=e.clientY-Touch.lastY;
+    Touch.lastX=e.clientX; Touch.lastY=e.clientY;
+  }
+  e.preventDefault();
+},{passive:false});
+
+function endTouch(e){
+  if(e.pointerId===Touch.stickId){
+    Touch.stickId=null; Touch.mx=0; Touch.my=0; Touch.sprint=false;
+    const st=stickEl(); st.classList.remove('on','sprint');
+  } else if(e.pointerId===Touch.lookId){ Touch.lookId=null; }
+}
+canvas.addEventListener('pointerup',endTouch);
+canvas.addEventListener('pointercancel',endTouch);
+
+// action buttons
+document.querySelectorAll('#touch .btn').forEach(btn=>{
+  const act=btn.dataset.act;
+  const press=e=>{
+    e.preventDefault(); e.stopPropagation();
+    enableTouch();
+    btn.classList.add('held');
+    if(act==='light') Input.light=true;
+    else if(act==='heavy') Input.heavy=true;
+    else if(act==='dodge') Input.dodge=true;
+    else if(act==='grab') Input.grab=true;
+    else if(act==='jump'){ Input.jump=true; Touch.jumpHeld=true; }
+    else if(act==='block') Touch.block=true;
+    else if(act==='pause') togglePause();
+  };
+  const release=e=>{
+    e.preventDefault(); e.stopPropagation();
+    btn.classList.remove('held');
+    if(act==='block') Touch.block=false;
+    if(act==='jump') Touch.jumpHeld=false;
+  };
+  btn.addEventListener('pointerdown',press,{passive:false});
+  btn.addEventListener('pointerup',release,{passive:false});
+  btn.addEventListener('pointercancel',release,{passive:false});
+  btn.addEventListener('pointerleave',release,{passive:false});
+  btn.addEventListener('contextmenu',e=>e.preventDefault());
+});
+
+function togglePause(){
+  if(!Game.running||Game.over) return;
+  Game.manualPause=!Game.manualPause;
+  Time_.paused=Game.manualPause;
+  if(Game.manualPause) showBanner('Paused',true);
+  else { document.getElementById('banner').classList.remove('on'); bannerTimer=0; }
+}
+
+/* Double-tapping the right side toggles lock-on, which keeps a dedicated
+   button off an already busy thumb cluster. */
+let lastTapAt=0;
+canvas.addEventListener('pointerup', e=>{
+  if(e.pointerType==='mouse') return;
+  if(e.clientX < VW*0.46) return;
+  const t=performance.now();
+  if(t-lastTapAt<300) Input.lock=true;
+  lastTapAt=t;
+});
+
+function writeControlHints(){
+  const grid=document.getElementById('ctrlGrid');
+  if(!grid) return;
+  grid.innerHTML=[
+    ['Left thumb','Move — push to edge to sprint'],
+    ['Right thumb','Look around'],
+    ['Hit','Light attack'],
+    ['Heavy','Heavy attack'],
+    ['Block','Hold to guard, tap on impact to parry'],
+    ['Dodge','Roll'],
+    ['Grab','Grab, then Heavy to throw'],
+    ['Double-tap right','Lock on']
+  ].map(([k,v])=>`<div class="kv"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  const hint=document.getElementById('startHint');
+  if(hint) hint.textContent='Best in landscape. Tap the pause button any time.';
+}
 document.addEventListener('pointerlockchange',()=>{
+  if(Touch.enabled) return;
   const locked=document.pointerLockElement===canvas;
   Time_.paused = Game.running && !locked && !Game.over;
   if(!locked && Game.running && !Game.over) showBanner('Paused — click to resume',true);
@@ -2654,26 +2902,45 @@ function sampleInput(dtUnscaled){
     const d=KEYMAP[code];
     if(d==='f') my+=1; else if(d==='b') my-=1; else if(d==='l') mx-=1; else mx+=1;
   }
+  if(Touch.enabled && (Touch.stickId!==null)){ mx=Touch.mx; my=Touch.my; }
   const m=Math.hypot(mx,my); if(m>1){ mx/=m; my/=m; }
   Input.move.x=mx; Input.move.y=my;
 
-  Input.look.x=Mouse.dx*0.13; Input.look.y=Mouse.dy*0.13;
-  Mouse.dx=0; Mouse.dy=0;
+  Input.look.x=Mouse.dx*0.13 + Touch.lookDX*0.16;
+  Input.look.y=Mouse.dy*0.13 + Touch.lookDY*0.16;
+  Mouse.dx=0; Mouse.dy=0; Touch.lookDX=0; Touch.lookDY=0;
 
-  Input.sprint=!!(Keys.ShiftLeft||Keys.ShiftRight);
-  Input.block=Mouse.right||!!Keys.KeyQ;
-  Input.jumpHeld=!!Keys.Space;
+  Input.sprint=!!(Keys.ShiftLeft||Keys.ShiftRight)||Touch.sprint;
+  Input.block=Mouse.right||!!Keys.KeyQ||Touch.block;
+  Input.jumpHeld=!!Keys.Space||!!Touch.jumpHeld;
 }
 function clearEdges(){ Input.jump=false; Input.dodge=false; Input.light=false; Input.heavy=false; Input.grab=false; }
 
 /* ---- main loop --------------------------------------------------------- */
 let last=performance.now()/1000;
+
+/* Watch the real frame time and step the internal resolution down before the
+   game starts feeling heavy, then let it climb back when there is headroom.
+   Phones vary far too much to pick a fixed quality up front. */
+const Perf={ avg:16, steps:[1,0.82,0.66,0.54], step:0, cooldown:0 };
+function adaptQuality(dtReal){
+  Perf.avg = Perf.avg*0.92 + dtReal*1000*0.08;
+  if(Perf.cooldown>0){ Perf.cooldown-=dtReal; return; }
+
+  if(Perf.avg>30 && Perf.step<Perf.steps.length-1){
+    Perf.step++; Quality.scale=Perf.steps[Perf.step]; Perf.cooldown=1.6; resize();
+  } else if(Perf.avg<17 && Perf.step>0){
+    Perf.step--; Quality.scale=Perf.steps[Perf.step]; Perf.cooldown=3.5; resize();
+  }
+}
+
 function frame(){
   requestAnimationFrame(frame);
   const t=performance.now()/1000;
   let dtReal=Math.min(.05,t-last); last=t;
   unscaled+=dtReal;
 
+  adaptQuality(dtReal);
   resizeIfNeeded();
   sampleInput(dtReal);
 
@@ -2793,13 +3060,32 @@ function drawVignette(){
 }
 
 /* ---- boot -------------------------------------------------------------- */
+(function setupViewport(){
+  // The artifact host owns <head>, so the viewport tag is installed at runtime.
+  let m=document.querySelector('meta[name=viewport]');
+  if(!m){ m=document.createElement('meta'); m.name='viewport'; document.head.appendChild(m); }
+  m.content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+})();
+
+(function pickQuality(){
+  const coarse=isCoarse();
+  const small=Math.min(innerWidth,innerHeight)<820;
+  if(coarse||small){
+    // Phones spend their budget on fill rate, so trim draw distance first and
+    // resolution second; the fight in front of you is unchanged.
+    Quality.cap=1.6; Quality.windowDist=34; Quality.boxDist=68;
+    Quality.propDist=44; Quality.fx=.6;
+  }
+  if(coarse){ enableTouch(); }
+})();
+
 resize();
 el('play').addEventListener('click',()=>{
   audioInit();
   if(Audio_.ctx&&Audio_.ctx.state==='suspended') Audio_.ctx.resume();
   el('veil').classList.add('hide');
   startGame();
-  canvas.requestPointerLock();
+  if(!Touch.enabled && !isCoarse()) canvas.requestPointerLock();
 });
 buildWorld();
 player=makePlayer({x:0,y:0,z:-6});

@@ -48,13 +48,22 @@ next to a downed enemy is a finisher.
 ## Playable browser demo
 
 `glowpulse-demo.html` is a self-contained port of the combat systems to the
-browser - open it in any browser, no server or build step. It exists because
+browser - open it in any browser, on desktop or phone, with no server or build
+step. It exists because
 combat feel cannot be judged from source, and it transcribes the real data:
 the same move timings, combo chains, poise values, parry windows, hit-stop
 durations, enemy archetypes and combat-director rules as the C#. Rendering is
 a small software 3D pipeline over Canvas 2D driving the same bone hierarchy
 and procedural animation, and the sound effects are synthesised at runtime the
 same way `ProceduralAudio` does.
+
+On a touch device it switches to a floating thumbstick - pushed to its edge to
+sprint - a drag-to-look right side, and a thumb cluster for hit, heavy, block,
+dodge, grab and jump, with a double-tap to lock on. It watches its own frame
+time and steps the internal resolution down before the game starts feeling
+heavy, then climbs back when there is headroom, so draw distance and effect
+density adapt rather than the design changing. Landscape is required, and the
+game pauses if the phone is turned upright.
 
 It is a testing aid, not a second codebase - the Unity project remains the
 game. Playing it has already caught bugs that source review did not, such as

@@ -45,6 +45,22 @@ differently. Block just as a hit lands to parry it, then attack for a counter.
 Dodge through an attack for the same counter. Grab, then heavy, to throw. Heavy
 next to a downed enemy is a finisher.
 
+## Playable browser demo
+
+`glowpulse-demo.html` is a self-contained port of the combat systems to the
+browser - open it in any browser, no server or build step. It exists because
+combat feel cannot be judged from source, and it transcribes the real data:
+the same move timings, combo chains, poise values, parry windows, hit-stop
+durations, enemy archetypes and combat-director rules as the C#. Rendering is
+a small software 3D pipeline over Canvas 2D driving the same bone hierarchy
+and procedural animation, and the sound effects are synthesised at runtime the
+same way `ProceduralAudio` does.
+
+It is a testing aid, not a second codebase - the Unity project remains the
+game. Playing it has already caught bugs that source review did not, such as
+enemies holding at a preferred range just outside their own attack range and
+therefore never committing to a swing.
+
 ## Verification without the Unity Editor
 
 The project ships two harnesses so changes can be checked in CI or from a

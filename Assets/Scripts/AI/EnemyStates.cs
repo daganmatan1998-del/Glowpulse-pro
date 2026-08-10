@@ -207,6 +207,16 @@ namespace Glowpulse.AI
             {
                 CombatDirector director = CombatDirector.Instance;
 
+                // With its cooldown up, the enemy closes the gap rather than
+                // circling. Preferred range sits outside attack range, so an
+                // enemy that only ever holds station can never actually reach
+                // far enough to commit to a swing.
+                if (brain.AttackReady && brain.CanSeeTarget && brain.HasTarget)
+                {
+                    brain.MoveTo(brain.Target.Transform.position, archetype.ChaseSpeed * 0.8f);
+                    return;
+                }
+
                 if (distance < archetype.PreferredRange * 0.7f)
                 {
                     brain.BackAway(archetype.StrafeSpeed);

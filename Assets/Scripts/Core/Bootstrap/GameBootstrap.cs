@@ -3,6 +3,7 @@ using Glowpulse.Audio;
 using Glowpulse.CameraSystem;
 using Glowpulse.Core.Characters;
 using Glowpulse.Core.InputSystem;
+using Glowpulse.Core.Settings;
 using Glowpulse.Core.Timing;
 using Glowpulse.Enemies;
 using Glowpulse.Player;
@@ -105,11 +106,18 @@ namespace Glowpulse.Core.Bootstrap
 
             _instance = this;
 
+            // Settings come first: the camera, the input provider and the enemy
+            // factory all read them while they are being built.
+            GameSettings.Load();
+
             ApplyQualityDefaults();
-            CombatFeedbackDefaults();
             GameLayers.ApplyCollisionMatrix();
 
             BuildServices();
+
+            // After the services exist, because this pushes settings into them.
+            ApplyPlayerSettings();
+
             BuildWorld();
             BuildPlayerAndCamera();
 
@@ -120,18 +128,46 @@ namespace Glowpulse.Core.Bootstrap
             Ready?.Invoke(this);
         }
 
+        private void OnEnable() => GameSettings.Changed += ApplyPlayerSettings;
+
+        private void OnDisable() => GameSettings.Changed -= ApplyPlayerSettings;
+
         private void OnDestroy()
         {
             if (_instance == this) _instance = null;
         }
 
-        private static void CombatFeedbackDefaults()
+        /// <summary>
+        /// Last chance to write settings out. Unity calls this on quit and when
+        /// a mobile app is backgrounded, which is the only save point some
+        /// players ever reach.
+        /// </summary>
+        private void OnApplicationQuit() => GameSettings.Flush();
+
+        private void OnApplicationPause(bool paused)
         {
-            // Reset from whatever the settings menu last applied, so entering play
-            // mode never inherits a previous session's accessibility overrides.
+            if (paused) GameSettings.Flush();
+        }
+
+        /// <summary>
+        /// Pushes the saved settings into the systems that cache them. Also called
+        /// whenever the settings change, so a slider moved in the pause menu is
+        /// felt without leaving the menu.
+        /// </summary>
+        private static void ApplyPlayerSettings()
+        {
             Combat.CombatFeedback.HitStopScale = 1f;
-            Combat.CombatFeedback.ShakeScale = 1f;
-            Combat.CombatFeedback.SlowMotionEnabled = true;
+            Combat.CombatFeedback.ShakeScale = GameSettings.ShakeScale;
+            Combat.CombatFeedback.SlowMotionEnabled = GameSettings.SlowMotionEnabled;
+
+            AudioManager audio = AudioManager.Instance;
+            if (audio != null) audio.MasterVolume = GameSettings.MasterVolume;
+
+            // How many enemies may swing at once is the single biggest lever on
+            // how hard a fight feels, so difficulty owns it.
+            CombatDirector director = CombatDirector.Instance;
+            if (director != null)
+                director.MaxSimultaneousAttackers = GameSettings.Profile.SimultaneousAttackers;
         }
 
         private void ApplyQualityDefaults()

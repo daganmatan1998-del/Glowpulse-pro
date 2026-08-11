@@ -1,5 +1,6 @@
 using Glowpulse.Combat;
 using Glowpulse.Core.Characters;
+using Glowpulse.Core.Settings;
 using UnityEngine;
 
 namespace Glowpulse.Enemies
@@ -82,6 +83,13 @@ namespace Glowpulse.Enemies
         /// <summary>How strongly it prefers a flanking slot over a frontal one.</summary>
         [Range(0f, 1f)] public float FlankPreference;
 
+        /// <summary>
+        /// Scales the damage every attack from this enemy deals. One on the
+        /// presets; the difficulty setting is what moves it, so raising a
+        /// difficulty never means editing a move table.
+        /// </summary>
+        public float DamageMultiplier = 1f;
+
         [Header("Rewards")]
         public int ExperienceReward;
         public int MoneyReward;
@@ -93,6 +101,30 @@ namespace Glowpulse.Enemies
         {
             return Mathf.Max(0.15f, AttackCooldown + Random.Range(-AttackCooldownVariance, AttackCooldownVariance));
         }
+
+        /// <summary>
+        /// A copy of this archetype bent by a difficulty profile.
+        ///
+        /// A copy, not an edit: the presets are cached singletons, so scaling one
+        /// in place would compound every time an enemy spawned and a Hard run
+        /// would drift into absurdity within a minute. Returning a new instance
+        /// also means the preset stays the honest record of the Normal balance.
+        /// </summary>
+        public EnemyArchetype Scaled(in DifficultyProfile profile)
+        {
+            EnemyArchetype copy = Clone();
+
+            copy.Health *= Mathf.Max(0.1f, profile.EnemyHealth);
+            copy.DamageMultiplier *= Mathf.Max(0.05f, profile.EnemyDamage);
+
+            copy.AttackCooldown *= Mathf.Max(0.1f, profile.EnemyCooldown);
+            copy.AttackCooldownVariance *= Mathf.Max(0.1f, profile.EnemyCooldown);
+            copy.ReactionTime *= Mathf.Max(0.1f, profile.EnemyReaction);
+
+            return copy;
+        }
+
+        public EnemyArchetype Clone() => (EnemyArchetype)MemberwiseClone();
 
         // ---- presets ----------------------------------------------------------
 

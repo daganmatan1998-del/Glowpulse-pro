@@ -144,7 +144,11 @@ namespace Glowpulse.Enemies
             _archetype = archetype;
             if (animator != null) _animator = animator;
             _combatant.Configure(archetype);
-            _runner.DamageMultiplier = 1f;
+
+            // The archetype carries the difficulty scaling, so every move this
+            // enemy throws inherits it without the move table knowing anything
+            // about difficulty.
+            _runner.DamageMultiplier = Mathf.Max(0.05f, archetype.DamageMultiplier);
         }
 
         private void OnEnable()

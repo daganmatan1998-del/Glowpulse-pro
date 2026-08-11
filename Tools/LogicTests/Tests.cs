@@ -8,6 +8,7 @@ using Glowpulse.AI;
 using Glowpulse.Enemies;
 using Glowpulse.World.City;
 using Glowpulse.World.Npc;
+using Glowpulse.Core.Settings;
 using UnityEngine;
 
 namespace Glowpulse.LogicTests
@@ -35,6 +36,8 @@ namespace Glowpulse.LogicTests
             CityTests();
             PedestrianTests();
             CivilianPoseTests();
+            BindingTests();
+            DifficultyTests();
 
             return Check.Report();
         }
@@ -1219,6 +1222,225 @@ namespace Glowpulse.LogicTests
 
                 Check.True(PoseLibrary.Has(CombatPoses.LightJab), "combat clips survive");
                 Check.True(PoseLibrary.Has(CivilianPoses.Cower), "civilian clips are present");
+            });
+        }
+
+        // ---- key bindings -------------------------------------------------------------------------
+
+        private static void BindingTests()
+        {
+            Check.Run("The defaults are the controls the game already shipped with", () =>
+            {
+                var b = new InputBindings();
+
+                Check.True(b.Primary(GameAction.MoveForward) == KeyCode.W, "W moves forward");
+                Check.True(b.Primary(GameAction.Attack) == KeyCode.Mouse0, "left mouse attacks");
+                Check.True(b.Primary(GameAction.HeavyAttack) == KeyCode.F, "F is heavy");
+                Check.True(b.Primary(GameAction.Block) == KeyCode.Mouse1, "right mouse blocks");
+                Check.True(b.Secondary(GameAction.Block) == KeyCode.Q, "and so does Q");
+                Check.True(b.Primary(GameAction.Dodge) == KeyCode.LeftControl, "Ctrl dodges");
+                Check.True(b.Secondary(GameAction.Dodge) == KeyCode.C, "and so does C");
+                Check.True(b.Primary(GameAction.Sprint) == KeyCode.LeftShift, "Shift sprints");
+                Check.True(b.Primary(GameAction.Jump) == KeyCode.Space, "Space jumps");
+                Check.True(b.Primary(GameAction.Interact) == KeyCode.E, "E interacts");
+
+                Check.True(b.IsComplete(), "every action starts bound");
+            });
+
+            Check.Run("Every listed action is unique and covers the whole set", () =>
+            {
+                var seen = new System.Collections.Generic.HashSet<GameAction>();
+                foreach (GameAction a in GameActions.Listed)
+                    Check.True(seen.Add(a), $"{a} is listed once");
+
+                Check.Equal(GameActions.Listed.Length, (int)GameAction.Count,
+                    "the settings screen lists every rebindable action");
+            });
+
+            Check.Run("Rebinding takes the key away from whoever had it", () =>
+            {
+                var b = new InputBindings();
+
+                // Put jump on F, which heavy attack owns.
+                b.Rebind(GameAction.Jump, KeyCode.F);
+
+                Check.True(b.Primary(GameAction.Jump) == KeyCode.F, "jump took the key");
+                Check.True(b.Primary(GameAction.HeavyAttack) == KeyCode.None,
+                    "heavy attack lost it rather than silently sharing it");
+                Check.True(b.Conflict(KeyCode.F, GameAction.Jump) == null, "no action still claims F");
+                Check.False(b.IsComplete(), "and the screen can see something is unbound");
+            });
+
+            Check.Run("Conflicts are found before a rebind happens", () =>
+            {
+                var b = new InputBindings();
+
+                GameAction? clash = b.Conflict(KeyCode.F, GameAction.Jump);
+                Check.True(clash == GameAction.HeavyAttack, "F belongs to heavy attack");
+
+                Check.True(b.Conflict(KeyCode.Q, GameAction.Block) == null,
+                    "an action never conflicts with itself");
+                Check.True(b.Conflict(KeyCode.None, GameAction.Jump) == null,
+                    "an unbound slot is not a conflict");
+                Check.True(b.Conflict(KeyCode.Z, GameAction.Jump) == null, "a free key is free");
+            });
+
+            Check.Run("An action never holds the same key in both slots", () =>
+            {
+                var b = new InputBindings();
+
+                // Dodge is Ctrl / C by default; put C in the primary slot too.
+                b.Rebind(GameAction.Dodge, KeyCode.C);
+
+                Check.True(b.Primary(GameAction.Dodge) == KeyCode.C, "primary took it");
+                Check.True(b.Secondary(GameAction.Dodge) == KeyCode.None,
+                    "the duplicate was cleared instead of showing as 'C / C'");
+            });
+
+            Check.Run("Reset to defaults undoes everything", () =>
+            {
+                var b = new InputBindings();
+
+                b.Rebind(GameAction.Jump, KeyCode.F);
+                b.Rebind(GameAction.Attack, KeyCode.Z);
+                b.Rebind(GameAction.MoveForward, KeyCode.I);
+
+                b.ResetToDefaults();
+
+                var fresh = new InputBindings();
+                for (int i = 0; i < (int)GameAction.Count; i++)
+                {
+                    var a = (GameAction)i;
+                    Check.True(b.Primary(a) == fresh.Primary(a), $"{a} primary restored");
+                    Check.True(b.Secondary(a) == fresh.Secondary(a), $"{a} secondary restored");
+                }
+            });
+
+            Check.Run("A save written by an older build is repaired, not rejected", () =>
+            {
+                var b = new InputBindings();
+
+                // Simulate a file where an action was never written: strip it.
+                b.Rebind(GameAction.Jump, KeyCode.Z);          // jump = Z
+                b.Rebind(GameAction.Attack, KeyCode.Z);        // steals Z, leaving jump unbound
+                Check.False(b.IsComplete(), "jump is genuinely unbound first");
+
+                b.Repair();
+
+                Check.True(b.IsComplete(), "repair leaves nothing unbound");
+                Check.True(b.Primary(GameAction.Jump) == KeyCode.Space,
+                    "the missing action fell back to its default");
+                Check.True(b.Primary(GameAction.Attack) == KeyCode.Z,
+                    "a deliberate rebind was not thrown away");
+            });
+
+            Check.Run("Labels read like something a player can act on", () =>
+            {
+                var b = new InputBindings();
+
+                Check.Equal(b.Label(GameAction.Attack), "LMB", "mouse buttons read as LMB");
+                Check.Equal(b.Label(GameAction.Block), "RMB / Q", "two keys read as a pair");
+                Check.Equal(b.Label(GameAction.HeavyAttack), "F", "a single key reads plainly");
+                Check.Equal(InputBindings.KeyName(KeyCode.LeftControl), "Left Ctrl", "modifiers are spelt out");
+
+                b.Rebind(GameAction.Jump, KeyCode.F);
+                Check.Equal(b.Label(GameAction.HeavyAttack), "Unbound",
+                    "an action with nothing on it says so");
+            });
+
+            Check.Run("A clone is independent of what it came from", () =>
+            {
+                var a = new InputBindings();
+                InputBindings copy = a.Clone();
+
+                copy.Rebind(GameAction.Jump, KeyCode.Z);
+
+                Check.True(a.Primary(GameAction.Jump) == KeyCode.Space, "the original is untouched");
+                Check.True(copy.Primary(GameAction.Jump) == KeyCode.Z, "the copy changed");
+
+                a.CopyFrom(copy);
+                Check.True(a.Primary(GameAction.Jump) == KeyCode.Z, "and it can be copied back");
+            });
+        }
+
+        // ---- difficulty ---------------------------------------------------------------------------
+
+        private static void DifficultyTests()
+        {
+            Check.Run("Normal is the shipped balance, exactly", () =>
+            {
+                DifficultyProfile p = DifficultyProfile.For(Difficulty.Normal);
+
+                Check.Near(p.EnemyDamage, 1f, "damage untouched");
+                Check.Near(p.EnemyHealth, 1f, "health untouched");
+                Check.Near(p.EnemyCooldown, 1f, "pacing untouched");
+                Check.Near(p.EnemyReaction, 1f, "reactions untouched");
+
+                EnemyArchetype baseline = EnemyArchetype.Brawler();
+                EnemyArchetype scaled = baseline.Scaled(p);
+
+                Check.Near(scaled.Health, baseline.Health, "a Normal brawler is the brawler");
+                Check.Near(scaled.DamageMultiplier, baseline.DamageMultiplier, "and hits the same");
+                Check.Near(scaled.AttackCooldown, baseline.AttackCooldown, "at the same pace");
+            });
+
+            Check.Run("Easy is gentler and Hard is harsher on every axis", () =>
+            {
+                DifficultyProfile easy = DifficultyProfile.For(Difficulty.Easy);
+                DifficultyProfile hard = DifficultyProfile.For(Difficulty.Hard);
+
+                Check.Less(easy.EnemyDamage, 1f, "easy enemies hit softer");
+                Check.Less(easy.EnemyHealth, 1f, "easy enemies have less health");
+                Check.Greater(easy.EnemyCooldown, 1f, "easy enemies wait longer between attacks");
+                Check.Greater(easy.EnemyReaction, 1f, "easy enemies are slower to react");
+
+                Check.Greater(hard.EnemyDamage, 1f, "hard enemies hit harder");
+                Check.Greater(hard.EnemyHealth, 1f, "hard enemies have more health");
+                Check.Less(hard.EnemyCooldown, 1f, "hard enemies attack more often");
+                Check.Less(hard.EnemyReaction, 1f, "hard enemies react faster");
+
+                // Simultaneous attackers is the biggest lever on pressure.
+                Check.Less(easy.SimultaneousAttackers, DifficultyProfile.Normal.SimultaneousAttackers,
+                    "easy sends them in one at a time");
+                Check.Greater(hard.SimultaneousAttackers, DifficultyProfile.Normal.SimultaneousAttackers,
+                    "hard lets them gang up");
+            });
+
+            Check.Run("Scaling copies rather than editing the shared preset", () =>
+            {
+                EnemyArchetype preset = EnemyArchetype.Bruiser();
+                float health = preset.Health;
+                float cooldown = preset.AttackCooldown;
+
+                // Scale the same preset repeatedly: a mutating implementation
+                // would compound and send Hard into absurdity within a minute.
+                for (int i = 0; i < 20; i++)
+                    preset.Scaled(DifficultyProfile.For(Difficulty.Hard));
+
+                Check.Near(EnemyArchetype.Bruiser().Health, health, "the preset still reports its own health");
+                Check.Near(EnemyArchetype.Bruiser().AttackCooldown, cooldown, "and its own pacing");
+            });
+
+            Check.Run("Every difficulty produces a fightable enemy", () =>
+            {
+                foreach (Difficulty d in System.Enum.GetValues(typeof(Difficulty)))
+                {
+                    DifficultyProfile p = DifficultyProfile.For(d);
+
+                    foreach (EnemyKind kind in System.Enum.GetValues(typeof(EnemyKind)))
+                    {
+                        EnemyArchetype a = EnemyArchetype.Get(kind).Scaled(p);
+
+                        Check.Greater(a.Health, 0f, $"{d} {kind} has health");
+                        Check.Greater(a.DamageMultiplier, 0f, $"{d} {kind} can deal damage");
+                        Check.Greater(a.AttackCooldown, 0f, $"{d} {kind} attacks eventually");
+                        Check.Greater(a.ReactionTime, 0f, $"{d} {kind} takes a moment to react");
+                    }
+
+                    Check.Greater(p.SimultaneousAttackers, 0, $"{d} lets somebody attack");
+                    Check.True(!string.IsNullOrEmpty(DifficultyProfile.DisplayName(d)), $"{d} has a name");
+                    Check.True(!string.IsNullOrEmpty(DifficultyProfile.Describe(d)), $"{d} explains itself");
+                }
             });
         }
 

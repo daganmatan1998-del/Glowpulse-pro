@@ -58,6 +58,9 @@
     <Compile Include="../../Assets/Scripts/World/City/CityLayout.cs" />
     <Compile Include="../../Assets/Scripts/World/Npc/PedestrianNetwork.cs" />
     <Compile Include="../../Assets/Scripts/World/Npc/CivilianPoses.cs" />
+    <Compile Include="../../Assets/Scripts/Core/Settings/Difficulty.cs" />
+    <Compile Include="../../Assets/Scripts/Core/Settings/GameAction.cs" />
+    <Compile Include="../../Assets/Scripts/Core/Settings/InputBindings.cs" />
   </ItemGroup>
 
 </Project>

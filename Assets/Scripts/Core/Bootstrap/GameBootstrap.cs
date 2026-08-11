@@ -7,6 +7,7 @@ using Glowpulse.Core.Settings;
 using Glowpulse.Core.Timing;
 using Glowpulse.Enemies;
 using Glowpulse.Player;
+using Glowpulse.Stages;
 using Glowpulse.UI;
 using Glowpulse.VFX;
 using Glowpulse.World;
@@ -23,7 +24,10 @@ namespace Glowpulse.Core.Bootstrap
         ProvingGround = 0,
 
         /// <summary>The open-world city.</summary>
-        City = 1
+        City = 1,
+
+        /// <summary>The staged campaign: five arenas, in order.</summary>
+        Campaign = 2
     }
 
     /// <summary>
@@ -39,7 +43,7 @@ namespace Glowpulse.Core.Bootstrap
     public sealed class GameBootstrap : MonoBehaviour
     {
         [Header("World")]
-        [SerializeField] private WorldMode _worldMode = WorldMode.City;
+        [SerializeField] private WorldMode _worldMode = WorldMode.Campaign;
         [SerializeField] private TimeOfDayPreset _timeOfDay = TimeOfDayPreset.GoldenHour;
 
         [Tooltip("Seed for the city layout. The same seed always produces the same city.")]
@@ -77,6 +81,7 @@ namespace Glowpulse.Core.Bootstrap
         [SerializeField] private int _targetFrameRate = -1;
 
         private static GameBootstrap _instance;
+        private UiRoot _ui;
 
         public static GameBootstrap Instance => _instance;
 
@@ -92,6 +97,9 @@ namespace Glowpulse.Core.Bootstrap
         public PedestrianNetwork Pavements { get; private set; }
 
         public CrowdDirector Crowd { get; private set; }
+
+        /// <summary>Runs the staged campaign, or null in the other world modes.</summary>
+        public StageDirector Stages { get; private set; }
 
         /// <summary>Raised once everything exists, for systems that need the assembled scene.</summary>
         public event System.Action<GameBootstrap> Ready;
@@ -109,7 +117,9 @@ namespace Glowpulse.Core.Bootstrap
 
             // Settings come first: the camera, the input provider and the enemy
             // factory all read them while they are being built.
-            GameSettings.Load();
+            // Settings and progression share one file, so the stage count has to
+            // be known before the save is repaired against it.
+            GameSettings.Load(StageCatalogue.Count);
 
             ApplyQualityDefaults();
             GameLayers.ApplyCollisionMatrix();
@@ -201,6 +211,7 @@ namespace Glowpulse.Core.Bootstrap
             // anything the world build wants to say.
             UiRoot ui = UiRoot.Install(gameObject);
             PauseMenu.Install(ui.MenuLayer);
+            _ui = ui;
 
             Combat.CombatPoses.EnsureRegistered();
             World.Npc.CivilianPoses.EnsureRegistered();
@@ -215,6 +226,11 @@ namespace Glowpulse.Core.Bootstrap
 
             switch (_worldMode)
             {
+                case WorldMode.Campaign:
+                    // The arenas are built by the stage director as each stage is
+                    // entered, so nothing is built here.
+                    break;
+
                 case WorldMode.City:
                     BuildCity();
                     break;
@@ -270,6 +286,15 @@ namespace Glowpulse.Core.Bootstrap
             if (director != null) director.Focus = Player.transform;
 
             PopulateStreets();
+
+            if (_worldMode == WorldMode.Campaign)
+            {
+                // The campaign owns spawning, so the free-roam test encounter and
+                // the dummies stay out of it.
+                Stages = StageDirector.Install(this, _ui);
+                Stages.Resume();
+                return;
+            }
 
             if (_spawnTrainingDummies) SpawnTrainingDummies(spawn);
             if (_spawnTestEncounter) SpawnTestEncounter(spawn);

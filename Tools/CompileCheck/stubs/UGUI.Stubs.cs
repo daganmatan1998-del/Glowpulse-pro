@@ -61,11 +61,10 @@ namespace UnityEngine.UI
         public bool maskable { get; set; }
     }
 
-    public enum FillMethod { Horizontal, Vertical, Radial90, Radial180, Radial360 }
-
     public class Image : MaskableGraphic
     {
         public enum Type { Simple, Sliced, Tiled, Filled }
+        public enum FillMethod { Horizontal, Vertical, Radial90, Radial180, Radial360 }
         public enum OriginHorizontal { Left, Right }
         public Sprite sprite { get; set; }
         public Sprite overrideSprite { get; set; }

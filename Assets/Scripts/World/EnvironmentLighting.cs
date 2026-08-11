@@ -7,14 +7,6 @@ using UnityEngine.Rendering.Universal;
 namespace Glowpulse.World
 {
     /// <summary>Named lighting presets for the city. Each one sets sun, ambient, fog and grading together.</summary>
-    public enum TimeOfDayPreset
-    {
-        Noon = 0,
-        GoldenHour = 1,
-        Dusk = 2,
-        Night = 3
-    }
-
     /// <summary>
     /// Owns the scene's atmosphere: directional sun, ambient light, fog, sky and
     /// the post-processing stack. Keeping it in one component means the whole

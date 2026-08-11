@@ -37,9 +37,13 @@ namespace Glowpulse.Combat
         /// </summary>
         public static event System.Action<Vector3, float> Commotion;
 
-        private static void RaiseCommotion(Vector3 point, float severity)
+        /// <summary>
+        /// Reports a commotion from outside the normal hit pipeline - a boss
+        /// changing phase, an explosion, anything the crowd should react to.
+        /// </summary>
+        public static void RaiseCommotion(Vector3 point, float severity)
         {
-            Commotion?.Invoke(point, severity);
+            Commotion?.Invoke(point, Mathf.Clamp01(severity));
         }
 
         /// <summary>A hit that landed on a character.</summary>

@@ -66,6 +66,30 @@ namespace Glowpulse.Enemies
             _resistance = Mathf.Clamp01(archetype.DamageResistance);
         }
 
+        /// <summary>
+        /// Swaps the archetype's combat numbers without touching current health or
+        /// stamina. Used by a boss changing phase - re-running Configure would
+        /// heal it to full, which is not a phase change, it is a reset.
+        /// </summary>
+        public void Retune(EnemyArchetype archetype)
+        {
+            if (archetype == null) return;
+
+            _archetype = archetype;
+
+            // Raise the ceiling without refilling: a boss that gets tougher keeps
+            // the damage it has already taken.
+            Health?.SetMax(archetype.Health, preserveRatio: false);
+
+            _maxPoise = Mathf.Max(1f, archetype.Poise);
+            _poise = Mathf.Min(_poise, _maxPoise);
+            _poiseRegen = archetype.PoiseRegenPerSecond;
+            _resistance = Mathf.Clamp01(archetype.DamageResistance);
+        }
+
+        /// <summary>Restores the stagger budget. Used to make a beat uninterruptible.</summary>
+        public void RefillPoise() => _poise = _maxPoise;
+
         protected override float ModifyIncomingDamage(float amount, in DamageInfo info)
         {
             return amount * (1f - _resistance);

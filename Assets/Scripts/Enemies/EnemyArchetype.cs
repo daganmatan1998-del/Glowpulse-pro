@@ -5,7 +5,10 @@ using UnityEngine;
 
 namespace Glowpulse.Enemies
 {
-    /// <summary>The three enemy roles. Encounters mix them deliberately.</summary>
+    /// <summary>
+    /// The enemy roles. Stages mix them deliberately, and the mix is what stops
+    /// a fight from feeling like the same fight with more health bars.
+    /// </summary>
     public enum EnemyKind
     {
         /// <summary>Balanced: walks in, trades, occasionally blocks. The baseline.</summary>
@@ -15,7 +18,19 @@ namespace Glowpulse.Enemies
         Bruiser = 1,
 
         /// <summary>Fast and evasive: flanks, jabs, backs off. Pressures from behind.</summary>
-        Runner = 2
+        Runner = 2,
+
+        /// <summary>Guards constantly and punishes a whiffed swing. Answered by grabs.</summary>
+        Defender = 3,
+
+        /// <summary>Fast, tough and canny at once. The step up in every late stage.</summary>
+        Elite = 4,
+
+        /// <summary>A named brawl at the end of a stage. Heavy, relentless, no flinching.</summary>
+        MiniBoss = 5,
+
+        /// <summary>The last fight. Changes behaviour as its health falls.</summary>
+        FinalBoss = 6
     }
 
     /// <summary>
@@ -129,6 +144,7 @@ namespace Glowpulse.Enemies
         // ---- presets ----------------------------------------------------------
 
         private static EnemyArchetype _brawler, _bruiser, _runner;
+        private static EnemyArchetype _defender, _elite, _miniBoss, _finalBoss;
 
         public static EnemyArchetype Get(EnemyKind kind)
         {
@@ -136,8 +152,18 @@ namespace Glowpulse.Enemies
             {
                 case EnemyKind.Bruiser: return Bruiser();
                 case EnemyKind.Runner: return Runner();
+                case EnemyKind.Defender: return Defender();
+                case EnemyKind.Elite: return Elite();
+                case EnemyKind.MiniBoss: return MiniBoss();
+                case EnemyKind.FinalBoss: return FinalBoss();
                 default: return Brawler();
             }
+        }
+
+        /// <summary>True for the fights a stage should treat as its headline act.</summary>
+        public static bool IsBoss(EnemyKind kind)
+        {
+            return kind == EnemyKind.MiniBoss || kind == EnemyKind.FinalBoss;
         }
 
         public static EnemyArchetype Brawler()
@@ -258,10 +284,190 @@ namespace Glowpulse.Enemies
             return _runner;
         }
 
+        /// <summary>
+        /// Blocks far more than anything else and hangs back at the edge of its
+        /// own reach, so a whiffed swing is punished. Beating one means opening
+        /// the guard - a grab, a parry, a heavy - rather than out-damaging it.
+        /// </summary>
+        public static EnemyArchetype Defender()
+        {
+            if (_defender != null) return _defender;
+
+            _defender = new EnemyArchetype
+            {
+                Kind = EnemyKind.Defender,
+                DisplayName = "Defender",
+                Style = CharacterStyle.Defender(),
+                Health = 120f,
+                Stamina = 140f,
+
+                // Moderate poise but a huge guard: the answer is to break the
+                // guard, not to out-trade it.
+                Poise = 42f,
+                PoiseRegenPerSecond = 12f,
+                DamageResistance = 0.1f,
+                WalkSpeed = 1.9f,
+                ChaseSpeed = 3.4f,
+                StrafeSpeed = 2.4f,
+                TurnSpeed = 420f,
+                Acceleration = 11f,
+                SightRange = 17f,
+                SightHalfAngle = 78f,
+                HearingRange = 24f,
+                ReactionTime = 0.26f,
+                PreferredRange = 2.6f,
+                AttackRange = 2.2f,
+
+                // Long gaps between attacks - it is waiting for the player to
+                // commit, which is the whole personality.
+                AttackCooldown = 2.1f,
+                AttackCooldownVariance = 0.5f,
+                BlockChance = 0.72f,
+                RetreatChance = 0.45f,
+                FlankPreference = 0.15f,
+                ExperienceReward = 45,
+                MoneyReward = 30,
+                Moves = EnemyMoves.Brawler()
+            };
+
+            return _defender;
+        }
+
+        /// <summary>
+        /// Fast, tough and patient at once. No single stat is extreme; what makes
+        /// an elite hard is that none of the usual answers works cleanly.
+        /// </summary>
+        public static EnemyArchetype Elite()
+        {
+            if (_elite != null) return _elite;
+
+            _elite = new EnemyArchetype
+            {
+                Kind = EnemyKind.Elite,
+                DisplayName = "Elite",
+                Style = CharacterStyle.Elite(),
+                Health = 165f,
+                Stamina = 130f,
+                Poise = 58f,
+                PoiseRegenPerSecond = 15f,
+                DamageResistance = 0.12f,
+                WalkSpeed = 2.4f,
+                ChaseSpeed = 5.2f,
+                StrafeSpeed = 3.2f,
+                TurnSpeed = 620f,
+                Acceleration = 16f,
+                SightRange = 21f,
+                SightHalfAngle = 88f,
+                HearingRange = 30f,
+                ReactionTime = 0.18f,
+                PreferredRange = 2.7f,
+                AttackRange = 2.4f,
+                AttackCooldown = 1.15f,
+                AttackCooldownVariance = 0.35f,
+                BlockChance = 0.4f,
+                RetreatChance = 0.35f,
+                FlankPreference = 0.6f,
+                DamageMultiplier = 1.15f,
+                ExperienceReward = 110,
+                MoneyReward = 70,
+                Moves = EnemyMoves.Elite()
+            };
+
+            return _elite;
+        }
+
+        /// <summary>
+        /// The end of a stage. Enormous poise so nothing the player does
+        /// interrupts it - the fight is about spacing and openings, not pressure.
+        /// </summary>
+        public static EnemyArchetype MiniBoss()
+        {
+            if (_miniBoss != null) return _miniBoss;
+
+            _miniBoss = new EnemyArchetype
+            {
+                Kind = EnemyKind.MiniBoss,
+                DisplayName = "Bulldozer",
+                Style = CharacterStyle.MiniBoss(),
+                Health = 420f,
+                Stamina = 200f,
+                Poise = 190f,
+                PoiseRegenPerSecond = 26f,
+                DamageResistance = 0.24f,
+                WalkSpeed = 1.9f,
+                ChaseSpeed = 4.1f,
+                StrafeSpeed = 1.6f,
+                TurnSpeed = 240f,
+                Acceleration = 8f,
+                SightRange = 24f,
+                SightHalfAngle = 80f,
+                HearingRange = 40f,
+                ReactionTime = 0.3f,
+                PreferredRange = 3.1f,
+                AttackRange = 2.9f,
+                AttackCooldown = 1.9f,
+                AttackCooldownVariance = 0.45f,
+                BlockChance = 0.08f,
+                RetreatChance = 0f,
+                FlankPreference = 0f,
+                DamageMultiplier = 1.3f,
+                ExperienceReward = 320,
+                MoneyReward = 220,
+                Moves = EnemyMoves.MiniBoss()
+            };
+
+            return _miniBoss;
+        }
+
+        /// <summary>
+        /// The last fight. Its phases live on <see cref="BossBrain"/>; the numbers
+        /// here are phase one, and the brain scales speed and pacing as health
+        /// falls rather than swapping in a different archetype.
+        /// </summary>
+        public static EnemyArchetype FinalBoss()
+        {
+            if (_finalBoss != null) return _finalBoss;
+
+            _finalBoss = new EnemyArchetype
+            {
+                Kind = EnemyKind.FinalBoss,
+                DisplayName = "Kaskade",
+                Style = CharacterStyle.FinalBoss(),
+                Health = 680f,
+                Stamina = 240f,
+                Poise = 150f,
+                PoiseRegenPerSecond = 30f,
+                DamageResistance = 0.2f,
+                WalkSpeed = 2.3f,
+                ChaseSpeed = 5f,
+                StrafeSpeed = 3f,
+                TurnSpeed = 480f,
+                Acceleration = 15f,
+                SightRange = 30f,
+                SightHalfAngle = 110f,
+                HearingRange = 50f,
+                ReactionTime = 0.16f,
+                PreferredRange = 3f,
+                AttackRange = 2.6f,
+                AttackCooldown = 1.5f,
+                AttackCooldownVariance = 0.4f,
+                BlockChance = 0.3f,
+                RetreatChance = 0.2f,
+                FlankPreference = 0.35f,
+                DamageMultiplier = 1.35f,
+                ExperienceReward = 900,
+                MoneyReward = 600,
+                Moves = EnemyMoves.FinalBoss()
+            };
+
+            return _finalBoss;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
             _brawler = _bruiser = _runner = null;
+            _defender = _elite = _miniBoss = _finalBoss = null;
         }
     }
 }

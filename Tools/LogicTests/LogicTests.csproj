@@ -61,6 +61,10 @@
     <Compile Include="../../Assets/Scripts/Core/Settings/Difficulty.cs" />
     <Compile Include="../../Assets/Scripts/Core/Settings/GameAction.cs" />
     <Compile Include="../../Assets/Scripts/Core/Settings/InputBindings.cs" />
+    <Compile Include="../../Assets/Scripts/SaveSystem/SaveData.cs" />
+    <Compile Include="../../Assets/Scripts/World/TimeOfDayPreset.cs" />
+    <Compile Include="../../Assets/Scripts/Stages/StageDefinition.cs" />
+    <Compile Include="../../Assets/Scripts/Stages/StageCatalogue.cs" />
   </ItemGroup>
 
 </Project>

@@ -102,6 +102,84 @@ namespace Glowpulse.Core.Characters
             };
         }
 
+        /// <summary>
+        /// Heavy guard, muted colours. The steel-blue accent is the tell: this is
+        /// the one you cannot simply out-hit.
+        /// </summary>
+        public static CharacterStyle Defender()
+        {
+            return new CharacterStyle
+            {
+                Height = 1.86f,
+                Build = 1.18f,
+                Skin = Hex("A87A55"),
+                Torso = Hex("2E3A44"),
+                Legs = Hex("22282E"),
+                Shoes = Hex("14171A"),
+                Hair = Hex("1A1614"),
+                Accent = Hex("8FB4CC"),
+                AccentGlow = 0.9f
+            };
+        }
+
+        /// <summary>Sharp silhouette, hot violet accent. Reads as dangerous at a glance.</summary>
+        public static CharacterStyle Elite()
+        {
+            return new CharacterStyle
+            {
+                Height = 1.88f,
+                Build = 1.08f,
+                Skin = Hex("B4835C"),
+                Torso = Hex("2A2233"),
+                Legs = Hex("1B1722"),
+                Shoes = Hex("121016"),
+                Hair = Hex("21191F"),
+                Accent = Hex("C77DFF"),
+                AccentGlow = 1.5f
+            };
+        }
+
+        /// <summary>
+        /// The mini-boss is the biggest thing on the street, and shirtless for the
+        /// same reason the player is: bulk has to be visible from across an arena.
+        /// </summary>
+        public static CharacterStyle MiniBoss()
+        {
+            return new CharacterStyle
+            {
+                Height = 2.16f,
+                Build = 1.62f,
+                Skin = Hex("9E7048"),
+                Torso = Hex("9E7048"),
+                Legs = Hex("2A2118"),
+                Shoes = Hex("15110C"),
+                Hair = Hex("120E0A"),
+                Accent = Hex("E0913A"),
+                AccentGlow = 1.2f,
+                Shirtless = true,
+                Tattoo = Hex("2A1408")
+            };
+        }
+
+        /// <summary>The last fight, in white and burning orange so it owns the frame.</summary>
+        public static CharacterStyle FinalBoss()
+        {
+            return new CharacterStyle
+            {
+                Height = 2.02f,
+                Build = 1.34f,
+                Skin = Hex("C29060"),
+                Torso = Hex("C29060"),
+                Legs = Hex("15161B"),
+                Shoes = Hex("0E0F12"),
+                Hair = Hex("E8E2D6"),
+                Accent = Hex("FF7A3D"),
+                AccentGlow = 2.2f,
+                Shirtless = true,
+                Tattoo = Hex("3A1206")
+            };
+        }
+
         /// <summary>Deterministic civilian palette so a crowd looks varied but stable across runs.</summary>
         public static CharacterStyle Civilian(int seed)
         {

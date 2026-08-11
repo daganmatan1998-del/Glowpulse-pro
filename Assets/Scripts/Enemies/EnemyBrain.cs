@@ -151,6 +151,18 @@ namespace Glowpulse.Enemies
             _runner.DamageMultiplier = Mathf.Max(0.05f, archetype.DamageMultiplier);
         }
 
+        /// <summary>
+        /// Swaps the archetype's numbers mid-fight without rebuilding the enemy.
+        /// Used by <see cref="BossBrain"/> for phase changes; the state machine,
+        /// current target and animation all continue uninterrupted.
+        /// </summary>
+        public void Retune(EnemyArchetype archetype)
+        {
+            if (archetype == null) return;
+            _archetype = archetype;
+            _runner.DamageMultiplier = Mathf.Max(0.05f, archetype.DamageMultiplier);
+        }
+
         private void OnEnable()
         {
             _combatant.Staggered += HandleStaggered;

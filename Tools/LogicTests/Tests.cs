@@ -9,6 +9,8 @@ using Glowpulse.Enemies;
 using Glowpulse.World.City;
 using Glowpulse.World.Npc;
 using Glowpulse.Core.Settings;
+using Glowpulse.Stages;
+using Glowpulse.SaveSystem;
 using UnityEngine;
 
 namespace Glowpulse.LogicTests
@@ -38,6 +40,8 @@ namespace Glowpulse.LogicTests
             CivilianPoseTests();
             BindingTests();
             DifficultyTests();
+            StageTests();
+            ProgressionTests();
 
             return Check.Report();
         }
@@ -1441,6 +1445,266 @@ namespace Glowpulse.LogicTests
                     Check.True(!string.IsNullOrEmpty(DifficultyProfile.DisplayName(d)), $"{d} has a name");
                     Check.True(!string.IsNullOrEmpty(DifficultyProfile.Describe(d)), $"{d} explains itself");
                 }
+            });
+        }
+
+        // ---- stages -------------------------------------------------------------------------------
+
+        private static void StageTests()
+        {
+            Check.Run("Every stage is playable and completable", () =>
+            {
+                System.Collections.Generic.List<string> problems = StageCatalogue.ValidateAll();
+
+                if (problems.Count > 0)
+                    foreach (string p in problems) Check.True(false, p);
+                else
+                    Check.True(true, "the whole progression validates");
+
+                Check.Equal(StageCatalogue.Count, 5, "there are five stages");
+            });
+
+            Check.Run("Stages are named, numbered and in order", () =>
+            {
+                for (int i = 0; i < StageCatalogue.Count; i++)
+                {
+                    StageDefinition stage = StageCatalogue.Get(i);
+
+                    Check.Equal(stage.Index, i, $"stage {i} knows its place");
+                    Check.Equal(stage.Number, i + 1, $"stage {i} displays as {i + 1}");
+                    Check.Equal(stage.DisplayNumber, "STAGE " + (i + 1), $"stage {i} title");
+                    Check.True(!string.IsNullOrEmpty(stage.Tagline), $"stage {i} has a tagline");
+                    Check.True(!string.IsNullOrEmpty(stage.ObjectiveText), $"stage {i} has an objective");
+                }
+            });
+
+            Check.Run("No two stages are the same fight", () =>
+            {
+                var arenas = new System.Collections.Generic.HashSet<ArenaKind>();
+                var rosters = new System.Collections.Generic.HashSet<string>();
+
+                for (int i = 0; i < StageCatalogue.Count; i++)
+                {
+                    StageDefinition stage = StageCatalogue.Get(i);
+
+                    Check.True(arenas.Add(stage.Arena), $"stage {stage.Number} has its own arena");
+
+                    // The roster is the other half of a stage's identity - five
+                    // different rooms with the same enemies is still one fight.
+                    var roster = new System.Collections.Generic.List<string>();
+                    foreach (EnemyWave w in stage.Waves) roster.Add(w.Kind + "x" + w.Count);
+                    roster.Sort();
+
+                    Check.True(rosters.Add(string.Join(",", roster)),
+                        $"stage {stage.Number} has its own enemy composition");
+                }
+            });
+
+            Check.Run("The progression gets harder rather than just longer", () =>
+            {
+                StageDefinition first = StageCatalogue.Get(0);
+                StageDefinition last = StageCatalogue.Last;
+
+                Check.False(first.HasBoss, "the first stage is not a boss fight");
+                Check.True(last.HasBoss, "the last stage is");
+
+                // Rewards must rise, or there is no reason to go forward.
+                for (int i = 1; i < StageCatalogue.Count; i++)
+                {
+                    Check.Greater(StageCatalogue.Get(i).ExperienceReward,
+                        StageCatalogue.Get(i - 1).ExperienceReward, $"stage {i + 1} pays more XP");
+                    Check.Greater(StageCatalogue.Get(i).MoneyReward,
+                        StageCatalogue.Get(i - 1).MoneyReward, $"stage {i + 1} pays more money");
+                }
+
+                Check.True(first.HasCivilians, "the streets have people on them");
+                Check.False(last.HasCivilians, "a rooftop showdown does not");
+            });
+
+            Check.Run("Boss objectives are backed by a boss that actually spawns", () =>
+            {
+                for (int i = 0; i < StageCatalogue.Count; i++)
+                {
+                    StageDefinition stage = StageCatalogue.Get(i);
+
+                    if (stage.Objective == StageObjective.DefeatMiniBoss)
+                        Check.True(stage.Contains(EnemyKind.MiniBoss),
+                            $"stage {stage.Number} spawns its mini-boss");
+
+                    if (stage.Objective == StageObjective.DefeatFinalBoss)
+                        Check.True(stage.Contains(EnemyKind.FinalBoss),
+                            $"stage {stage.Number} spawns its final boss");
+
+                    // A boss arriving on the first frame denies the stage its
+                    // build-up, so bosses are always a later wave.
+                    foreach (EnemyWave w in stage.Waves)
+                        if (EnemyArchetype.IsBoss(w.Kind))
+                            Check.Greater(w.Delay, 0f, $"stage {stage.Number}'s boss arrives after a build-up");
+                }
+            });
+
+            Check.Run("Every enemy a stage names has a real archetype behind it", () =>
+            {
+                for (int i = 0; i < StageCatalogue.Count; i++)
+                {
+                    StageDefinition stage = StageCatalogue.Get(i);
+
+                    foreach (EnemyWave w in stage.Waves)
+                    {
+                        EnemyArchetype a = EnemyArchetype.Get(w.Kind);
+
+                        Check.True(a != null, $"{w.Kind} exists");
+                        Check.Equal((int)a.Kind, (int)w.Kind, $"{w.Kind} returns its own archetype");
+                        Check.Greater(a.Health, 0f, $"{w.Kind} has health");
+                        Check.True(a.Moves != null, $"{w.Kind} has moves");
+                        Check.True(!string.IsNullOrEmpty(a.DisplayName), $"{w.Kind} has a name");
+                    }
+
+                    Check.Greater(stage.TotalEnemies, 0, $"stage {stage.Number} has enemies to fight");
+                }
+            });
+
+            Check.Run("Every new fighter's move set is internally consistent", () =>
+            {
+                EnemyKind[] kinds =
+                {
+                    EnemyKind.Defender, EnemyKind.Elite, EnemyKind.MiniBoss, EnemyKind.FinalBoss
+                };
+
+                foreach (EnemyKind kind in kinds)
+                {
+                    EnemyArchetype a = EnemyArchetype.Get(kind);
+                    System.Collections.Generic.List<string> problems = a.Moves.Validate();
+
+                    if (problems.Count > 0)
+                        foreach (string p in problems) Check.True(false, $"{kind}: {p}");
+                    else
+                        Check.True(true, $"{kind}'s moves validate");
+                }
+            });
+
+            Check.Run("The new fighters are actually different from each other", () =>
+            {
+                EnemyArchetype basic = EnemyArchetype.Brawler();
+                EnemyArchetype defender = EnemyArchetype.Defender();
+                EnemyArchetype elite = EnemyArchetype.Elite();
+                EnemyArchetype mini = EnemyArchetype.MiniBoss();
+                EnemyArchetype boss = EnemyArchetype.FinalBoss();
+
+                // A defender is defined by its guard, not its health bar.
+                Check.Greater(defender.BlockChance, basic.BlockChance * 2f, "defenders block far more");
+                Check.Greater(defender.RetreatChance, basic.RetreatChance, "and give ground to bait a swing");
+
+                // An elite is better at everything rather than bigger at one thing.
+                Check.Greater(elite.ChaseSpeed, basic.ChaseSpeed, "elites are faster");
+                Check.Greater(elite.Health, basic.Health, "elites are tougher");
+                Check.Less(elite.ReactionTime, basic.ReactionTime, "elites react sooner");
+                Check.Greater(elite.FlankPreference, basic.FlankPreference, "elites work the angles");
+
+                // Bosses must not be a normal enemy with a bigger number.
+                Check.Greater(mini.Poise, basic.Poise * 4f, "the mini-boss shrugs off pressure");
+                Check.Greater(boss.Health, mini.Health, "the final boss is the bigger fight");
+                Check.Greater(boss.Moves.Count, mini.Moves.Count, "and has more to throw at you");
+                Check.Greater(boss.ExperienceReward, mini.ExperienceReward, "and is worth more");
+            });
+        }
+
+        // ---- progression and saving ----------------------------------------------------------------
+
+        private static void ProgressionTests()
+        {
+            Check.Run("A fresh save has only the first stage open", () =>
+            {
+                var data = new SaveData();
+
+                Check.True(data.IsStageUnlocked(0), "stage 1 is playable");
+                Check.False(data.IsStageUnlocked(1), "stage 2 is locked");
+                Check.False(data.IsStageUnlocked(4), "and so is the last");
+                Check.False(data.IsStageCompleted(0), "nothing is completed yet");
+            });
+
+            Check.Run("Completing a stage unlocks exactly the next one", () =>
+            {
+                var data = new SaveData();
+
+                data.CompleteStage(0, 5);
+                Check.True(data.IsStageCompleted(0), "stage 1 is recorded");
+                Check.True(data.IsStageUnlocked(1), "stage 2 opened");
+                Check.False(data.IsStageUnlocked(2), "stage 3 did not");
+
+                data.CompleteStage(1, 5);
+                Check.True(data.IsStageUnlocked(2), "stage 3 opened in turn");
+            });
+
+            Check.Run("Replaying a stage cannot wind progression backwards", () =>
+            {
+                var data = new SaveData();
+                data.CompleteStage(0, 5);
+                data.CompleteStage(1, 5);
+                data.CompleteStage(2, 5);
+
+                int reached = data.HighestUnlockedStage;
+
+                // Replay an early one, which a player can always do.
+                data.CompleteStage(0, 5);
+
+                Check.Equal(data.HighestUnlockedStage, reached, "still unlocked as far as before");
+                Check.Equal(data.CompletedStages.Count, 3, "and not recorded twice");
+            });
+
+            Check.Run("Finishing the last stage does not unlock a sixth", () =>
+            {
+                var data = new SaveData();
+                for (int i = 0; i < 5; i++) data.CompleteStage(i, 5);
+
+                Check.Equal(data.HighestUnlockedStage, 4, "the last stage is as far as it goes");
+                Check.False(data.IsStageUnlocked(5), "there is no stage 6");
+            });
+
+            Check.Run("A save from another build is repaired into something playable", () =>
+            {
+                var data = new SaveData
+                {
+                    // Values a corrupt or older file could plausibly hold.
+                    MouseSensitivity = 999f,
+                    MasterVolume = -4f,
+                    Level = 0,
+                    Xp = -50,
+                    Money = -10,
+                    HighestUnlockedStage = 40,
+                    CurrentStage = 39,
+                    Difficulty = (Difficulty)77
+                };
+                data.CompletedStages.Add(31);
+                data.CompletedStages.Add(2);
+
+                data.Repair(5);
+
+                Check.InRange(data.MouseSensitivity, 0.1f, 5f, "sensitivity is usable");
+                Check.InRange(data.MasterVolume, 0f, 1f, "volume is usable");
+                Check.True(data.Difficulty == Difficulty.Normal, "an unknown difficulty falls back");
+                Check.Equal(data.Level, 1, "level starts at one");
+                Check.Equal(data.Xp, 0, "xp is not negative");
+                Check.Equal(data.Money, 0, "money is not negative");
+                Check.Equal(data.HighestUnlockedStage, 4, "unlocks are clamped to what exists");
+                Check.True(data.CurrentStage <= data.HighestUnlockedStage, "current stage is reachable");
+                Check.False(data.IsStageCompleted(31), "a stage that does not exist was dropped");
+                Check.True(data.IsStageCompleted(2), "a real one was kept");
+                Check.True(data.Bindings.IsComplete(), "and the controls still work");
+            });
+
+            Check.Run("Progression covers every stage in the catalogue", () =>
+            {
+                var data = new SaveData();
+
+                for (int i = 0; i < StageCatalogue.Count; i++)
+                {
+                    Check.True(data.IsStageUnlocked(i), $"stage {i + 1} was reachable in turn");
+                    data.CompleteStage(i, StageCatalogue.Count);
+                }
+
+                Check.Equal(data.CompletedStages.Count, StageCatalogue.Count,
+                    "the whole game can be finished");
             });
         }
 

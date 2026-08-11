@@ -20,19 +20,37 @@ namespace Glowpulse.Core.Characters
         public Color Accent;       // trim, jacket detail, gloves
         public float AccentGlow;   // 0 = matte, >0 emissive rim (used for enemy tells)
 
+        /// <summary>
+        /// Bare chest. The rig swaps the torso to skin and adds the muscle masses
+        /// that a shirt would otherwise hide - without them a shirtless character
+        /// just reads as a flesh-coloured box.
+        /// </summary>
+        public bool Shirtless;
+
+        /// <summary>Ink colour for the back piece. Alpha at zero means no tattoo.</summary>
+        public Color Tattoo;
+
         public static CharacterStyle Player()
         {
             return new CharacterStyle
             {
-                Height = 1.82f,
-                Build = 1.0f,
-                Skin = Hex("C99A72"),
-                Torso = Hex("23303F"),
+                Height = 1.84f,
+
+                // Heavier than anything on the street except a bruiser. The build
+                // figure drives shoulder width, limb thickness and the muscle
+                // masses together, so raising it thickens the whole silhouette
+                // rather than just widening the chest box.
+                Build = 1.26f,
+
+                Skin = Hex("C08A5E"),
+                Torso = Hex("C08A5E"),   // bare chest: the torso is skin
                 Legs = Hex("1A2129"),
                 Shoes = Hex("14161A"),
                 Hair = Hex("24201E"),
                 Accent = Hex("46C2C8"),
-                AccentGlow = 1.1f
+                AccentGlow = 1.1f,
+                Shirtless = true,
+                Tattoo = Hex("14212B")
             };
         }
 

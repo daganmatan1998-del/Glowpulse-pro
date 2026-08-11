@@ -80,10 +80,18 @@ namespace Glowpulse.Core.Characters
                 new Vector3(-shoulderHalfWidth, 0.085f * h, 0f), Quaternion.identity,
                 Vector3.one * (limbR * 2.5f), castShadows);
 
-            // accent stripe down the chest - also the enemy-type colour tell
-            MeshLibrary.CreatePart("Accent", chest, MeshLibrary.Cube, accent,
-                new Vector3(0f, 0.02f * h, 0.07f * h * build), Quaternion.identity,
-                new Vector3(0.055f * h, 0.17f * h, 0.012f * h), false);
+            if (style.Shirtless)
+            {
+                BuildBareTorso(chest, skin, h, build, shoulderHalfWidth, castShadows);
+                BuildBackTattoo(chest, style, h, build, shoulderHalfWidth);
+            }
+            else
+            {
+                // accent stripe down the chest - also the enemy-type colour tell
+                MeshLibrary.CreatePart("Accent", chest, MeshLibrary.Cube, accent,
+                    new Vector3(0f, 0.02f * h, 0.07f * h * build), Quaternion.identity,
+                    new Vector3(0.055f * h, 0.17f * h, 0.012f * h), false);
+            }
 
             MeshLibrary.CreatePart("Belt", hips, MeshLibrary.Cube, accent,
                 new Vector3(0f, 0.075f * h, 0f), Quaternion.identity,
@@ -122,6 +130,118 @@ namespace Glowpulse.Core.Characters
             rig.Configure(h, 0.72f * h);
             rig.CaptureRestPose();
             return rig;
+        }
+
+        /// <summary>
+        /// Muscle masses over a bare chest: pectorals, abdominals, obliques and a
+        /// trapezius wedge into the neck.
+        ///
+        /// Without these a shirtless character is a flesh-coloured box, because
+        /// the shirt was doing all the work of breaking up the torso. They are
+        /// slightly proud of the torso block so they catch light along their own
+        /// edges, which is what reads as bulk at gameplay distance.
+        /// </summary>
+        private static void BuildBareTorso(Transform chest, Material skin, float h, float build,
+            float shoulderHalfWidth, bool shadows)
+        {
+            float depth = 0.135f * h * build;
+            float front = depth * 0.5f;
+
+            // Pectorals: two flattened spheres, spread with the shoulders.
+            for (int side = -1; side <= 1; side += 2)
+            {
+                MeshLibrary.CreatePart(side > 0 ? "PecL" : "PecR", chest, MeshLibrary.Sphere, skin,
+                    new Vector3(side * shoulderHalfWidth * 0.52f, 0.062f * h, front * 0.62f),
+                    Quaternion.identity,
+                    new Vector3(0.105f * h * build, 0.062f * h, 0.075f * h * build), shadows);
+            }
+
+            // Abdominals: three tapering blocks, narrowing towards the belt so the
+            // torso reads as a V rather than a slab.
+            for (int i = 0; i < 3; i++)
+            {
+                float t = i / 2f;
+                float width = Mathf.Lerp(0.155f, 0.115f, t) * h * build;
+                MeshLibrary.CreatePart("Abs" + i, chest, MeshLibrary.Cube, skin,
+                    new Vector3(0f, -0.012f * h - i * 0.042f * h, front * 0.72f),
+                    Quaternion.identity,
+                    new Vector3(width, 0.034f * h, 0.03f * h), shadows);
+            }
+
+            // Obliques flare the ribcage out above the waist.
+            for (int side = -1; side <= 1; side += 2)
+            {
+                MeshLibrary.CreatePart(side > 0 ? "ObliqueL" : "ObliqueR", chest,
+                    MeshLibrary.Sphere, skin,
+                    new Vector3(side * shoulderHalfWidth * 0.86f, -0.01f * h, 0f),
+                    Quaternion.identity,
+                    new Vector3(0.05f * h * build, 0.115f * h, 0.1f * h * build), shadows);
+            }
+
+            // Traps, which is most of what makes a heavy build read from behind.
+            MeshLibrary.CreatePart("Traps", chest, MeshLibrary.Sphere, skin,
+                new Vector3(0f, 0.105f * h, -0.012f * h), Quaternion.identity,
+                new Vector3(shoulderHalfWidth * 1.5f, 0.05f * h, 0.09f * h * build), shadows);
+        }
+
+        /// <summary>
+        /// A back piece, built from flat slabs laid just proud of the spine: a
+        /// central bar with wings sweeping up and out across the shoulder blades.
+        ///
+        /// Drawn as geometry rather than a texture because the whole project has
+        /// no authored art - and because it survives being replaced later by a
+        /// real decal on a real model without any gameplay code changing.
+        /// </summary>
+        private static void BuildBackTattoo(Transform chest, in CharacterStyle style, float h,
+            float build, float shoulderHalfWidth)
+        {
+            if (style.Tattoo.a <= 0.01f) return;
+
+            Material ink = MaterialLibrary.Lit(style.Tattoo, 0.05f);
+            float back = -0.135f * h * build * 0.5f - 0.004f * h;
+            float thickness = 0.01f * h;
+
+            // Spine bar, running most of the height of the back.
+            MeshLibrary.CreatePart("TattooSpine", chest, MeshLibrary.Cube, ink,
+                new Vector3(0f, 0.012f * h, back), Quaternion.identity,
+                new Vector3(0.034f * h, 0.215f * h, thickness), false);
+
+            // Five feathers per side, fanning out across the shoulder blades. The
+            // fan starts below the centre line so the design covers the back
+            // rather than perching on top of it.
+            //
+            // Every width is a fraction of the shoulder half-width rather than of
+            // height, so the ink stays on the skin. Measured against height it
+            // overhangs the silhouette on a heavy build and the tattoo appears to
+            // float in the air beside the character.
+            float inner = shoulderHalfWidth * 0.1f;
+
+            for (int side = -1; side <= 1; side += 2)
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    float t = i / 4f;
+                    float length = Mathf.Lerp(0.82f, 0.44f, t) * shoulderHalfWidth;
+                    float rise = Mathf.Lerp(-0.022f, 0.088f, t) * h;
+                    float tilt = Mathf.Lerp(6f, 46f, t) * side;
+
+                    // The bar is centred, so its centre sits half its own length
+                    // out from the spine. Getting this wrong bunches the whole
+                    // fan into a smudge over the shoulders.
+                    float offset = side * (inner + length * 0.5f);
+
+                    MeshLibrary.CreatePart($"TattooWing{(side > 0 ? "L" : "R")}{i}", chest,
+                        MeshLibrary.Cube, ink,
+                        new Vector3(offset, rise, back),
+                        Quaternion.Euler(0f, 0f, tilt),
+                        new Vector3(length, 0.019f * h, thickness), false);
+                }
+            }
+
+            // A band low on the back closes the design off above the belt.
+            MeshLibrary.CreatePart("TattooBand", chest, MeshLibrary.Cube, ink,
+                new Vector3(0f, -0.098f * h, back), Quaternion.identity,
+                new Vector3(shoulderHalfWidth * 1.3f, 0.016f * h, thickness), false);
         }
 
         private static void BuildArm(CharacterRig rig, Transform chest, float side,

@@ -338,6 +338,14 @@ function matMulM(a,b){
   }
   return r;
 }
+/* A transform offset inside a parent bone, optionally rolled about Z. Used for
+   detail parts that hang off a bone without deserving a bone of their own. */
+function childXform(t, offset, rollRad){
+  return {
+    m: rollRad ? matMulM(t.m, eulerZXY(0,0,rollRad)) : t.m,
+    p: matXform(t, offset)
+  };
+}
 function matXform(t,v){
   const m=t.m;
   return {
@@ -650,8 +658,13 @@ function drawCharacter(rig, alive){
   drawBox(W[B.Chest], {x:rig.shW*0.98, y:0.118*h, z:0.068*h*build}, torso);
   drawBlob(matXform(W[B.Chest], v3( rig.shW,0.085*h,0)), r*1.05, torso);
   drawBlob(matXform(W[B.Chest], v3(-rig.shW,0.085*h,0)), r*1.05, torso);
-  // accent stripe — also the enemy-type colour tell
-  drawBox(W[B.Chest], {x:0.027*h, y:0.085*h, z:0.008*h}, accent);
+  if(s.shirtless){
+    drawBareTorso(rig, W, h, build, r, skin);
+    drawBackTattoo(rig, W, h, build, s.tattoo);
+  } else {
+    // accent stripe — also the enemy-type colour tell
+    drawBox(W[B.Chest], {x:0.027*h, y:0.085*h, z:0.008*h}, accent);
+  }
   drawBox(W[B.Hips], {x:hipW2(rig)*1.02, y:0.011*h, z:0.07*h*build}, accent);
 
   // head
@@ -665,11 +678,13 @@ function drawCharacter(rig, alive){
     drawBlob(matXform(W[B.Head], v3(-0.022*h,0.058*h,0.052*h)), 0.008*h, [22,20,18]);
   }
 
-  // arms
-  drawLimb(jointPos(B.UpperArmL), jointPos(B.LowerArmL), r*0.85, torso);
+  // arms — a bare chest means bare arms, and a heavier build thickens them
+  const upper = s.shirtless ? skin : torso;
+  const upperR = s.shirtless ? r*0.95 : r*0.85;
+  drawLimb(jointPos(B.UpperArmL), jointPos(B.LowerArmL), upperR, upper);
   drawLimb(jointPos(B.LowerArmL), jointPos(B.HandL), r*0.72, skin);
   drawBlob(matXform(W[B.HandL], v3(0,-r*0.8,0)), r*0.78, skin);
-  drawLimb(jointPos(B.UpperArmR), jointPos(B.LowerArmR), r*0.85, torso);
+  drawLimb(jointPos(B.UpperArmR), jointPos(B.LowerArmR), upperR, upper);
   drawLimb(jointPos(B.LowerArmR), jointPos(B.HandR), r*0.72, skin);
   drawBlob(matXform(W[B.HandR], v3(0,-r*0.8,0)), r*0.78, skin);
 
@@ -682,6 +697,52 @@ function drawCharacter(rig, alive){
   drawBox(W[B.FootR], {x:r*1.05, y:rig.ankle*0.5, z:0.067*h}, shoes, null);
 }
 function hipW2(rig){ return rig.hipW*1.05; }
+
+/* Muscle masses over a bare chest. Without them a shirtless character is a
+   flesh-coloured box, because the shirt was doing the work of breaking up the
+   torso. Ported from CharacterRigFactory.BuildBareTorso. */
+function drawBareTorso(rig, W, h, build, r, skin){
+  const front = 0.068*h*build;
+  for(let side=-1; side<=1; side+=2)
+    drawBlob(matXform(W[B.Chest], v3(side*rig.shW*0.52, 0.062*h, front*0.62)), 0.05*h*build, skin, 0.72);
+
+  for(let i=0;i<3;i++){
+    const t=i/2, width=lerp(0.078,0.058,t)*h*build;
+    drawBox(childXform(W[B.Chest], v3(0, -0.012*h - i*0.042*h, front*0.72)),
+      {x:width, y:0.017*h, z:0.015*h}, skin);
+  }
+  for(let side=-1; side<=1; side+=2)
+    drawBlob(matXform(W[B.Chest], v3(side*rig.shW*0.86, -0.01*h, 0)), 0.05*h*build, skin, 1.5);
+
+  // traps: most of what makes a heavy build read from behind
+  drawBlob(matXform(W[B.Chest], v3(0, 0.105*h, -0.012*h)), rig.shW*0.62, skin, 0.42);
+}
+
+/* A back piece: a spine bar with wings fanning across the shoulder blades.
+   Geometry rather than a texture, because the project has no authored art. */
+function drawBackTattoo(rig, W, h, build, ink){
+  if(!ink) return;
+  const back = -0.068*h*build - 0.004*h;
+  const th = 0.005*h;
+
+  drawBox(childXform(W[B.Chest], v3(0, 0.012*h, back)), {x:0.017*h, y:0.107*h, z:th}, ink);
+
+  // Widths are fractions of the shoulder half-width, not of height, so the ink
+  // stays on the skin instead of overhanging the silhouette on a heavy build.
+  const inner = rig.shW*0.1;
+  for(let side=-1; side<=1; side+=2){
+    for(let i=0;i<5;i++){
+      const t=i/4;
+      const half=lerp(0.41,0.22,t)*rig.shW;   // drawBox takes half extents
+      const rise=lerp(-0.022,0.088,t)*h;
+      const tilt=lerp(6,46,t)*side*DEG;
+      // centre sits a full half-width out from the spine, or the fan bunches
+      drawBox(childXform(W[B.Chest], v3(side*(inner+half), rise, back), tilt),
+        {x:half, y:0.0095*h, z:th}, ink);
+    }
+  }
+  drawBox(childXform(W[B.Chest], v3(0, -0.098*h, back)), {x:rig.shW*0.65, y:0.008*h, z:th}, ink);
+}
 
 /* ---- pose clips --------------------------------------------------------
    Ported from PoseLibrary/CombatPoses. Each track is [time, x,y,z] rotation
@@ -1278,8 +1339,9 @@ const MOVES=Object.assign({},PLAYER_MOVES,ENEMY_MOVES);
 /* ---- character styles (ported from CharacterStyle) --------------------- */
 function style(o){ return o; }
 const STYLES={
-  player:{height:1.82,build:1.0,skin:hexRGB('#C99A72'),torso:hexRGB('#23303F'),legs:hexRGB('#1A2129'),
-    shoes:hexRGB('#14161A'),hair:hexRGB('#24201E'),accent:hexRGB('#46C2C8')},
+  player:{height:1.84,build:1.26,skin:hexRGB('#C08A5E'),torso:hexRGB('#C08A5E'),legs:hexRGB('#1A2129'),
+    shoes:hexRGB('#14161A'),hair:hexRGB('#24201E'),accent:hexRGB('#46C2C8'),
+    shirtless:true, tattoo:hexRGB('#14212B')},
   thug:{height:1.78,build:1.05,skin:hexRGB('#B98A63'),torso:hexRGB('#59323A'),legs:hexRGB('#2B2A31'),
     shoes:hexRGB('#1A1A1D'),hair:hexRGB('#1B1614'),accent:hexRGB('#D8563F')},
   bruiser:{height:2.02,build:1.38,skin:hexRGB('#A97B58'),torso:hexRGB('#3E3326'),legs:hexRGB('#262119'),

@@ -158,6 +158,7 @@ namespace UnityEngine.UI
     {
         [Serializable] public class SliderEvent : UnityEvent<float> { }
         public enum Direction { LeftToRight, RightToLeft, BottomToTop, TopToBottom }
+        public void SetValueWithoutNotify(float input) { }
         public float value { get; set; }
         public float normalizedValue { get; set; }
         public float minValue { get; set; }
@@ -172,6 +173,7 @@ namespace UnityEngine.UI
     public class Toggle : Selectable
     {
         [Serializable] public class ToggleEvent : UnityEvent<bool> { }
+        public void SetIsOnWithoutNotify(bool value) { }
         public bool isOn { get; set; }
         public Graphic graphic { get; set; }
         public ToggleEvent onValueChanged { get; set; }

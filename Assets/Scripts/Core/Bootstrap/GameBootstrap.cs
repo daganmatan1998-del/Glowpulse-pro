@@ -7,6 +7,7 @@ using Glowpulse.Core.Settings;
 using Glowpulse.Core.Timing;
 using Glowpulse.Enemies;
 using Glowpulse.Player;
+using Glowpulse.UI;
 using Glowpulse.VFX;
 using Glowpulse.World;
 using Glowpulse.World.City;
@@ -195,6 +196,11 @@ namespace Glowpulse.Core.Bootstrap
             CombatDirector.Install(services);
 
             Crowd = services.AddComponent<CrowdDirector>();
+
+            // The UI is built before the world so a screen can exist to report on
+            // anything the world build wants to say.
+            UiRoot ui = UiRoot.Install(gameObject);
+            PauseMenu.Install(ui.MenuLayer);
 
             Combat.CombatPoses.EnsureRegistered();
             World.Npc.CivilianPoses.EnsureRegistered();

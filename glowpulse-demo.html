@@ -314,6 +314,9 @@ const vmul=(a,s)=>({x:a.x*s,y:a.y*s,z:a.z*s});
 const vlen=a=>Math.hypot(a.x,a.y,a.z);
 const flatLen=a=>Math.hypot(a.x,a.z);
 const flatDist=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
+// Ported from FactionRules.IsHostileTo: nobody is hostile to a bystander, so
+// civilians can neither be hit nor be locked on to.
+const hostileTo=(a,b)=> a!==b && a!=='neutral' && b!=='neutral' && a!=='civilian' && b!=='civilian';
 function flatDir(a){ const m=Math.hypot(a.x,a.z); return m>1e-5?{x:a.x/m,y:0,z:a.z/m}:{x:0,y:0,z:0}; }
 
 /* 3x3 rotation + translation. Euler order matches Unity's ZXY so the pose
@@ -1620,7 +1623,7 @@ function evaluateDefence(c,info){
 
 function applyDamage(target, info){
   if(!target.alive) return RESULT.Missed;
-  if(info.faction===target.faction) return RESULT.Missed;
+  if(!hostileTo(info.faction,target.faction)) return RESULT.Missed;
   if(now<target.invulUntil){
     if(target.onEvade) target.onEvade(info);
     return RESULT.Immune;
@@ -1682,13 +1685,13 @@ function feedback(move,info,result,point,byPlayer){
   if(result===RESULT.Blocked){
     Time_.hitStop(move.hitStop*.6); shakeCam(move.shake*.4);
     spark(point,vmul(info.dir,-1),12,4.5,hexRGB('#BFD8FF'),.24,.09);
-    sfx('block',point,.9); return;
+    sfx('block',point,.9); commotion(point,.55); return;
   }
   if(result===RESULT.Parried){
     Time_.hitStop(.13,.01); Time_.slowMo(.3,.4); shakeCam(.32);
     spark(point,vmul(info.dir,-1),16,6.5,hexRGB('#FFFFFF'),.3,.1);
     ring(point,hexRGB('#CFE8FF'),.3,3.4,.34);
-    sfx('parry',point,1,.03); return;
+    sfx('parry',point,1,.03); commotion(point,.8); return;
   }
 
   const killed=(result===RESULT.Killed);
@@ -1713,6 +1716,7 @@ function feedback(move,info,result,point,byPlayer){
   }
   sfx(move.tag==='kick'?'kick':(heavy||big?'heavy':'punch'), point, byPlayer?1:.8);
   if(!killed && move.impact>=IMPACT.Medium) sfx('grunt',point,.7,.14);
+  commotion(point, killed?1:clamp01(.5+move.impact*.15));
 }
 
 /* ---- hit detection (ported from MeleeHitbox) --------------------------- */
@@ -1780,7 +1784,7 @@ function resolveHits(r,move){
   const byPlayer=(c.faction==='player');
   for(const t of chars){
     if(t===c || !t.alive) continue;
-    if(t.faction===c.faction) continue;
+    if(!hostileTo(c.faction,t.faction)) continue;
     if(r.hit.size>=move.maxTargets) break;
     if(r.hit.has(t)) continue;
     if(!overlapsCapsule(center,move,c,t)) continue;
@@ -2047,7 +2051,7 @@ function autoFaceTarget(p){
   let best=null, bestScore=Infinity;
   const fwd={x:Math.sin(p.yaw), z:Math.cos(p.yaw)};
   for(const c of chars){
-    if(c===p||!c.alive||c.faction===p.faction) continue;
+    if(c===p||!c.alive||!hostileTo(p.faction,c.faction)) continue;
     const to=vsub(c.pos,p.pos), d=flatLen(to);
     if(d>4.5) continue;
     const dir=flatDir(to);
@@ -2080,7 +2084,7 @@ function tryStartAttack(p){
 function tryFinisher(p){
   let victim=null, bestD=Infinity;
   for(const c of chars){
-    if(c===p||!c.alive||c.faction===p.faction||!c.down) continue;
+    if(c===p||!c.alive||!hostileTo(p.faction,c.faction)||!c.down) continue;
     const d=flatDist(p.pos,c.pos);
     if(d<1.9 && d<bestD){ bestD=d; victim=c; }
   }
@@ -2145,7 +2149,7 @@ function trySeize(p,move){
   let victim=null,bestD=Infinity;
   const center=hitboxCenter(p,move);
   for(const c of chars){
-    if(c===p||!c.alive||c.faction===p.faction||c.down||c.grabbedBy) continue;
+    if(c===p||!c.alive||!hostileTo(p.faction,c.faction)||c.down||c.grabbedBy) continue;
     const d=Math.hypot(center.x-c.pos.x,center.z-c.pos.z);
     if(d<move.radius+c.radius && d<bestD){ bestD=d; victim=c; }
   }
@@ -2216,7 +2220,7 @@ function findLockTarget(p){
   let best=null,bestScore=Infinity;
   const fwd={x:Math.sin(cam.yaw), z:Math.cos(cam.yaw)};
   for(const c of chars){
-    if(c===p||!c.alive||c.faction===p.faction) continue;
+    if(c===p||!c.alive||!hostileTo(p.faction,c.faction)) continue;
     const to=vsub(c.pos,p.pos), d=flatLen(to);
     if(d>18) continue;
     const dir=flatDir(to);
@@ -2529,6 +2533,383 @@ function pushAnimEnemy(e,dt){
 
 <script>
 "use strict";
+/* ---- civilian clips (ported from CivilianPoses) ------------------------ */
+reg(tr(tr(mirror(mirror(tr(tr(tr(clip('civ_startle',.5,{full:true}),
+  B.Spine,K(0,0,0,0),K(.08,14,0,0),K(.26,6,0,0),K(.5,0,0,0)),
+  B.Head,K(0,0,0,0),K(.07,-16,0,0),K(.3,-4,0,0),K(.5,0,0,0)),
+  B.UpperArmL,K(0,0,0,0),K(.1,-34,0,26),K(.32,-14,0,14),K(.5,0,0,0)),
+  B.UpperArmL,B.UpperArmR), B.LowerArmL,B.LowerArmR),
+  B.LowerArmL,K(0,0,0,0),K(.1,-46,0,0),K(.5,0,0,0)),
+  B.Chest,K(0,0,0,0),K(.08,10,0,0),K(.5,0,0,0)));
+
+(function(){
+  const c=clip('civ_cower',.55,{full:true,hold:true});
+  tr(c,B.Spine,K(0,0,0,0),K(.55,34,0,0));
+  tr(c,B.Chest,K(0,0,0,0),K(.55,20,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.55,26,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.55,-128,0,44)); mirror(c,B.UpperArmL,B.UpperArmR);
+  tr(c,B.LowerArmL,K(0,0,0,0),K(.55,-104,0,0)); mirror(c,B.LowerArmL,B.LowerArmR);
+  tr(c,B.ThighL,K(0,0,0,0),K(.55,-34,0,0));     mirror(c,B.ThighL,B.ThighR);
+  tr(c,B.ShinL,K(0,0,0,0),K(.55,52,0,0));       mirror(c,B.ShinL,B.ShinR);
+  hips(c,K(0,0,0,0),K(.55,0,-.34,0));
+  reg(c);
+
+  const s=clip('civ_shield',.45,{full:true,hold:true});
+  tr(s,B.Spine,K(0,0,0,0),K(.12,18,0,0),K(.45,12,0,0));
+  tr(s,B.Head,K(0,0,0,0),K(.12,14,0,0),K(.45,10,0,0));
+  tr(s,B.UpperArmL,K(0,0,0,0),K(.14,-96,0,30),K(.45,-88,0,28)); mirror(s,B.UpperArmL,B.UpperArmR);
+  tr(s,B.LowerArmL,K(0,0,0,0),K(.14,-88,0,0),K(.45,-84,0,0));   mirror(s,B.LowerArmL,B.LowerArmR);
+  reg(s);
+
+  const w=clip('civ_wave',1.5);
+  tr(w,B.UpperArmR,K(0,0,0,0),K(.3,-132,0,-22),K(1.2,-132,0,-22),K(1.5,0,0,0));
+  tr(w,B.LowerArmR,K(0,0,0,0),K(.3,-20,0,0),K(.55,-20,0,-34),K(.8,-20,0,22),
+     K(1.05,-20,0,-30),K(1.2,-20,0,0),K(1.5,0,0,0));
+  tr(w,B.Head,K(0,0,0,0),K(.35,0,-16,0),K(1.2,0,-16,0),K(1.5,0,0,0));
+  tr(w,B.Chest,K(0,0,0,0),K(.35,0,-10,0),K(1.2,0,-10,0),K(1.5,0,0,0));
+  reg(w);
+
+  const t=clip('civ_check_watch',1.2);
+  tr(t,B.UpperArmL,K(0,0,0,0),K(.28,-62,0,30),K(.9,-62,0,30),K(1.2,0,0,0));
+  tr(t,B.LowerArmL,K(0,0,0,0),K(.28,-86,0,0),K(.9,-86,0,0),K(1.2,0,0,0));
+  tr(t,B.Head,K(0,0,0,0),K(.3,22,12,0),K(.9,22,12,0),K(1.2,0,0,0));
+  tr(t,B.Spine,K(0,0,0,0),K(.3,8,6,0),K(.9,8,6,0),K(1.2,0,0,0));
+  reg(t);
+
+  const l=clip('civ_look_around',2.4);
+  tr(l,B.Head,K(0,0,0,0),K(.5,0,-40,0),K(1,0,-34,0),K(1.5,0,44,0),K(2,0,36,0),K(2.4,0,0,0));
+  tr(l,B.Chest,K(0,0,0,0),K(.5,0,-12,0),K(1.5,0,14,0),K(2.4,0,0,0));
+  reg(l);
+
+  const u=clip('civ_stumble',.7,{full:true});
+  tr(u,B.Spine,K(0,0,0,0),K(.12,-26,10,8),K(.4,16,0,0),K(.7,0,0,0));
+  tr(u,B.Head,K(0,0,0,0),K(.12,-22,16,10),K(.7,0,0,0));
+  tr(u,B.UpperArmL,K(0,0,0,0),K(.14,-76,0,52),K(.42,-30,0,24),K(.7,0,0,0));
+  mirror(u,B.UpperArmL,B.UpperArmR);
+  tr(u,B.ThighL,K(0,0,0,0),K(.18,-52,0,0),K(.45,10,0,0),K(.7,0,0,0));
+  tr(u,B.ShinL,K(0,0,0,0),K(.18,40,0,0),K(.7,0,0,0));
+  tr(u,B.ThighR,K(0,0,0,0),K(.22,30,0,0),K(.7,0,0,0));
+  hips(u,K(0,0,0,0),K(.14,0,-.12,0),K(.4,0,-.05,0),K(.7,0,0,0));
+  reg(u);
+})();
+
+/* ---- pedestrian network (ported from PedestrianNetwork) ---------------- */
+const Walk={ nodes:[], build(){
+  this.nodes.length=0;
+  const laneX=[-11.3, 11.3];
+  const zs=[]; for(let z=-28; z<=32; z+=6.5) zs.push(z);
+
+  for(let li=0; li<laneX.length; li++)
+    for(let zi=0; zi<zs.length; zi++)
+      this.nodes.push({x:laneX[li], z:zs[zi], links:[]});
+
+  const idx=(li,zi)=>li*zs.length+zi;
+  const link=(a,b,crossing)=>{
+    this.nodes[a].links.push({to:b,crossing});
+    this.nodes[b].links.push({to:a,crossing});
+  };
+
+  for(let li=0; li<laneX.length; li++)
+    for(let zi=0; zi+1<zs.length; zi++) link(idx(li,zi), idx(li,zi+1), false);
+
+  // crossings over the carriageway, every third node
+  for(let zi=0; zi<zs.length; zi+=3) link(idx(0,zi), idx(1,zi), true);
+},
+nearest(p){
+  let best=-1, bestD=1e9;
+  for(let i=0;i<this.nodes.length;i++){
+    const n=this.nodes[i], d=(n.x-p.x)**2+(n.z-p.z)**2;
+    if(d<bestD){bestD=d;best=i;}
+  }
+  return best;
+},
+next(from, cameFrom, heading){
+  const n=this.nodes[from]; if(!n||!n.links.length) return -1;
+  const hl=Math.hypot(heading.x,heading.z);
+  const fx=hl>1e-4?heading.x/hl:0, fz=hl>1e-4?heading.z/hl:0;
+  let total=0; const w=[];
+  for(const l of n.links){
+    let weight = (l.to===cameFrom)?.06:(l.crossing?.45:1);
+    if(hl>1e-4){
+      const t=this.nodes[l.to];
+      const dx=t.x-n.x, dz=t.z-n.z, d=Math.hypot(dx,dz)||1;
+      const a=(dx/d)*fx+(dz/d)*fz;
+      weight*=lerp(.25,2.4,clamp01((a+1)/2));
+    }
+    w.push(weight); total+=weight;
+  }
+  let draw=Math.random()*total, run=0;
+  for(let i=0;i<n.links.length;i++){ run+=w[i]; if(draw<=run) return n.links[i].to; }
+  return n.links[n.links.length-1].to;
+},
+awayFrom(from, threat){
+  const n=this.nodes[from]; if(!n) return -1;
+  const here=(n.x-threat.x)**2+(n.z-threat.z)**2;
+  let best=-1, bestGain=0;
+  for(const l of n.links){
+    const t=this.nodes[l.to];
+    let gain=(t.x-threat.x)**2+(t.z-threat.z)**2-here;
+    if(l.crossing) gain*=.8;
+    if(gain>bestGain){ bestGain=gain; best=l.to; }
+  }
+  return best;
+},
+pos(i){ const n=this.nodes[i]; return {x:n.x, y:0, z:n.z}; }
+};
+
+/* ---- civilian styles --------------------------------------------------- */
+const CIV_SKIN=['#F0C8A0','#D9A578','#B07C4F','#8A5A38','#5E3A22'];
+const CIV_TOP=['#6B7B8C','#8C6B6B','#4E5D52','#7A7285','#A8A093','#3B4A5A','#94684F'];
+const CIV_LEG=['#343A42','#4A4038','#2C3038','#5A5348'];
+const CIV_HAIR=['#1B1512','#3A2A1E','#6B5238','#8F8F92','#2A2A2E'];
+const pick=a=>a[(Math.random()*a.length)|0];
+function civilianStyle(){
+  return { height:rand(1.62,1.88), build:rand(.86,1.16),
+    skin:hexRGB(pick(CIV_SKIN)), torso:hexRGB(pick(CIV_TOP)), legs:hexRGB(pick(CIV_LEG)),
+    shoes:hexRGB('#1C1A18'), hair:hexRGB(pick(CIV_HAIR)), accent:hexRGB(pick(CIV_TOP)) };
+}
+
+/* ---- the crowd (ported from CrowdDirector + CivilianBrain) ------------- */
+const PANIC_R=11, CALM_R=22;
+const Crowd={
+  people:[], population:14, spawnR:44, minSpawn:14, recycleR:60,
+  alarmR:26, alarmDur:6, nextMaintain:0, dangers:[],
+
+  reset(){ for(const c of this.people){ const i=chars.indexOf(c); if(i>=0) chars.splice(i,1); }
+    this.people.length=0; this.dangers.length=0; this.nextMaintain=0; },
+
+  tick(){
+    if(!player || now<this.nextMaintain) return;
+    this.nextMaintain=now+.35;
+
+    for(let i=this.people.length-1;i>=0;i--){
+      const c=this.people[i];
+      if(flatDist(c.pos,player.pos)>this.recycleR) this.relocate(c);
+    }
+    let spawned=0;
+    while(this.people.length<this.population && spawned<3){
+      const node=this.pickNode(); if(node<0) break;
+      this.people.push(makeCivilian(node)); spawned++;
+    }
+  },
+
+  pickNode(){
+    const count=Walk.nodes.length; if(!count) return -1;
+    const start=(Math.random()*count)|0;
+    for(let i=0;i<count;i++){
+      const idx=(start+i)%count;
+      const d=flatDist(Walk.nodes[idx], player.pos);
+      if(d>=this.minSpawn && d<=this.spawnR) return idx;
+    }
+    return -1;
+  },
+
+  relocate(c){
+    const node=this.pickNode(); if(node<0) return;
+    const p=Walk.pos(node);
+    c.pos.x=p.x; c.pos.z=p.z; c.pos.y=0;
+    c.node=node; c.prevNode=-1; c.target=null;
+    c.threatUntil=0; c.down=false; c.controlUntil=0;
+    c.anim.stance=STANCE.Relaxed;
+    civSetState(c,'stroll');
+  },
+
+  alarm(point,severity){
+    if(!this.people.length) return;
+    for(const c of this.people){
+      if(flatDist(c.pos,point)>this.alarmR) continue;
+      civAlarm(c,point,severity,this.alarmDur);
+    }
+  }
+};
+function commotion(point,severity){ Crowd.alarm(point,severity); }
+
+function makeCivilian(node){
+  const p=Walk.pos(node);
+  const c=makeChar('civilian', civilianStyle(), {x:p.x,y:0,z:p.z}, rand(-Math.PI,Math.PI));
+  c.faction='civilian';
+  c.name='Civilian';
+  c.node=node; c.prevNode=-1; c.target=null;
+  c.walk=rand(1.15,1.75); c.hurry=c.walk+rand(.6,1.1); c.flee=rand(4.1,5.2);
+  c.turn=rand(360,520)*DEG;
+  c.state='stroll'; c.stateAt=now;
+  c.threat={x:0,y:0,z:0}; c.threatUntil=0; c.severity=0;
+  c.desired=v3(); c.facing=null;
+  c.anim.stance=STANCE.Relaxed;
+  chars.push(c);
+  return c;
+}
+function civSetState(c,s){ if(c.state===s) return; c.state=s; c.stateAt=now;
+  if(s==='flee') c.anim.stance=STANCE.Combat;
+  else if(s==='stroll'||s==='watch') c.anim.stance=STANCE.Relaxed; }
+const civTime=c=>now-c.stateAt;
+const civHasThreat=c=>now<c.threatUntil;
+const civThreatDist=c=>civHasThreat(c)?flatDist(c.pos,c.threat):1e9;
+
+function civAlarm(c,point,severity,duration){
+  const d=flatDist(c.pos,point);
+  if(civHasThreat(c) && d>civThreatDist(c) && severity<=c.severity) return;
+  c.threat={...point}; c.severity=severity;
+  c.threatUntil=Math.max(c.threatUntil, now+duration);
+  if(c.state==='stroll'||c.state==='pause') civSetState(c,'startled');
+}
+
+function civChooseStop(c){
+  if(c.node<0) c.node=Walk.nearest(c.pos);
+  const prev=c.prevNode>=0?Walk.nodes[c.prevNode]:null;
+  const here=Walk.nodes[c.node];
+  const heading=prev?{x:here.x-prev.x,z:here.z-prev.z}:{x:Math.sin(c.yaw),z:Math.cos(c.yaw)};
+  const next=Walk.next(c.node,c.prevNode,heading);
+  if(next<0) return false;
+  c.prevNode=c.node; c.node=next;
+  const p=Walk.pos(next);
+  c.target={x:p.x+rand(-.55,.55), y:0, z:p.z+rand(-.55,.55)};
+  return true;
+}
+function civChooseEscape(c){
+  if(c.node<0) c.node=Walk.nearest(c.pos);
+  const next=Walk.awayFrom(c.node,c.threat);
+  if(next<0) return false;
+  c.prevNode=c.node; c.node=next;
+  const p=Walk.pos(next);
+  c.target={x:p.x+rand(-.5,.5), y:0, z:p.z+rand(-.5,.5)};
+  return true;
+}
+const civCornered=c=>c.node<0 || Walk.awayFrom(c.node,c.threat)<0;
+function civArrive(c,speed){
+  if(!c.target) return;
+  const dx=c.target.x-c.pos.x, dz=c.target.z-c.pos.z;
+  const d=Math.hypot(dx,dz);
+  if(d<=.3){ c.desired=v3(); return; }
+  const s=d<1.2?speed*(d-.3)/.9:speed;
+  c.desired={x:dx/d*Math.min(s,speed), y:0, z:dz/d*Math.min(s,speed)};
+}
+const civDist=c=>c.target?flatDist(c.pos,c.target):1e9;
+
+function tickCivilian(c,dt){
+  if(!c.alive){ integrate(c,v3(),dt); pushAnimCiv(c,dt); return; }
+  c.desired=v3(); c.facing=null;
+
+  if(reacting(c)){
+    integrate(c,v3(),dt); pushAnimCiv(c,dt);
+    if(!reacting(c) && c.down){ c.down=false; c.anim.stance=STANCE.Relaxed; playAction(c.anim,'get_up'); }
+    return;
+  }
+
+  switch(c.state){
+    case 'stroll':   civStroll(c); break;
+    case 'pause':    civPause(c); break;
+    case 'startled': civStartled(c); break;
+    case 'flee':     civFlee(c); break;
+    case 'cower':    civCower(c); break;
+    case 'watch':    civWatch(c); break;
+  }
+
+  civBarge(c);
+  civApplyMovement(c,dt);
+  pushAnimCiv(c,dt);
+}
+
+/* separation from other characters, then move and turn */
+function civApplyMovement(c,dt){
+  let vx=c.desired.x, vz=c.desired.z;
+  for(const o of chars){
+    if(o===c||!o.alive) continue;
+    const dx=c.pos.x-o.pos.x, dz=c.pos.z-o.pos.z;
+    const d=Math.hypot(dx,dz);
+    if(d>1.4||d<1e-4) continue;
+    const w=(1-d/1.4)*2.6;
+    vx+=dx/d*w; vz+=dz/d*w;
+  }
+  const cap=Math.max(c.flee,c.hurry);
+  const m=Math.hypot(vx,vz);
+  if(m>cap){ vx=vx/m*cap; vz=vz/m*cap; }
+  c.planar={x:vx,y:0,z:vz};
+  integrate(c,c.planar,dt);
+
+  const face=c.facing||(m>.2?{x:vx/m,z:vz/m}:null);
+  if(face) c.yaw=moveTowardAngle(c.yaw,Math.atan2(face.x,face.z),c.turn*dt);
+}
+function civStroll(c){
+  if(civHasThreat(c) && civThreatDist(c)<CALM_R){ civSetState(c,'startled'); return; }
+  if(!c.target && !civChooseStop(c)) return;
+  civArrive(c,c.walk);
+  if(civDist(c)>.6) return;
+  if(Math.random()<.22){ civSetState(c,'pause'); return; }
+  civChooseStop(c);
+}
+function civPause(c){
+  if(civTime(c)<.02){
+    const r=Math.random();
+    playAction(c.anim, r<.4?'civ_look_around':(r<.7?'civ_check_watch':'civ_wave'));
+  }
+  if(civHasThreat(c) && civThreatDist(c)<CALM_R){ civSetState(c,'startled'); return; }
+  if(civTime(c)<1.6) return;
+  if(c.anim.action) return;
+  civSetState(c,'stroll');
+}
+function civStartled(c){
+  if(civTime(c)<.02){ playAction(c.anim,'civ_startle'); sfx('grunt',c.pos,.3,.22); }
+  c.facing={x:c.threat.x-c.pos.x, y:0, z:c.threat.z-c.pos.z};
+  if(civTime(c)<.45) return;
+  if(!civHasThreat(c)){ civSetState(c,'stroll'); return; }
+  if(civThreatDist(c)<PANIC_R) civSetState(c, civCornered(c)?'cower':'flee');
+  else civSetState(c,'watch');
+}
+function civFlee(c){
+  if(!civHasThreat(c) || civThreatDist(c)>CALM_R){ civSetState(c,'watch'); return; }
+  if(civCornered(c)){ civSetState(c,'cower'); return; }
+  if(!c.target || civDist(c)<.8){ if(!civChooseEscape(c)){ civSetState(c,'cower'); return; } }
+  civArrive(c,c.flee);
+}
+function civCower(c){
+  if(civTime(c)<.02) playAction(c.anim,'civ_cower');
+  c.facing={x:c.threat.x-c.pos.x, y:0, z:c.threat.z-c.pos.z};
+  if(civTime(c)<1.2) return;
+  if(civHasThreat(c) && civThreatDist(c)<PANIC_R && civCornered(c)) return;
+  stopAction(c.anim);
+  civSetState(c, civHasThreat(c)?'flee':'stroll');
+}
+function civWatch(c){
+  if(!civHasThreat(c)){ civSetState(c,'stroll'); return; }
+  const d=civThreatDist(c);
+  if(d<PANIC_R){ civSetState(c, civCornered(c)?'cower':'flee'); return; }
+  c.facing={x:c.threat.x-c.pos.x, y:0, z:c.threat.z-c.pos.z};
+  if(d<CALM_R*.75){
+    const dx=c.pos.x-c.threat.x, dz=c.pos.z-c.threat.z, l=Math.hypot(dx,dz)||1;
+    c.desired={x:dx/l*c.walk*.45, y:0, z:dz/l*c.walk*.45};
+  }
+  if(civTime(c)<=4.5) return;
+  c.threatUntil=0;              // seen enough; a fresh commotion re-alarms them
+  civSetState(c,'stroll');
+}
+function civBarge(c){
+  if(!player || !player.alive) return;
+  const d=flatDist(c.pos,player.pos);
+  if(d>.95) return;
+  const speed=Math.hypot(player.planar.x, player.planar.z);
+  if(speed<4) return;
+  const dx=c.pos.x-player.pos.x, dz=c.pos.z-player.pos.z, l=Math.hypot(dx,dz)||1;
+  const push=Math.min(speed*.6,8);
+  applyKnockback(c,{x:dx/l*push, y:0, z:dz/l*push});
+  addImpulse(c.anim, worldToLocalDir(c,{x:dx/l,y:0,z:dz/l}), 1.3);
+  playAction(c.anim,'civ_stumble');
+  civAlarm(c, player.pos, .5, 2.5);
+}
+function pushAnimCiv(c,dt){
+  const a=c.anim;
+  const local=worldToLocalDir(c,{x:c.planar?c.planar.x:0,y:0,z:c.planar?c.planar.z:0});
+  a.speed=Math.hypot(local.x,local.z);
+  a.airborne=c.grounded?0:1;
+  a.turnRate=damp(a.turnRate, wrapAngle(c.yaw-c.prevYaw)/Math.max(dt,1e-4)/DEG, 12, dt);
+  c.prevYaw=c.yaw;
+  if(!c.alive) a.stance=STANCE.Dead;
+  else if(c.down) a.stance=STANCE.Downed;
+}
+</script>
+
+<script>
+"use strict";
 /* ---- camera (ported from ThirdPersonCamera) ---------------------------- */
 const CCFG={ pivotH:1.42, shoulder:.45, dist:5.3, combatDist:4.4, sprintBoost:1.1, minDist:1.1,
   minPitch:-34*DEG, maxPitch:50*DEG, rotSharp:22, followSharp:16, vertSharp:9,
@@ -2705,6 +3086,8 @@ function startGame(){
   Director.reset(); Time_.clear();
   Shake.trauma=0; Shake.kx=Shake.kz=Shake.vx=Shake.vz=0;
   buildWorld();
+  Walk.build();
+  Crowd.reset();
   player=makePlayer({x:0,y:0,z:-6});
   chars.push(player);
   Director.focus=player;
@@ -2952,9 +3335,11 @@ function frame(){
     if(dt>0){
       for(const c of chars){
         if(c===player) tickPlayer(c,dt);
+        else if(c.kind==='civilian') tickCivilian(c,dt);
         else tickEnemy(c,dt);
       }
       Director.tick(dt);
+      Crowd.tick();
       tickFX(dt);
       for(const c of chars) c.hitFlash=Math.max(0,c.hitFlash-dt*4);
       // the grab hook runs after the move has advanced
@@ -3088,6 +3473,7 @@ el('play').addEventListener('click',()=>{
   if(!Touch.enabled && !isCoarse()) canvas.requestPointerLock();
 });
 buildWorld();
+Walk.build();
 player=makePlayer({x:0,y:0,z:-6});
 chars.push(player);
 Director.focus=player;

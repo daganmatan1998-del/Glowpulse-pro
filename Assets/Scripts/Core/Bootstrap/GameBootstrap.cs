@@ -9,6 +9,7 @@ using Glowpulse.Player;
 using Glowpulse.VFX;
 using Glowpulse.World;
 using Glowpulse.World.City;
+using Glowpulse.World.Npc;
 using UnityEngine;
 
 namespace Glowpulse.Core.Bootstrap
@@ -44,6 +45,12 @@ namespace Glowpulse.Core.Bootstrap
 
         [SerializeField] private CitySettings _citySettings;
 
+        [Tooltip("Populates the streets with pedestrians. City mode only.")]
+        [SerializeField] private bool _populateCity = true;
+
+        [Tooltip("How many civilians exist at once. They follow the player rather than living in the city.")]
+        [Range(0, 80)] [SerializeField] private int _crowdSize = 26;
+
         [Header("Player")]
         [SerializeField] private Vector3 _spawnPosition = new Vector3(0f, 1.5f, -6f);
         [SerializeField] private float _spawnYaw;
@@ -78,6 +85,11 @@ namespace Glowpulse.Core.Bootstrap
 
         /// <summary>The generated city, or null in the proving ground.</summary>
         public CityLayout City { get; private set; }
+
+        /// <summary>The pavement graph the crowd walks, or null without a city.</summary>
+        public PedestrianNetwork Pavements { get; private set; }
+
+        public CrowdDirector Crowd { get; private set; }
 
         /// <summary>Raised once everything exists, for systems that need the assembled scene.</summary>
         public event System.Action<GameBootstrap> Ready;
@@ -146,7 +158,10 @@ namespace Glowpulse.Core.Bootstrap
             ImpactEffects.Install(services);
             CombatDirector.Install(services);
 
+            Crowd = services.AddComponent<CrowdDirector>();
+
             Combat.CombatPoses.EnsureRegistered();
+            World.Npc.CivilianPoses.EnsureRegistered();
         }
 
         private void BuildWorld()
@@ -181,6 +196,16 @@ namespace Glowpulse.Core.Bootstrap
 
             new CityBuilder(City).Build(WorldRoot);
             _spawnPosition = City.PlayerSpawn + Vector3.up * 1.5f;
+
+            Pavements = PedestrianNetwork.Build(City);
+
+            // A pedestrian who walks onto a stranded node stands there for the
+            // rest of the game, so the graph is worth the same load-time check the
+            // layout gets.
+            System.Collections.Generic.List<string> walkProblems = Pavements.Validate();
+            if (walkProblems.Count > 0)
+                Debug.LogWarning("[City] pedestrian network problems:\n  - " +
+                                 string.Join("\n  - ", walkProblems));
         }
 
         private void BuildPlayerAndCamera()
@@ -202,8 +227,28 @@ namespace Glowpulse.Core.Bootstrap
             CombatDirector director = CombatDirector.Instance;
             if (director != null) director.Focus = Player.transform;
 
+            PopulateStreets();
+
             if (_spawnTrainingDummies) SpawnTrainingDummies(spawn);
             if (_spawnTestEncounter) SpawnTestEncounter(spawn);
+        }
+
+        /// <summary>
+        /// Hands the crowd its pavements and someone to follow. Skipped entirely
+        /// without a city, because the proving ground has no streets to walk.
+        /// </summary>
+        private void PopulateStreets()
+        {
+            if (Crowd == null) return;
+
+            if (!_populateCity || Pavements == null || Pavements.NodeCount == 0)
+            {
+                Crowd.Population = 0;
+                return;
+            }
+
+            Crowd.Population = _crowdSize;
+            Crowd.Configure(Pavements, Player.transform, _citySeed ^ 0x5F3A);
         }
 
         /// <summary>

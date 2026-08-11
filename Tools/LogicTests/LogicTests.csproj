@@ -56,6 +56,8 @@
     <Compile Include="../../Assets/Scripts/Enemies/EnemyArchetype.cs" />
     <Compile Include="../../Assets/Scripts/World/City/CitySettings.cs" />
     <Compile Include="../../Assets/Scripts/World/City/CityLayout.cs" />
+    <Compile Include="../../Assets/Scripts/World/Npc/PedestrianNetwork.cs" />
+    <Compile Include="../../Assets/Scripts/World/Npc/CivilianPoses.cs" />
   </ItemGroup>
 
 </Project>

@@ -9,8 +9,8 @@ the next one starts.
 | 2 | Combat: light/heavy attacks, combos, block, parry, counter, grab, hit feel | **Done** |
 | 3 | Enemy AI: three archetypes, state machine, encounter coordination | **Done** |
 | 4 | Open-world city | **Done** |
-| 5 | Civilian NPCs | Next |
-| 6 | Mission system, "Clear the Street" | |
+| 5 | Civilian NPCs | **Done** |
+| 6 | Mission system, "Clear the Street" | Next |
 | 7 | Progression: XP, levels, money, skill tree | |
 | 8 | HUD, pause, settings, mission and game-over screens | |
 | 9 | Audio and VFX | |
@@ -198,6 +198,47 @@ than the visuals - one box per building, not one per window.
 `CityLocation`s, and `PickArena` finds one near a point. Encounters are staged
 in real space in the city rather than on a flat proving ground, which is what
 the mission system will use to place fights.
+
+## Phase 5 - what exists
+
+**A graph, not pathfinding.** `PedestrianNetwork` lays two walking lanes over
+every road - one per pavement - and puts a node wherever lanes cross, which is
+exactly where a real pavement corner is. Civilians walk node to node, so there
+is no path to allocate and nothing to recompute when the crowd moves. Links that
+step over a carriageway are marked as crossings and weighted down, so people
+follow the kerb rather than wandering into traffic. Like the city layout it is
+pure data, and the tests check the graph is connected, that no node stands
+inside a building, and that a stroll keeps going instead of shuffling on the
+spot.
+
+**Reacting, not just walking.** A civilian who only walks is set dressing. These
+stroll, stop to check the time or wave at somebody, and then a fight breaks out:
+they flinch, and depending on how close it is they run, or they stand at a safe
+distance and watch. Cornered - when no neighbouring node is further from the
+trouble - they crouch and cover up instead. Bystanders gathering to watch costs
+almost nothing and does more for a living street than any amount of wandering.
+
+**Trouble is pushed, not discovered.** `CombatFeedback` raises a `Commotion`
+event on every landed hit, block and parry; the crowd listens. Combat stays a
+leaf that knows nothing about pedestrians, and civilians do no perception work
+at all - no raycasts, no target search. The same signal is what a police
+response or a mission trigger would hang off later.
+
+**Never a punching bag.** The faction rules already made civilians immune to
+every attack, and `CivilianCombatant` refuses damage explicitly as well, so a
+future explosion or thrown enemy cannot kill a bystander by accident. They are
+not lock-on targets either - a reticle snapping to a pedestrian mid-fight is one
+of the fastest ways to make combat feel broken. What they do get is shoved:
+running through one knocks them off their line and they stumble, detected from
+the civilian's side so the player controller never needs to know they exist.
+
+**A budget, not a census.** `CrowdDirector` keeps a fixed number of people near
+the player rather than populating the whole city. Anyone who falls behind is
+recycled to a pavement ahead with a new seed and comes back as a different
+person, so the cost stays constant however large the city grows. Thinking is
+throttled by distance - every frame up close, a few times a second at range -
+with the skipped time handed to the tick, so a distant civilian covers the same
+ground in coarser steps rather than falling behind.
 
 ## Conventions
 

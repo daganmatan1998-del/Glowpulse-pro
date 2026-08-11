@@ -27,6 +27,21 @@ namespace Glowpulse.Combat
         /// <summary>Enables the brief slow-motion on the heaviest hits.</summary>
         public static bool SlowMotionEnabled = true;
 
+        /// <summary>
+        /// Violence happened at a position, with a severity from 0 to 1.
+        ///
+        /// This exists so the rest of the game can react to a fight without combat
+        /// having to know who is listening. The crowd uses it to panic; missions
+        /// and, later, a police response can hang off the same signal. Combat
+        /// itself stays a leaf.
+        /// </summary>
+        public static event System.Action<Vector3, float> Commotion;
+
+        private static void RaiseCommotion(Vector3 point, float severity)
+        {
+            Commotion?.Invoke(point, severity);
+        }
+
         /// <summary>A hit that landed on a character.</summary>
         public static void Landed(AttackDefinition move, in DamageInfo info, HitResult result,
             Vector3 point, bool isPlayerAttacker)
@@ -66,6 +81,8 @@ namespace Glowpulse.Combat
 
             if (!killed && info.Impact >= HitImpact.Medium)
                 AudioManager.PlayAt(Sfx.Grunt, point, 0.7f, 0.14f);
+
+            RaiseCommotion(point, killed ? 1f : Mathf.Clamp01(0.5f + (int)info.Impact * 0.15f));
         }
 
         /// <summary>A hit that was absorbed on the defender's guard.</summary>
@@ -75,6 +92,7 @@ namespace Glowpulse.Combat
             CameraShaker.Shake(move.CameraShake * 0.4f * ShakeScale);
             ImpactEffects.Play(ImpactVisual.Block, point, info.Direction, 0.9f);
             AudioManager.PlayAt(Sfx.Block, point, 0.9f);
+            RaiseCommotion(point, 0.55f);
         }
 
         /// <summary>
@@ -89,6 +107,7 @@ namespace Glowpulse.Combat
             CameraShaker.Shake(0.32f * ShakeScale);
             ImpactEffects.Play(ImpactVisual.Parry, point, info.Direction, 1.15f);
             AudioManager.PlayAt(Sfx.Parry, point, 1f, 0.03f);
+            RaiseCommotion(point, 0.8f);
         }
 
         /// <summary>The defender's guard was broken by accumulated damage.</summary>
@@ -174,6 +193,20 @@ namespace Glowpulse.Combat
                 case "grab": return Sfx.Grab;
                 default: return Sfx.Punch;
             }
+        }
+
+        /// <summary>
+        /// Drops subscribers between play sessions. Without this the editor's
+        /// "no domain reload" option keeps last session's listeners alive, and the
+        /// event starts firing into destroyed objects the moment combat resumes.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            Commotion = null;
+            HitStopScale = 1f;
+            ShakeScale = 1f;
+            SlowMotionEnabled = true;
         }
     }
 }

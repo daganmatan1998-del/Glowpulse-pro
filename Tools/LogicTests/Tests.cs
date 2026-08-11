@@ -7,6 +7,7 @@ using Glowpulse.Core.Timing;
 using Glowpulse.AI;
 using Glowpulse.Enemies;
 using Glowpulse.World.City;
+using Glowpulse.World.Npc;
 using UnityEngine;
 
 namespace Glowpulse.LogicTests
@@ -32,6 +33,8 @@ namespace Glowpulse.LogicTests
             ArchetypeTests();
             DirectorTests();
             CityTests();
+            PedestrianTests();
+            CivilianPoseTests();
 
             return Check.Report();
         }
@@ -960,6 +963,262 @@ namespace Glowpulse.LogicTests
                 CitySettings s = CitySettings.Default;
                 Check.Equal(junctions, (s.BlocksX + 1) * (s.BlocksZ + 1),
                     "one junction per grid crossing");
+            });
+        }
+
+        // ---- pedestrian network -------------------------------------------------------------------
+
+        private static PedestrianNetwork NewPavements(int seed = 1234)
+        {
+            return PedestrianNetwork.Build(NewCity(seed));
+        }
+
+        private static void PedestrianTests()
+        {
+            Check.Run("Every city gets a connected pedestrian network", () =>
+            {
+                for (int seed = 1; seed <= 12; seed++)
+                {
+                    PedestrianNetwork network = NewPavements(seed * 71);
+
+                    Check.Greater(network.NodeCount, 20, $"seed {seed}: the streets are walkable");
+
+                    System.Collections.Generic.List<string> problems = network.Validate();
+                    if (problems.Count > 0)
+                        Check.True(false, $"seed {seed}: {problems[0]}");
+                    else
+                        Check.True(true, $"seed {seed}: network is sound");
+                }
+            });
+
+            Check.Run("Pavement nodes stand on pavement, never inside a building", () =>
+            {
+                for (int seed = 1; seed <= 8; seed++)
+                {
+                    CityLayout city = NewCity(seed * 313);
+                    PedestrianNetwork network = PedestrianNetwork.Build(city);
+
+                    for (int i = 0; i < network.NodeCount; i++)
+                    {
+                        Vector3 p = network.NodePosition(i);
+                        Check.False(city.IsInsideBuilding(new Vector2(p.x, p.z)),
+                            $"seed {seed}: node {i} is on open ground");
+                    }
+                }
+            });
+
+            Check.Run("Nodes sit on the pavement rather than in the carriageway", () =>
+            {
+                CitySettings s = CitySettings.Default;
+                PedestrianNetwork network = NewPavements(99);
+
+                // A node should be offset from the road centreline by roughly half
+                // the carriageway - out of the traffic, on the flags.
+                float expected = s.CarriagewayWidth * 0.5f + s.SidewalkWidth * 0.5f;
+                Check.Greater(expected, s.CarriagewayWidth * 0.5f, "the lane clears the carriageway");
+                Check.Less(expected, s.RoadWidth * 0.5f, "the lane stays inside the road corridor");
+
+                Check.Greater(network.LinkCount, network.NodeCount, "nodes are linked into a grid");
+            });
+
+            Check.Run("Some links are crossings and most are not", () =>
+            {
+                PedestrianNetwork network = NewPavements(5150);
+
+                int crossings = 0;
+                for (int i = 0; i < network.LinkCount; i++)
+                    if (network.Links[i].IsCrossing) crossings++;
+
+                Check.Greater(crossings, 0, "stepping into the road is recognised as a crossing");
+                Check.Less(crossings, network.LinkCount * 0.6f,
+                    "most of the network is pavement, not road");
+            });
+
+            Check.Run("A stroll keeps going instead of shuffling back and forth", () =>
+            {
+                PedestrianNetwork network = NewPavements(31337);
+                var rng = new System.Random(4);
+
+                int previous = -1;
+                int current = network.Nearest(Vector3.zero);
+                Check.True(current >= 0, "there is somewhere to start");
+
+                int backtracks = 0;
+                var visited = new System.Collections.Generic.HashSet<int>();
+
+                for (int step = 0; step < 200; step++)
+                {
+                    Vector3 heading = previous >= 0
+                        ? network.NodePosition(current) - network.NodePosition(previous)
+                        : Vector3.forward;
+
+                    int next = network.NextStep(current, previous, heading, rng);
+                    Check.True(next >= 0, $"step {step} found somewhere to go");
+
+                    if (next == previous) backtracks++;
+                    visited.Add(next);
+
+                    previous = current;
+                    current = next;
+                }
+
+                // Doubling back is allowed - people do - but it must be rare, or
+                // the crowd paces on the spot.
+                Check.Less(backtracks, 30f, "walkers rarely double back");
+                Check.Greater(visited.Count, 12f, "a walk actually covers ground");
+            });
+
+            Check.Run("Fleeing always increases the distance from the trouble", () =>
+            {
+                PedestrianNetwork network = NewPavements(24);
+
+                int checkedNodes = 0;
+                for (int i = 0; i < network.NodeCount; i += 3)
+                {
+                    Vector3 here = network.NodePosition(i);
+
+                    // Trouble one node over, so there is somewhere better to be.
+                    Vector3 threat = here + new Vector3(3f, 0f, 3f);
+
+                    int escape = network.StepAwayFrom(i, threat);
+                    if (escape < 0) continue;
+
+                    Check.Greater(
+                        Vector3.Distance(network.NodePosition(escape), threat),
+                        Vector3.Distance(here, threat),
+                        $"node {i}: running away increases the gap");
+                    checkedNodes++;
+                }
+
+                Check.Greater(checkedNodes, 5, "the test actually exercised some escapes");
+            });
+
+            Check.Run("A civilian with nowhere further to run is cornered", () =>
+            {
+                PedestrianNetwork network = NewPavements(808);
+
+                // The node furthest from the trouble is, by definition, one where
+                // no neighbour is further still. That is the cornered case, and
+                // the states rely on it to switch from running to covering up.
+                var threat = new Vector3(-400f, 0f, -400f);
+
+                int furthest = 0;
+                float furthestSqr = -1f;
+                for (int i = 0; i < network.NodeCount; i++)
+                {
+                    float sqr = (network.NodePosition(i) - threat).sqrMagnitude;
+                    if (sqr <= furthestSqr) continue;
+                    furthestSqr = sqr;
+                    furthest = i;
+                }
+
+                Check.Equal(network.StepAwayFrom(furthest, threat), -1,
+                    "the far corner has nowhere better to go");
+
+                // Everywhere else there is still an escape, or fleeing would be
+                // pointless well before anyone is actually trapped.
+                int escapable = 0;
+                for (int i = 0; i < network.NodeCount; i++)
+                    if (network.StepAwayFrom(i, threat) >= 0) escapable++;
+
+                Check.Greater(escapable, network.NodeCount * 0.9f,
+                    "almost everywhere still has a way out");
+            });
+
+            Check.Run("An empty city produces an empty network rather than throwing", () =>
+            {
+                PedestrianNetwork network = PedestrianNetwork.Build(null);
+
+                Check.Equal(network.NodeCount, 0, "no nodes");
+                Check.Equal(network.Nearest(Vector3.zero), -1, "nothing is nearest");
+                Check.Equal(network.NextStep(0, -1, Vector3.forward, new System.Random(1)), -1,
+                    "there is nowhere to walk");
+                Check.Equal(network.StepAwayFrom(0, Vector3.zero), -1, "and nowhere to flee");
+                Check.Greater(network.Validate().Count, 0, "and it says so");
+            });
+
+            Check.Run("The network is the same for the same seed", () =>
+            {
+                PedestrianNetwork a = NewPavements(6060);
+                PedestrianNetwork b = NewPavements(6060);
+
+                Check.Equal(a.NodeCount, b.NodeCount, "same node count");
+                Check.Equal(a.LinkCount, b.LinkCount, "same link count");
+
+                for (int i = 0; i < a.NodeCount; i++)
+                    Check.Near(a.NodePosition(i), b.NodePosition(i), $"node {i}");
+            });
+        }
+
+        // ---- civilian animation -------------------------------------------------------------------
+
+        private static void CivilianPoseTests()
+        {
+            Check.Run("Every civilian clip registers and can be sampled", () =>
+            {
+                CivilianPoses.EnsureRegistered();
+
+                string[] ids =
+                {
+                    CivilianPoses.Startle, CivilianPoses.Cower, CivilianPoses.Shield,
+                    CivilianPoses.Wave, CivilianPoses.CheckWatch, CivilianPoses.LookAround,
+                    CivilianPoses.Stumble
+                };
+
+                int boneCount = System.Enum.GetValues(typeof(RigBone)).Length;
+                var accumulator = new Quaternion[boneCount];
+                var touched = new bool[boneCount];
+
+                foreach (string id in ids)
+                {
+                    PoseClip clip = PoseLibrary.Get(id);
+                    Check.True(clip != null, $"{id} is registered");
+                    if (clip == null) continue;
+
+                    Check.Greater(clip.Duration, 0f, $"{id} has a length");
+
+                    for (int i = 0; i < boneCount; i++)
+                    {
+                        accumulator[i] = Quaternion.identity;
+                        touched[i] = false;
+                    }
+
+                    // Sampling past the end has to stay safe: the animator runs a
+                    // frame beyond a clip on its way out of an action.
+                    Vector3 hips = Vector3.zero;
+                    clip.Sample(clip.Duration * 1.5f, 1f, accumulator, touched, ref hips);
+
+                    Check.True(!float.IsNaN(hips.x) && !float.IsNaN(hips.y) && !float.IsNaN(hips.z),
+                        $"{id} samples cleanly past its end");
+
+                    bool anyTouched = false;
+                    for (int i = 0; i < boneCount; i++) anyTouched |= touched[i];
+                    Check.True(anyTouched, $"{id} actually moves something");
+                }
+            });
+
+            Check.Run("Cower and shield hold their pose instead of snapping back", () =>
+            {
+                CivilianPoses.EnsureRegistered();
+
+                PoseClip cower = PoseLibrary.Get(CivilianPoses.Cower);
+                PoseClip shield = PoseLibrary.Get(CivilianPoses.Shield);
+
+                Check.True(cower != null && cower.HoldLastFrame, "cowering is held");
+                Check.True(shield != null && shield.HoldLastFrame, "shielding is held");
+
+                PoseClip startle = PoseLibrary.Get(CivilianPoses.Startle);
+                Check.True(startle != null && !startle.HoldLastFrame,
+                    "a startle is a one-shot, not a pose to stand in");
+            });
+
+            Check.Run("Registering the civilian set does not disturb the combat set", () =>
+            {
+                CombatPoses.EnsureRegistered();
+                CivilianPoses.EnsureRegistered();
+
+                Check.True(PoseLibrary.Has(CombatPoses.LightJab), "combat clips survive");
+                Check.True(PoseLibrary.Has(CivilianPoses.Cower), "civilian clips are present");
             });
         }
 

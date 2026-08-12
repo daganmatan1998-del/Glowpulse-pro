@@ -216,6 +216,7 @@
 
 .overlay{ position:fixed; inset:0; display:none; align-items:center; justify-content:center;
   background:radial-gradient(120% 90% at 50% 20%, rgba(28,26,24,.9), rgba(6,7,8,.97)); z-index:40 }
+#settingsScreen{ z-index:60 }
 .overlay.on{ display:flex }
 .panel{ width:min(640px,92vw); border:1px solid var(--line); background:rgba(14,16,19,.9);
   padding:32px 34px; text-align:center }
@@ -224,6 +225,7 @@
 .panel .rewards{ font:700 18px/1.7 ui-monospace,monospace; color:var(--cyan); margin:14px 0 }
 .panel .note{ font:400 14px/1.5 system-ui,sans-serif; color:rgba(237,230,218,.55); margin-bottom:20px }
 .panel button{ display:block; width:100%; margin:8px 0; transform:none }
+.panel button span{ transform:none }
 .panel button:hover{ transform:none }
 
 #selectList{ text-align:left; margin:14px 0 18px }
@@ -240,6 +242,34 @@
 .stitle{ font:700 16px/1.3 system-ui,sans-serif }
 .srow.current .stitle{ color:var(--sun) }
 .sdetail{ font:400 13px/1.4 system-ui,sans-serif; color:rgba(237,230,218,.5) }
+/* ---- settings ------------------------------------------------------- */
+#settingsPanel{ width:min(720px,94vw); max-height:92vh; overflow-y:auto; text-align:left }
+#settingsPanel h2{ text-align:center }
+.sechead{ font:700 13px/1 ui-monospace,monospace; letter-spacing:.24em; color:var(--sun);
+  margin:20px 0 10px; display:flex; align-items:center; justify-content:space-between }
+.diffrow{ display:flex; gap:8px }
+.diffrow button{ flex:1; margin:0; transform:none }
+.diffrow button:hover{ transform:none }
+button.diff{ background:rgba(255,255,255,.07); color:var(--bone) }
+button.diff:hover{ background:rgba(255,255,255,.14) }
+button.diff.on{ background:var(--sun); color:var(--ink) }
+button.diff.on span{ color:var(--ink) }
+button.mini{ background:rgba(255,255,255,.07); color:var(--bone) }
+.bindrow button{ background:rgba(255,255,255,.07); color:var(--bone) }
+button.mini{ padding:5px 12px; font-size:10px; margin:0; transform:none }
+button.mini:hover{ transform:none }
+.sliderrow{ display:flex; align-items:center; gap:12px }
+.sliderrow label{ width:120px; font:400 14px/1 system-ui,sans-serif }
+.sliderrow input{ flex:1; accent-color:var(--cyan) }
+.sliderrow span{ width:48px; text-align:right; font:400 13px/1 ui-monospace,monospace;
+  color:rgba(237,230,218,.6) }
+.bindrow{ display:flex; align-items:center; gap:10px; padding:5px 0 }
+.bindrow .bname{ width:150px; font:400 14px/1 system-ui,sans-serif }
+.bindrow .bkeys{ flex:1; font:400 13px/1 ui-monospace,monospace; color:var(--cyan) }
+.bindrow.unbound .bkeys{ color:var(--thug) }
+.bindrow.listening .bkeys{ color:var(--sun) }
+.bindrow button{ width:auto; padding:5px 12px; font-size:10px; margin:0; transform:none }
+.bindrow button:hover{ transform:none }
 </style>
 
 <div id="titleCard">
@@ -262,12 +292,39 @@
   <div class="note" id="endNote"></div>
   <button id="endNext"><span>NEXT STAGE</span></button>
   <button id="endSelect"><span>STAGE SELECT</span></button>
+  <button id="endSettings"><span>SETTINGS</span></button>
 </div></div>
 
 <div class="overlay" id="selectScreen"><div class="panel">
   <h2>STAGE SELECT</h2>
   <div id="selectList"></div>
+  <button id="selectSettings"><span>SETTINGS</span></button>
   <button id="selectBack"><span>BACK</span></button>
+</div></div>
+
+<div class="overlay" id="settingsScreen"><div class="panel" id="settingsPanel">
+  <h2>SETTINGS</h2>
+
+  <div class="sechead">DIFFICULTY</div>
+  <div class="diffrow">
+    <button class="diff" data-diff="easy"><span>EASY</span></button>
+    <button class="diff" data-diff="normal"><span>NORMAL</span></button>
+    <button class="diff" data-diff="hard"><span>HARD</span></button>
+  </div>
+  <div class="note" id="diffNote"></div>
+
+  <div class="sechead">MOUSE</div>
+  <div class="sliderrow">
+    <label>Sensitivity</label>
+    <input id="sensSlider" type="range" min="0.25" max="3" step="0.05">
+    <span id="sensValue">1.00</span>
+  </div>
+
+  <div class="sechead">CONTROLS <button id="bindReset" class="mini"><span>RESET TO DEFAULTS</span></button></div>
+  <div id="bindList"></div>
+  <div class="note" id="bindNote">Click a key to change it. Escape cancels.</div>
+
+  <button id="settingsBack"><span>BACK</span></button>
 </div></div>
 
 <div id="stage"><canvas id="c"></canvas></div>
@@ -357,7 +414,8 @@
 
     <div class="go">
       <button id="play"><span>Start fighting</span></button>
-      <span class="hint" id="startHint">Click locks the mouse. Press Esc to release it.</span>
+      <button id="titleSettings"><span>Settings</span></button>
+      <span class="hint" id="startHint">Click locks the mouse. Esc releases it. O opens settings, L is stage select.</span>
     </div>
   </div>
 </div>
@@ -2132,7 +2190,7 @@ function separate(c,dt){
 "use strict";
 /* ---- input ------------------------------------------------------------- */
 const Keys={};
-const Mouse={dx:0,dy:0,left:false,right:false,leftEdge:false,rightEdge:false};
+const Mouse={dx:0,dy:0,left:false,right:false,middle:false,leftEdge:false,rightEdge:false};
 const Input={ move:{x:0,y:0}, look:{x:0,y:0},
   sprint:false, block:false, jump:false, jumpHeld:false, dodge:false,
   light:false, heavy:false, grab:false, lock:false };
@@ -3231,14 +3289,82 @@ const DIFFICULTY={
 
 /* ---- persistence (ported from SaveData/SaveFile) ---------------------- */
 const SAVE_KEY='glowpulse.save.v1';
+
+/* ---- key bindings (ported from InputBindings) -------------------------
+   Two keys per action, because the shipped controls genuinely use two for
+   dodge and block and collapsing that would quietly change the game.
+   Claiming a key takes it from whoever had it and leaves that action
+   visibly unbound - a problem you can see - rather than two actions
+   silently sharing one. */
+const ACTIONS=[
+  {id:'forward', name:'Move Forward'},
+  {id:'back',    name:'Move Backward'},
+  {id:'left',    name:'Move Left'},
+  {id:'right',   name:'Move Right'},
+  {id:'sprint',  name:'Sprint'},
+  {id:'jump',    name:'Jump'},
+  {id:'dodge',   name:'Dodge'},
+  {id:'light',   name:'Attack'},
+  {id:'heavy',   name:'Heavy Attack'},
+  {id:'block',   name:'Block'},
+  {id:'grab',    name:'Grab'},
+  {id:'lock',    name:'Lock On'}
+];
+const DEFAULT_BINDS={
+  forward:['KeyW','ArrowUp'], back:['KeyS','ArrowDown'],
+  left:['KeyA','ArrowLeft'], right:['KeyD','ArrowRight'],
+  sprint:['ShiftLeft','ShiftRight'], jump:['Space',null],
+  dodge:['ControlLeft','KeyC'], light:['Mouse0',null],
+  heavy:['KeyF',null], block:['Mouse1','KeyQ'],
+  grab:['KeyG',null], lock:['Tab','Mouse2']
+};
+function defaultBinds(){ const o={}; for(const k in DEFAULT_BINDS) o[k]=DEFAULT_BINDS[k].slice(); return o; }
+
+function keyLabel(code){
+  if(!code) return '-';
+  const named={ Mouse0:'LMB', Mouse1:'RMB', Mouse2:'MMB', Space:'Space', Tab:'Tab',
+    ControlLeft:'Left Ctrl', ControlRight:'Right Ctrl', ShiftLeft:'Left Shift',
+    ShiftRight:'Right Shift', AltLeft:'Left Alt', AltRight:'Right Alt',
+    ArrowUp:'Up', ArrowDown:'Down', ArrowLeft:'Left', ArrowRight:'Right',
+    Escape:'Esc', Enter:'Enter', Backspace:'Backspace' };
+  if(named[code]) return named[code];
+  if(code.startsWith('Key')) return code.slice(3);
+  if(code.startsWith('Digit')) return code.slice(5);
+  return code;
+}
+function bindLabel(id){
+  const b=Save.data.binds[id]||[];
+  if(!b[0]&&!b[1]) return 'Unbound';
+  if(!b[1]) return keyLabel(b[0]);
+  if(!b[0]) return keyLabel(b[1]);
+  return keyLabel(b[0])+' / '+keyLabel(b[1]);
+}
+function bindHeld(id){
+  const b=Save.data.binds[id]||[];
+  return b.some(c=>c&&(c.startsWith('Mouse')?mouseDown(c):!!Keys[c]));
+}
+function mouseDown(code){
+  return code==='Mouse0'?Mouse.left : code==='Mouse1'?Mouse.right : Mouse.middle;
+}
+function rebind(id,code,slot){
+  if(!code) return;
+  // Take the key from whoever had it rather than refusing the rebind.
+  for(const a of ACTIONS){
+    const b=Save.data.binds[a.id];
+    for(let i=0;i<2;i++) if(b[i]===code && !(a.id===id&&i===slot)) b[i]=null;
+  }
+  Save.data.binds[id][slot]=code;
+  Save.write();
+}
+
 const Save={
   data:{ difficulty:'normal', sensitivity:1, highestUnlocked:0, current:0,
-         completed:[], xp:0, money:0 },
+         completed:[], xp:0, money:0, binds:defaultBinds() },
   load(){
     // Start from defaults every time. Merging onto whatever is already in
     // memory means clearing the save leaves the old progress behind.
     this.data={ difficulty:'normal', sensitivity:1, highestUnlocked:0, current:0,
-                completed:[], xp:0, money:0 };
+                completed:[], xp:0, money:0, binds:defaultBinds() };
     try{
       const raw=localStorage.getItem(SAVE_KEY);
       if(raw) Object.assign(this.data, JSON.parse(raw)||{});
@@ -3254,6 +3380,14 @@ const Save={
     if(!Array.isArray(d.completed)) d.completed=[];
     d.completed=d.completed.filter(i=>i>=0&&i<STAGES.length);
     d.xp=Math.max(0,d.xp|0); d.money=Math.max(0,d.money|0);
+    // Repair a binding table written by an older build: an action with
+    // nothing on it falls back to its default rather than being unplayable.
+    const def=defaultBinds();
+    if(!d.binds||typeof d.binds!=='object') d.binds=def;
+    for(const a of ACTIONS){
+      const b=d.binds[a.id];
+      if(!Array.isArray(b)||b.length!==2||(!b[0]&&!b[1])) d.binds[a.id]=def[a.id].slice();
+    }
   },
   write(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(this.data)); }catch(e){} },
   unlocked(i){ return i<=this.data.highestUnlocked; },
@@ -3482,7 +3616,7 @@ const Screens={
 
   defeat(st){
     this.el('endTitle').textContent='YOU WENT DOWN';
-    this.el('endTitle').style.color='var(--red)';
+    this.el('endTitle').style.color='var(--thug)';
     this.el('endStage').textContent=st.name;
     this.el('endRewards').innerHTML=`XP ${Save.data.xp}<br>$${Save.data.money}`;
     this.el('endNote').textContent='Everything you earned on the way is kept.';
@@ -3512,7 +3646,90 @@ const Screens={
     this.el('selectScreen').classList.add('on');
     Time_.paused=true;
   },
-  hideSelect(){ this.el('selectScreen').classList.remove('on'); Time_.paused=false; }
+  hideSelect(){ this.el('selectScreen').classList.remove('on'); Time_.paused=false; },
+
+  /* ---- settings ------------------------------------------------------
+     Changes apply as they are made rather than behind an Apply button: a
+     sensitivity slider you cannot feel while dragging is useless. */
+  settings(){
+    this.refreshSettings();
+    this.el('settingsScreen').classList.add('on');
+    Time_.paused=true;
+    releasePointer();
+  },
+  hideSettings(){
+    Rebind.cancel();
+    Save.write();
+    this.el('settingsScreen').classList.remove('on');
+    Time_.paused=false;
+  },
+  refreshSettings(){
+    const d=Save.data;
+
+    document.querySelectorAll('button.diff').forEach(b=>
+      b.classList.toggle('on', b.dataset.diff===d.difficulty));
+
+    this.el('diffNote').textContent={
+      easy:'Enemies hit softer, have less health, and come at you one at a time.',
+      normal:'The fight as it was tuned.',
+      hard:'Enemies hit harder, take more punishment, and three can swing at once.'
+    }[d.difficulty];
+
+    this.el('sensSlider').value=d.sensitivity;
+    this.el('sensValue').textContent=(+d.sensitivity).toFixed(2);
+
+    const list=this.el('bindList');
+    list.innerHTML='';
+    for(const a of ACTIONS){
+      const b=d.binds[a.id];
+      const unbound=!b[0]&&!b[1];
+      const listening=Rebind.action===a.id;
+      const row=document.createElement('div');
+      row.className='bindrow'+(unbound?' unbound':'')+(listening?' listening':'');
+      row.innerHTML=`<div class="bname">${a.name}</div>
+        <div class="bkeys">${listening?'Press a key...':bindLabel(a.id)}</div>`;
+      for(let slot=0;slot<2;slot++){
+        const btn=document.createElement('button');
+        btn.innerHTML=`<span>${slot?'ALT':'SET'}</span>`;
+        btn.onclick=()=>Rebind.begin(a.id,slot);
+        row.appendChild(btn);
+      }
+      list.appendChild(row);
+    }
+  }
+};
+
+/* ---- capturing a new key ---------------------------------------------
+   Escape cancels the capture rather than closing the menu, and is never
+   itself bindable: it is the way out of the screen that rebinds everything
+   else, so it has to stay where it is. */
+const Rebind={
+  action:null, slot:0,
+  begin(id,slot){
+    this.action=id; this.slot=slot;
+    Screens.el('bindNote').textContent='Press a key or mouse button. Escape cancels.';
+    Screens.refreshSettings();
+  },
+  cancel(){ this.action=null; },
+  take(code){
+    if(!this.action) return false;
+    if(code==='Escape'){
+      this.cancel();
+      Screens.el('bindNote').textContent='Rebinding cancelled.';
+      Screens.refreshSettings();
+      return true;
+    }
+    const stolen=ACTIONS.find(a=>a.id!==this.action &&
+      Save.data.binds[a.id].includes(code));
+    rebind(this.action,code,this.slot);
+    const name=ACTIONS.find(a=>a.id===this.action).name;
+    this.cancel();
+    Screens.el('bindNote').textContent = stolen
+      ? `${keyLabel(code)} taken from ${stolen.name}.`
+      : `${name} is now ${keyLabel(code)}.`;
+    Screens.refreshSettings();
+    return true;
+  }
 };
 
 function enterStage(i){
@@ -3745,28 +3962,62 @@ function startGame(){
 
 
 /* ---- input wiring ------------------------------------------------------ */
-const KEYMAP={ KeyW:'f', KeyS:'b', KeyA:'l', KeyD:'r', ArrowUp:'f', ArrowDown:'b', ArrowLeft:'l', ArrowRight:'r' };
+// Was the key just pressed bound to this action?
+function bindPressed(id,code){ const b=Save.data.binds[id]; return b[0]===code||b[1]===code; }
+
 addEventListener('keydown',e=>{
   if(e.repeat){ e.preventDefault(); return; }
+
+  // While a rebind is armed the settings screen owns every key, so a capture
+  // cannot also fire the action it is being bound to.
+  if(Rebind.take(e.code)){ e.preventDefault(); return; }
+
   Keys[e.code]=true;
-  if(e.code==='Tab'){ Input.lock=true; e.preventDefault(); }
-  if(e.code==='KeyF') Input.heavy=true;
-  if(e.code==='KeyG') Input.grab=true;
-  if(e.code==='Space'){ Input.jump=true; e.preventDefault(); }
-  if(e.code==='ControlLeft'||e.code==='ControlRight'||e.code==='KeyC') Input.dodge=true;
+
+  if(bindPressed('lock',e.code)){ Input.lock=true; e.preventDefault(); }
+  if(bindPressed('heavy',e.code)) Input.heavy=true;
+  if(bindPressed('grab',e.code)) Input.grab=true;
+  if(bindPressed('jump',e.code)){ Input.jump=true; e.preventDefault(); }
+  if(bindPressed('dodge',e.code)) Input.dodge=true;
+  if(bindPressed('light',e.code)) Input.light=true;
+
   if(e.code==='KeyR'&&Game.running){ enterStage(Stage.def?Stage.index:Save.data.current); Game.manualPause=false; Time_.paused=false; }
   if(e.code==='KeyM'){ Audio_.muted=!Audio_.muted; showBanner(Audio_.muted?'Sound off':'Sound on'); }
-  if(e.code==='Escape') releasePointer();
+  if(e.code==='KeyO'&&Game.running) Screens.settings();
+  if(e.code==='Escape'){
+    // Escape backs out of whatever screen is open, then releases the pointer.
+    if(document.getElementById('settingsScreen').classList.contains('on')) Screens.hideSettings();
+    else if(document.getElementById('selectScreen').classList.contains('on')) Screens.hideSelect();
+    else releasePointer();
+  }
   if(['Space','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup',e=>{ Keys[e.code]=false; });
 canvas.addEventListener('mousedown',e=>{
   if(Touch.enabled) return;
-  if(e.button===0){ Mouse.left=true; Input.light=true; }
-  if(e.button===2){ Mouse.right=true; }
+
+  // Mouse buttons are bindable too, so they go through the same table as keys.
+  const code=e.button===0?'Mouse0':e.button===2?'Mouse1':e.button===1?'Mouse2':null;
+  if(e.button===0) Mouse.left=true;
+  if(e.button===2) Mouse.right=true;
+  if(e.button===1) Mouse.middle=true;
+
+  if(code && Rebind.take(code)){ e.preventDefault(); return; }
+  if(code){
+    if(bindPressed('light',code)) Input.light=true;
+    if(bindPressed('heavy',code)) Input.heavy=true;
+    if(bindPressed('grab',code)) Input.grab=true;
+    if(bindPressed('dodge',code)) Input.dodge=true;
+    if(bindPressed('jump',code)) Input.jump=true;
+    if(bindPressed('lock',code)) Input.lock=true;
+  }
   if(document.pointerLockElement!==canvas && !isCoarse()) canvas.requestPointerLock();
 });
-addEventListener('mouseup',e=>{ if(e.button===0) Mouse.left=false; if(e.button===2) Mouse.right=false; });
+addEventListener('mouseup',e=>{
+  if(e.button===0) Mouse.left=false;
+  if(e.button===2) Mouse.right=false;
+  if(e.button===1) Mouse.middle=false;
+});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 addEventListener('mousemove',e=>{
   if(document.pointerLockElement!==canvas) return;
@@ -3926,21 +4177,24 @@ document.addEventListener('pointerlockchange',()=>{
 
 function sampleInput(dtUnscaled){
   let mx=0,my=0;
-  for(const code in KEYMAP){ if(!Keys[code]) continue;
-    const d=KEYMAP[code];
-    if(d==='f') my+=1; else if(d==='b') my-=1; else if(d==='l') mx-=1; else mx+=1;
-  }
+  if(bindHeld('forward')) my+=1;
+  if(bindHeld('back')) my-=1;
+  if(bindHeld('left')) mx-=1;
+  if(bindHeld('right')) mx+=1;
   if(Touch.enabled && (Touch.stickId!==null)){ mx=Touch.mx; my=Touch.my; }
   const m=Math.hypot(mx,my); if(m>1){ mx/=m; my/=m; }
   Input.move.x=mx; Input.move.y=my;
 
-  Input.look.x=Mouse.dx*0.13 + Touch.lookDX*0.16;
-  Input.look.y=Mouse.dy*0.13 + Touch.lookDY*0.16;
+  // The player's sensitivity multiplies the base scale, so 1 is exactly the
+  // feel the camera was tuned with.
+  const sens=Save.data.sensitivity;
+  Input.look.x=(Mouse.dx*0.13 + Touch.lookDX*0.16)*sens;
+  Input.look.y=(Mouse.dy*0.13 + Touch.lookDY*0.16)*sens;
   Mouse.dx=0; Mouse.dy=0; Touch.lookDX=0; Touch.lookDY=0;
 
-  Input.sprint=!!(Keys.ShiftLeft||Keys.ShiftRight)||Touch.sprint;
-  Input.block=Mouse.right||!!Keys.KeyQ||Touch.block;
-  Input.jumpHeld=!!Keys.Space||!!Touch.jumpHeld;
+  Input.sprint=bindHeld('sprint')||Touch.sprint;
+  Input.block=bindHeld('block')||Touch.block;
+  Input.jumpHeld=bindHeld('jump')||Touch.jumpHeld;
 }
 function clearEdges(){ Input.jump=false; Input.dodge=false; Input.light=false; Input.heavy=false; Input.grab=false; }
 
@@ -4134,6 +4388,37 @@ document.getElementById('selectBack').addEventListener('click',()=>{
 addEventListener('keydown',e=>{
   if(!Game.running) return;
   if(e.code==='KeyL'){ Screens.select(); }
+});
+
+document.getElementById('settingsBack').addEventListener('click',()=>Screens.hideSettings());
+document.getElementById('titleSettings').addEventListener('click',()=>Screens.settings());
+document.getElementById('endSettings').addEventListener('click',()=>Screens.settings());
+document.getElementById('selectSettings').addEventListener('click',()=>Screens.settings());
+document.getElementById('bindReset').addEventListener('click',()=>{
+  Save.data.binds=defaultBinds(); Save.write();
+  Rebind.cancel();
+  Screens.el('bindNote').textContent='Controls reset to defaults.';
+  Screens.refreshSettings();
+});
+document.querySelectorAll('button.diff').forEach(b=>{
+  b.addEventListener('click',()=>{
+    Save.data.difficulty=b.dataset.diff; Save.write();
+    Director.maxAttackers=Save.profile().attackers;
+    // Enemies are scaled as they spawn, so anyone already on the street keeps
+    // the stats they were built with. Say so rather than look broken.
+    Screens.el('diffNote').textContent='Applies to enemies from the next stage.';
+    Screens.refreshSettings();
+    Screens.el('diffNote').textContent+=' '+{
+      easy:'Enemies hit softer and come one at a time.',
+      normal:'The fight as it was tuned.',
+      hard:'Enemies hit harder and three can swing at once.'
+    }[Save.data.difficulty];
+  });
+});
+document.getElementById('sensSlider').addEventListener('input',e=>{
+  Save.data.sensitivity=clamp(+e.target.value,.25,3);
+  Screens.el('sensValue').textContent=Save.data.sensitivity.toFixed(2);
+  Save.write();
 });
 
 buildArena(STAGES[Save.data.current]);

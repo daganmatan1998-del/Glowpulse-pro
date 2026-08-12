@@ -187,14 +187,95 @@
     .hint{ font-size:10.5px }
   }
   @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+/* ---- campaign: title card, boss bar, end and select screens ---------- */
+#titleCard{ position:fixed; left:0; right:0; top:38%; height:26%; display:flex;
+  align-items:center; justify-content:center; flex-direction:column;
+  background:rgba(6,7,8,.72); opacity:0; pointer-events:none; z-index:30;
+  transition:opacity .55s ease }
+#titleCard.on{ opacity:1; animation:cardBeat 2.9s ease forwards }
+@keyframes cardBeat{ 0%{opacity:0} 19%{opacity:1} 62%{opacity:1} 100%{opacity:0} }
+#cardNum{ font:700 22px/1 ui-monospace,monospace; letter-spacing:.28em; color:var(--sun) }
+#cardName{ font:700 46px/1.1 system-ui,sans-serif; letter-spacing:.04em; margin:10px 0 8px }
+#cardRule{ width:300px; height:2px; background:rgba(237,230,218,.28); margin-bottom:10px }
+#cardTag{ font:400 15px/1.4 system-ui,sans-serif; color:rgba(237,230,218,.55) }
+
+#bossBar{ position:fixed; left:50%; transform:translateX(-50%); bottom:118px;
+  width:min(680px,86vw); display:none; z-index:12 }
+#bossBar.on{ display:block }
+#bossName{ font:700 13px/1 ui-monospace,monospace; letter-spacing:.24em;
+  color:var(--sun); text-align:center; margin-bottom:6px }
+#bossTrack{ height:12px; background:rgba(0,0,0,.6); border:1px solid var(--line) }
+#bossFill{ display:block; height:100%; width:100%; transform-origin:left center;
+  background:linear-gradient(90deg,#F2765C,#B8402C); transition:transform .18s linear }
+#bossPhase{ position:fixed; left:50%; top:24%; transform:translateX(-50%);
+  font:700 34px/1 system-ui,sans-serif; letter-spacing:.2em; color:#FF7A3D;
+  opacity:0; pointer-events:none; z-index:30 }
+#bossPhase.on{ animation:phaseFlash 1.5s ease forwards }
+@keyframes phaseFlash{ 0%{opacity:0;transform:translateX(-50%) scale(.8)}
+  18%{opacity:1;transform:translateX(-50%) scale(1)} 70%{opacity:1} 100%{opacity:0} }
+
+.overlay{ position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+  background:radial-gradient(120% 90% at 50% 20%, rgba(28,26,24,.9), rgba(6,7,8,.97)); z-index:40 }
+.overlay.on{ display:flex }
+.panel{ width:min(640px,92vw); border:1px solid var(--line); background:rgba(14,16,19,.9);
+  padding:32px 34px; text-align:center }
+.panel h2{ font:700 38px/1.1 system-ui,sans-serif; margin:0 0 8px }
+.panel .sub{ font:400 20px/1.3 system-ui,sans-serif; color:var(--bone); margin-bottom:16px }
+.panel .rewards{ font:700 18px/1.7 ui-monospace,monospace; color:var(--cyan); margin:14px 0 }
+.panel .note{ font:400 14px/1.5 system-ui,sans-serif; color:rgba(237,230,218,.55); margin-bottom:20px }
+.panel button{ display:block; width:100%; margin:8px 0; transform:none }
+.panel button:hover{ transform:none }
+
+#selectList{ text-align:left; margin:14px 0 18px }
+.srow{ display:flex; gap:14px; align-items:center; padding:12px 14px; margin-bottom:6px;
+  background:rgba(255,255,255,.05); border:1px solid transparent; cursor:pointer }
+.srow:hover{ border-color:var(--line) }
+.srow.locked{ background:rgba(255,255,255,.02); cursor:default; opacity:.55 }
+.srow.locked:hover{ border-color:transparent }
+.srow.current{ background:rgba(255,210,161,.12); border-color:rgba(255,210,161,.4) }
+.smark{ width:30px; text-align:center; font:700 20px/1 system-ui,sans-serif }
+.srow.done .smark{ color:var(--cyan) }
+.srow.current .smark{ color:var(--sun) }
+.srow.locked .smark{ color:rgba(237,230,218,.4) }
+.stitle{ font:700 16px/1.3 system-ui,sans-serif }
+.srow.current .stitle{ color:var(--sun) }
+.sdetail{ font:400 13px/1.4 system-ui,sans-serif; color:rgba(237,230,218,.5) }
 </style>
+
+<div id="titleCard">
+  <div id="cardNum">STAGE 1</div>
+  <div id="cardName">THE STREETS</div>
+  <div id="cardRule"></div>
+  <div id="cardTag"></div>
+</div>
+
+<div id="bossBar">
+  <div id="bossName">BULLDOZER</div>
+  <div id="bossTrack"><i id="bossFill"></i></div>
+</div>
+<div id="bossPhase"></div>
+
+<div class="overlay" id="endScreen"><div class="panel">
+  <h2 id="endTitle">STAGE COMPLETE</h2>
+  <div class="sub" id="endStage"></div>
+  <div class="rewards" id="endRewards"></div>
+  <div class="note" id="endNote"></div>
+  <button id="endNext"><span>NEXT STAGE</span></button>
+  <button id="endSelect"><span>STAGE SELECT</span></button>
+</div></div>
+
+<div class="overlay" id="selectScreen"><div class="panel">
+  <h2>STAGE SELECT</h2>
+  <div id="selectList"></div>
+  <button id="selectBack"><span>BACK</span></button>
+</div></div>
 
 <div id="stage"><canvas id="c"></canvas></div>
 
 <div class="hud">
   <div id="obj" class="slab"><div>
-    <div class="label">Objective</div>
-    <div class="t">Clear the street</div>
+    <div class="label" id="objLabel">STAGE 1</div>
+    <div class="t" id="objTitle">The streets</div>
     <div class="c num" id="objCount">5 hostiles remaining</div>
   </div></div>
 
@@ -695,6 +776,59 @@ function drawCharacter(rig, alive){
   drawLimb(jointPos(B.ThighR), jointPos(B.ShinR), r*1.02, legs);
   drawLimb(jointPos(B.ShinR), jointPos(B.FootR), r*0.88, legs);
   drawBox(W[B.FootR], {x:r*1.05, y:rig.ankle*0.5, z:0.067*h}, shoes, null);
+}
+// Each arena gets a floor of its own: the ring that bounds the fight plus the
+// geometry standing on it.
+function drawProps(){
+  const metal=hexRGB('#3A3D42'), glow=hexRGB('#FFD9A0');
+  for(const p of World.props){
+    if(flatDist(p,cam.pos)>Quality.propDist) continue;
+    if(p.type==='lamp'){
+      const base={x:p.x,y:0,z:p.z};
+      drawLimb(base,{x:p.x,y:4.4,z:p.z},.07,metal);
+      drawLimb({x:p.x,y:4.4,z:p.z},{x:p.x+p.s*1.1,y:4.55,z:p.z},.06,metal);
+      drawBlob({x:p.x+p.s*1.1,y:4.45,z:p.z},.19,glow);
+      drawShadow(base,.28,.22);
+    } else if(p.type==='bin'){
+      const x={m:[1,0,0,0,1,0,0,0,1], p:{x:p.x,y:.42,z:p.z}};
+      drawBox(x,{x:.28,y:.42,z:.28}, hexRGB('#3D4A44'));
+      drawShadow({x:p.x,z:p.z},.34,.28);
+    } else if(p.type==='car'){
+      const m=eulerZXY(0,p.yaw,0);
+      drawBox({m,p:{x:p.x,y:.52,z:p.z}},{x:.92,y:.34,z:2.1}, p.col);
+      drawBox({m,p:{x:p.x,y:1.06,z:p.z-.12}},{x:.82,y:.3,z:1.15}, shade(p.col,.72));
+      drawShadow({x:p.x,z:p.z},1.6,.3);
+    }
+  }
+}
+
+function drawArenaFloor(){
+  const st=(typeof Stage!=='undefined'&&Stage.def)?Stage.def:null;
+  const r=st?st.radius:16;
+  const tone={ warehouse:'#4A4741', docks:'#3C4247', underground:'#43413C', rooftop:'#4E4B46' };
+  const floor=hexRGB(tone[World.arena]||'#4C4A45');
+
+  // Concentric rings read as a surface without a real ground mesh, and they
+  // fade with distance so the edge of the deck is visible.
+  for(let i=0;i<9;i++){
+    const rad=r*(i+1)/9;
+    const seg=Math.max(12,(rad*2)|0);
+    for(let k=0;k<seg;k++){
+      const a0=k/seg*TAU, a1=(k+1)/seg*TAU;
+      groundSeg({x:Math.sin(a0)*rad,y:.02,z:Math.cos(a0)*rad},
+                {x:Math.sin(a1)*rad,y:.02,z:Math.cos(a1)*rad}, floor, r/9*.9);
+    }
+  }
+  for(const b of World.boxes){
+    if(b.noDraw) continue;
+    const d=flatDist(b,cam.pos);
+    if(d>Quality.boxDist) continue;
+    const y=b.sunk?-b.sunk+b.h/2:b.h/2;
+    const m=b.yaw?eulerZXY(0,b.yaw,0):[1,0,0,0,1,0,0,0,1];
+    drawBox({m, p:{x:b.x,y,z:b.z}}, {x:b.hw,y:b.h/2,z:b.hd}, b.rgb,
+      d<Quality.windowDist?b.windows:null);
+  }
+  drawProps();
 }
 function hipW2(rig){ return rig.hipW*1.05; }
 
@@ -1334,6 +1468,49 @@ const ENEMY_MOVES={
     impact:IMPACT.Medium,stamina:10,knock:1.6,capsule:.6,oy:1,oz:.7,radius:.52,lunge:1.6,track:2.2,maxTargets:1,
     comboAt:1,hitStop:.06,shake:.22})
 };
+
+// ---- new fighters, ported from EnemyMoves ------------------------------
+Object.assign(ENEMY_MOVES,{
+  el_jab:mv({id:'el_jab',kind:'light',clip:'atk_light_jab',tag:'punch',windup:.2,active:.06,recovery:.22,
+    dmg:9,impact:IMPACT.Light,stamina:5,ox:.14,oy:1.24,oz:.7,radius:.48,lunge:1.1,track:1.6,maxTargets:1,
+    comboAt:.48,nextL:'el_cross',hitStop:.035,shake:.12}),
+  el_cross:mv({id:'el_cross',kind:'light',clip:'atk_light_cross',tag:'punch',windup:.2,active:.06,recovery:.26,
+    dmg:11,impact:IMPACT.Light,stamina:6,ox:-.14,oy:1.24,oz:.72,radius:.48,lunge:1,track:1.5,maxTargets:1,
+    comboAt:.5,nextL:'el_spin',hitStop:.04,shake:.14}),
+  el_spin:mv({id:'el_spin',kind:'heavy',clip:'atk_light_kick',tag:'kick',windup:.34,active:.09,recovery:.42,
+    dmg:20,impact:IMPACT.Heavy,stamina:12,knock:1.7,capsule:.7,ox:0,oy:1.05,oz:.72,radius:.56,
+    lunge:1.5,track:2,maxTargets:2,comboAt:1,hitStop:.075,shake:.26}),
+  el_hook:mv({id:'el_hook',kind:'heavy',clip:'atk_heavy_hook',tag:'heavy',windup:.46,active:.1,recovery:.5,
+    dmg:26,impact:IMPACT.Heavy,stamina:16,knock:1.9,ox:.16,oy:1.2,oz:.78,radius:.62,
+    lunge:1.7,track:1.8,maxTargets:1,comboAt:1,hitStop:.09,shake:.3}),
+
+  mb_swipe:mv({id:'mb_swipe',kind:'heavy',clip:'atk_heavy_hook',tag:'heavy',windup:.5,active:.12,recovery:.52,
+    dmg:24,impact:IMPACT.Heavy,stamina:14,knock:2,capsule:1.5,ox:0,oy:1.25,oz:.8,radius:.72,
+    lunge:1.5,track:1.4,maxTargets:3,comboAt:.62,nextH:'mb_slam',hitStop:.095,shake:.34}),
+  mb_slam:mv({id:'mb_slam',kind:'heavy',clip:'atk_heavy_overhead',tag:'heavy',windup:.86,active:.14,recovery:.75,
+    dmg:44,impact:IMPACT.Knockdown,stamina:24,knock:2.6,unblockable:true,ox:0,oy:.7,oz:.9,radius:1.05,
+    lunge:1.3,track:1.1,maxTargets:3,comboAt:1,hitStop:.13,shake:.55,kick:.4}),
+  mb_charge:mv({id:'mb_charge',kind:'heavy',clip:'atk_heavy_uppercut',tag:'heavy',windup:.72,active:.22,recovery:.7,
+    dmg:32,impact:IMPACT.Knockdown,stamina:20,knock:2.4,capsule:1,ox:0,oy:1.1,oz:.85,radius:.7,
+    lunge:5.2,track:.8,maxTargets:3,comboAt:1,hitStop:.11,shake:.42,kick:.3}),
+
+  fb_jab:mv({id:'fb_jab',kind:'light',clip:'atk_light_jab',tag:'punch',windup:.22,active:.06,recovery:.2,
+    dmg:12,impact:IMPACT.Light,stamina:5,ox:.15,oy:1.3,oz:.74,radius:.5,lunge:1.2,track:1.7,maxTargets:1,
+    comboAt:.46,nextL:'fb_cross',hitStop:.04,shake:.14}),
+  fb_cross:mv({id:'fb_cross',kind:'light',clip:'atk_light_cross',tag:'punch',windup:.2,active:.06,recovery:.24,
+    dmg:14,impact:IMPACT.Medium,stamina:6,ox:-.15,oy:1.3,oz:.76,radius:.5,lunge:1.1,track:1.5,maxTargets:1,
+    comboAt:.48,nextL:'fb_uppercut',hitStop:.05,shake:.18}),
+  fb_uppercut:mv({id:'fb_uppercut',kind:'heavy',clip:'atk_heavy_uppercut',tag:'heavy',windup:.4,active:.1,recovery:.46,
+    dmg:28,impact:IMPACT.Launch,stamina:16,knock:2.1,ox:0,oy:1.15,oz:.72,radius:.62,
+    lunge:1.4,track:1.6,maxTargets:1,comboAt:1,hitStop:.1,shake:.34,kick:.26}),
+  fb_smash:mv({id:'fb_smash',kind:'heavy',clip:'atk_heavy_overhead',tag:'heavy',windup:.78,active:.13,recovery:.66,
+    dmg:46,impact:IMPACT.Knockdown,stamina:24,knock:2.5,unblockable:true,ox:0,oy:.75,oz:.86,radius:1,
+    lunge:1.6,track:1.2,maxTargets:3,comboAt:1,hitStop:.13,shake:.6,kick:.45}),
+  fb_sweep:mv({id:'fb_sweep',kind:'heavy',clip:'atk_light_kick',tag:'kick',windup:.44,active:.14,recovery:.5,
+    dmg:22,impact:IMPACT.Knockdown,stamina:14,knock:1.5,capsule:1.8,ox:0,oy:.45,oz:.75,radius:.6,
+    lunge:2.2,track:1.8,maxTargets:3,comboAt:1,hitStop:.09,shake:.34})
+});
+
 const MOVES=Object.assign({},PLAYER_MOVES,ENEMY_MOVES);
 
 /* ---- character styles (ported from CharacterStyle) --------------------- */
@@ -1347,7 +1524,17 @@ const STYLES={
   bruiser:{height:2.02,build:1.38,skin:hexRGB('#A97B58'),torso:hexRGB('#3E3326'),legs:hexRGB('#262119'),
     shoes:hexRGB('#17140F'),hair:hexRGB('#15110E'),accent:hexRGB('#E0913A')},
   runner:{height:1.72,build:0.85,skin:hexRGB('#C08F6A'),torso:hexRGB('#2C3F35'),legs:hexRGB('#1D2622'),
-    shoes:hexRGB('#121614'),hair:hexRGB('#2A211C'),accent:hexRGB('#7FD858')}
+    shoes:hexRGB('#121614'),hair:hexRGB('#2A211C'),accent:hexRGB('#7FD858')},
+  defender:{height:1.86,build:1.18,skin:hexRGB('#A87A55'),torso:hexRGB('#2E3A44'),legs:hexRGB('#22282E'),
+    shoes:hexRGB('#14171A'),hair:hexRGB('#1A1614'),accent:hexRGB('#8FB4CC')},
+  elite:{height:1.88,build:1.08,skin:hexRGB('#B4835C'),torso:hexRGB('#2A2233'),legs:hexRGB('#1B1722'),
+    shoes:hexRGB('#121016'),hair:hexRGB('#21191F'),accent:hexRGB('#C77DFF')},
+  miniboss:{height:2.16,build:1.62,skin:hexRGB('#9E7048'),torso:hexRGB('#9E7048'),legs:hexRGB('#2A2118'),
+    shoes:hexRGB('#15110C'),hair:hexRGB('#120E0A'),accent:hexRGB('#E0913A'),
+    shirtless:true, tattoo:hexRGB('#2A1408')},
+  finalboss:{height:2.02,build:1.34,skin:hexRGB('#C29060'),torso:hexRGB('#C29060'),legs:hexRGB('#15161B'),
+    shoes:hexRGB('#0E0F12'),hair:hexRGB('#E8E2D6'),accent:hexRGB('#FF7A3D'),
+    shirtless:true, tattoo:hexRGB('#3A1206')}
 };
 
 /* ---- archetypes (ported from EnemyArchetype) --------------------------- */
@@ -1365,6 +1552,28 @@ const ARCHETYPES={
     range:3.6, attackRange:1.9, cd:1.05, cdVar:.3, block:.05, retreat:.75, flank:.9,
     moves:['r_jab','r_hook','r_kick'], opener:'r_jab' }
 };
+// ---- new archetypes, ported from EnemyArchetype ------------------------
+Object.assign(ARCHETYPES,{
+  defender:{ name:'Defender', style:STYLES.defender, hp:120, stam:140, poise:42, poiseRegen:12, resist:.1,
+    walk:1.9, chase:3.4, strafe:2.4, turn:420*DEG, sight:17, sightAngle:78*DEG, react:.26,
+    range:2.6, attackRange:2.2, cd:2.1, cdVar:.5, block:.72, retreat:.45, flank:.15,
+    moves:['e_jab','e_cross','e_swing'], opener:'e_jab', xp:45, money:30 },
+  elite:{ name:'Elite', style:STYLES.elite, hp:165, stam:130, poise:58, poiseRegen:15, resist:.12,
+    walk:2.4, chase:5.2, strafe:3.2, turn:620*DEG, sight:21, sightAngle:88*DEG, react:.18,
+    range:2.7, attackRange:2.4, cd:1.15, cdVar:.35, block:.4, retreat:.35, flank:.6, dmgMul:1.15,
+    moves:['el_jab','el_cross','el_spin','el_hook'], opener:'el_jab', xp:110, money:70 },
+  miniboss:{ name:'Bulldozer', style:STYLES.miniboss, hp:420, stam:200, poise:190, poiseRegen:26, resist:.24,
+    walk:1.9, chase:4.1, strafe:1.6, turn:240*DEG, sight:24, sightAngle:80*DEG, react:.3,
+    range:3.1, attackRange:2.9, cd:1.9, cdVar:.45, block:.08, retreat:0, flank:0, dmgMul:1.3,
+    moves:['mb_swipe','mb_slam','mb_charge'], opener:'mb_swipe', xp:320, money:220, boss:true },
+  finalboss:{ name:'Kaskade', style:STYLES.finalboss, hp:680, stam:240, poise:150, poiseRegen:30, resist:.2,
+    walk:2.3, chase:5, strafe:3, turn:480*DEG, sight:30, sightAngle:110*DEG, react:.16,
+    range:3, attackRange:2.6, cd:1.5, cdVar:.4, block:.3, retreat:.2, flank:.35, dmgMul:1.35,
+    moves:['fb_jab','fb_cross','fb_uppercut','fb_smash','fb_sweep'], opener:'fb_jab',
+    xp:900, money:600, boss:true }
+});
+
+
 
 /* ---- combat director (ported from CombatDirector) ---------------------- */
 const Director={
@@ -1513,6 +1722,10 @@ function buildWorld(){
 }
 function drawWorld(){
   const sidewalk=hexRGB('#4C4A45'), road=hexRGB('#2E3136'), paint=hexRGB('#C8B27A');
+  // Kerbs and lane markings belong to a street. Drawing them under a warehouse
+  // floor or a rooftop deck is what makes every arena look like the same place.
+  const street=(World.arena===undefined||World.arena==='streets');
+  if(!street) return drawArenaFloor();
   // road surface markings + kerbs
   for(let i=-30;i<=34;i+=4){
     groundSeg({x:-9.2,y:.02,z:i},{x:-9.2,y:.02,z:i+4}, sidewalk, .26);
@@ -1531,30 +1744,13 @@ function drawWorld(){
     const x={m:[1,0,0,0,1,0,0,0,1], p:{x:b.x,y:b.h/2,z:b.z}};
     drawBox(x,{x:b.hw,y:b.h/2,z:b.hd}, b.rgb, d<Quality.windowDist?b.windows:null);
   }
-  const metal=hexRGB('#3A3D42'), glow=hexRGB('#FFD9A0');
-  for(const p of World.props){
-    if(flatDist(p,cam.pos)>Quality.propDist) continue;
-    if(p.type==='lamp'){
-      const base={x:p.x,y:0,z:p.z};
-      drawLimb(base,{x:p.x,y:4.4,z:p.z},.07,metal);
-      drawLimb({x:p.x,y:4.4,z:p.z},{x:p.x+p.s*1.1,y:4.55,z:p.z},.06,metal);
-      drawBlob({x:p.x+p.s*1.1,y:4.45,z:p.z},.19,glow);
-      drawShadow(base,.28,.22);
-    } else if(p.type==='bin'){
-      const x={m:[1,0,0,0,1,0,0,0,1], p:{x:p.x,y:.42,z:p.z}};
-      drawBox(x,{x:.28,y:.42,z:.28}, hexRGB('#3D4A44'));
-      drawShadow({x:p.x,z:p.z},.34,.28);
-    } else if(p.type==='car'){
-      const m=eulerZXY(0,p.yaw,0);
-      drawBox({m,p:{x:p.x,y:.52,z:p.z}},{x:.92,y:.34,z:2.1}, p.col);
-      drawBox({m,p:{x:p.x,y:1.06,z:p.z-.12}},{x:.82,y:.3,z:1.15}, shade(p.col,.72));
-      drawShadow({x:p.x,z:p.z},1.6,.3);
-    }
-  }
+  drawProps();
 }
 /* Push a circle out of the world's axis-aligned boxes. */
 function collideWorld(pos,radius){
   for(const b of World.boxes){
+    // Seating tiers and the skyline below a rooftop are scenery, not walls.
+    if(b.noCollide||b.sunk) continue;
     const nx=clamp(pos.x,b.x-b.hw,b.x+b.hw), nz=clamp(pos.z,b.z-b.hd,b.z+b.hd);
     let dx=pos.x-nx, dz=pos.z-nz;
     let d=Math.hypot(dx,dz);
@@ -1844,6 +2040,9 @@ function resolveHits(r,move){
   const c=r.owner;
   const center=hitboxCenter(c,move);
   const byPlayer=(c.faction==='player');
+  // The archetype carries the difficulty and boss-phase scaling, so every move
+  // inherits it without the move table knowing anything about either.
+  const dmgMul=(c.arch&&c.arch.dmgMul)||1;
   for(const t of chars){
     if(t===c || !t.alive) continue;
     if(!hostileTo(c.faction,t.faction)) continue;
@@ -1858,6 +2057,7 @@ function resolveHits(r,move){
     const info={ amount:move.dmg*r.dmgMul, impact:move.impact, dir, point,
       unblockable:move.unblockable, chip:move.chip, guardDrain:move.guardDrain,
       faction:c.faction, attacker:c, knock:KNOCK[move.impact]*move.knock };
+    info.amount*=dmgMul;
 
     const res=applyDamage(t,info);
     if(res===RESULT.Hit||res===RESULT.Killed){
@@ -1963,7 +2163,9 @@ function makePlayer(pos){
   p.onParry=()=>{ p.counterUntil=now+1.1; };
   p.onEvade=()=>{ if(p.state==='dodge') p.counterUntil=now+1.1; };
   p.onStagger=()=>{ abortCombat(p); };
-  p.onDeath=()=>{ abortCombat(p); Game.over=true; showBanner('You are down — press R to restart',true); };
+  p.onDeath=()=>{ abortCombat(p); Game.over=true;
+    if(typeof Stage!=='undefined') Stage.fail();
+    else showBanner('You are down — press R to restart',true); };
   return p;
 }
 function addCombo(){ player.combo++; player.comboExpires=now+2.4; HUD.combo(); }
@@ -2313,11 +2515,18 @@ function pushAnim(c,dt){
 /* ---- enemy brain (ported from EnemyBrain + EnemyStates) ---------------- */
 function makeEnemy(kindKey,pos,yaw){
   const A=ARCHETYPES[kindKey];
-  const e=makeChar('enemy',A.style,pos,yaw);
-  e.arch=A; e.name=A.name;
-  e.hp=e.hpMax=A.hp; e.stam=e.stamMax=A.stam;
-  e.poise=e.poiseMax=A.poise; e.poiseRegen=A.poiseRegen; e.resist=A.resist;
-  e.flank=A.flank;
+  // Scaled by difficulty at spawn: a copy, never an edit, or the multipliers
+  // would compound on every enemy the stage sends.
+  const D=(typeof Save!=='undefined')?Save.profile():{dmg:1,hp:1,cd:1,react:1};
+  const A2=Object.assign({},A,{
+    hp:A.hp*D.hp, cd:A.cd*D.cd, cdVar:A.cdVar*D.cd, react:A.react*D.react,
+    dmgMul:(A.dmgMul||1)*D.dmg
+  });
+  const e=makeChar('enemy',A2.style,pos,yaw);
+  e.arch=A2; e.name=A2.name;
+  e.hp=e.hpMax=A2.hp; e.stam=e.stamMax=A2.stam;
+  e.poise=e.poiseMax=A2.poise; e.poiseRegen=A2.poiseRegen; e.resist=A2.resist;
+  e.flank=A2.flank;
   e.state='idle'; e.stateAt=now; e.home={...pos}; e.patrol={...pos}; e.pauseUntil=0;
   e.target=null; e.canSee=false; e.lastSeen=-99; e.lastKnown={...pos};
   e.nextPerception=now+Math.random()*.18; e.nextAttack=0;
@@ -2327,8 +2536,10 @@ function makeEnemy(kindKey,pos,yaw){
   e.onStagger=(d)=>{ runnerCancel(e.runner); Director.release(e);
     e.nextAttack=Math.max(e.nextAttack, now+d+.25); e.guard=false; setState(e,'react'); };
   e.onDeath=()=>{ runnerCancel(e.runner); Director.unregister(e); setState(e,'dead');
-    Game.kills++; Game.money+=A.name==='Bruiser'?48:(A.name==='Runner'?18:14);
-    Game.xp+=A.name==='Bruiser'?65:(A.name==='Runner'?30:22); HUD.objective(); };
+    Game.kills++;
+    // Rewards land as they are earned, so dying on the last enemy still keeps them.
+    Save.data.money+=(A.money||14); Save.data.xp+=(A.xp||22);
+    if(typeof Stage!=='undefined') Stage.killed(); else HUD.objective(); };
   e.onAlert=(p)=>{ e.lastKnown={...p}; e.lastSeen=now;
     if(e.state==='idle'||e.state==='patrol') setState(e,'alert'); };
   Director.register(e);
@@ -2972,6 +3183,371 @@ function pushAnimCiv(c,dt){
 
 <script>
 "use strict";
+/* ======================================================================
+   THE CAMPAIGN
+   Ported from Assets/Scripts/Stages/*. Difficulty rises through enemy
+   composition and arena shape rather than through bigger numbers.
+   ====================================================================== */
+
+const STAGES=[
+  { name:'THE STREETS', tagline:'Somebody has been leaning on the shopkeepers.',
+    arena:'streets', radius:17, xp:250, money:120, civilians:true,
+    objective:'DEFEAT ALL ENEMIES',
+    waves:[ {kind:'brawler',count:3,delay:0}, {kind:'runner',count:2,delay:6} ] },
+
+  { name:'THE ABANDONED WAREHOUSE', tagline:'Whatever they are moving, it is in here.',
+    arena:'warehouse', radius:15, xp:400, money:200, civilians:false,
+    objective:'DEFEAT ALL ENEMIES',
+    waves:[ {kind:'brawler',count:4,delay:0}, {kind:'bruiser',count:2,delay:8} ] },
+
+  { name:'THE DOCKS', tagline:'Cold night, open ground, nowhere to hide.',
+    arena:'docks', radius:22, xp:650, money:320, civilians:false,
+    objective:'DEFEAT ALL ENEMIES',
+    waves:[ {kind:'runner',count:3,delay:0}, {kind:'bruiser',count:2,delay:7},
+            {kind:'elite',count:1,delay:15} ] },
+
+  { name:'THE UNDERGROUND ARENA', tagline:'They paid to watch this one.',
+    arena:'underground', radius:13, xp:1000, money:550, civilians:false,
+    objective:'DEFEAT THE BULLDOZER',
+    waves:[ {kind:'defender',count:2,delay:0}, {kind:'elite',count:2,delay:9},
+            {kind:'miniboss',count:1,delay:20} ] },
+
+  { name:'THE ROOFTOP', tagline:'The whole city is watching this one end.',
+    arena:'rooftop', radius:20, xp:2000, money:1200, civilians:false,
+    objective:'DEFEAT KASKADE',
+    waves:[ {kind:'elite',count:2,delay:0}, {kind:'defender',count:1,delay:6},
+            {kind:'runner',count:2,delay:11}, {kind:'finalboss',count:1,delay:18} ] }
+];
+const stageTotal=st=>st.waves.reduce((a,w)=>a+w.count,0);
+
+/* ---- difficulty (ported from DifficultyProfile) ------------------------
+   Multipliers, never replacement values. Normal is exactly 1 on every axis,
+   because the balance was tuned by playing it. */
+const DIFFICULTY={
+  easy:   { name:'Easy',   dmg:.65, hp:.75, cd:1.35, react:1.4,  attackers:1 },
+  normal: { name:'Normal', dmg:1,   hp:1,   cd:1,    react:1,    attackers:2 },
+  hard:   { name:'Hard',   dmg:1.45,hp:1.35,cd:.7,   react:.65,  attackers:3 }
+};
+
+/* ---- persistence (ported from SaveData/SaveFile) ---------------------- */
+const SAVE_KEY='glowpulse.save.v1';
+const Save={
+  data:{ difficulty:'normal', sensitivity:1, highestUnlocked:0, current:0,
+         completed:[], xp:0, money:0 },
+  load(){
+    // Start from defaults every time. Merging onto whatever is already in
+    // memory means clearing the save leaves the old progress behind.
+    this.data={ difficulty:'normal', sensitivity:1, highestUnlocked:0, current:0,
+                completed:[], xp:0, money:0 };
+    try{
+      const raw=localStorage.getItem(SAVE_KEY);
+      if(raw) Object.assign(this.data, JSON.parse(raw)||{});
+    }catch(e){ /* a corrupt save must never stop the game starting */ }
+    this.repair();
+  },
+  repair(){
+    const d=this.data;
+    if(!DIFFICULTY[d.difficulty]) d.difficulty='normal';
+    d.sensitivity=clamp(+d.sensitivity||1,.25,3);
+    d.highestUnlocked=clamp(d.highestUnlocked|0,0,STAGES.length-1);
+    d.current=clamp(d.current|0,0,d.highestUnlocked);
+    if(!Array.isArray(d.completed)) d.completed=[];
+    d.completed=d.completed.filter(i=>i>=0&&i<STAGES.length);
+    d.xp=Math.max(0,d.xp|0); d.money=Math.max(0,d.money|0);
+  },
+  write(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(this.data)); }catch(e){} },
+  unlocked(i){ return i<=this.data.highestUnlocked; },
+  completed(i){ return this.data.completed.includes(i); },
+  complete(i){
+    if(!this.data.completed.includes(i)) this.data.completed.push(i);
+    // Forward only: replaying an early stage must not wind progress back.
+    if(i+1<STAGES.length && i+1>this.data.highestUnlocked) this.data.highestUnlocked=i+1;
+    this.write();
+  },
+  profile(){ return DIFFICULTY[this.data.difficulty]; }
+};
+Save.load();
+
+/* ---- arenas (ported from ArenaBuilder) --------------------------------
+   Each arena is shaped differently, not merely dressed differently: the
+   warehouse breaks sightlines, the pit corners you, the rooftop is wide
+   and exposed. */
+function buildArena(st){
+  World.boxes.length=0; World.props.length=0;
+  const r=st.radius;
+  World.bounds=r*1.02;
+  World.arena=st.arena;
+
+  const ring=(deg,rad)=>({x:Math.sin(deg*DEG)*rad, z:Math.cos(deg*DEG)*rad});
+  const wall=(rad,h,thick,rgb)=>{
+    for(let i=0;i<24;i++){
+      const a=i*15, p=ring(a,rad+thick*.5);
+      // segments overlap, or a knockback pushes you through a seam
+      const w=rad*2*Math.PI/24*1.15;
+      World.boxes.push({x:p.x,z:p.z,hw:w*.5,hd:thick*.5,h,rgb,yaw:a*DEG});
+    }
+  };
+
+  if(st.arena==='streets'){
+    const facades=['#4A4139','#3E4148','#514540','#3A3F45','#57493F','#434A50'];
+    for(let i=0;i<12;i++){
+      const p=ring(i*30, r+8), h=rand(9,20);
+      World.boxes.push({x:p.x,z:p.z,hw:5.5,hd:5.5,h,rgb:hexRGB(facades[i%6]),
+        windows:{windows:true,cols:3,rows:Math.max(2,(h/3)|0),lit:[]}});
+    }
+    for(let i=0;i<5;i++){
+      const a=40+i*66, p=ring(a,r*.86);
+      World.props.push({type:'car',x:p.x,z:p.z,yaw:a*DEG,
+        col:hexRGB(['#5A6470','#6B4B44','#41505A','#6E6353','#495159'][i%5])});
+      World.boxes.push({x:p.x,z:p.z,hw:1,hd:2.2,h:1.35,rgb:null,noDraw:true});
+    }
+    for(let i=0;i<8;i++){ const p=ring(i*45,r*.98); World.props.push({type:'lamp',x:p.x,z:p.z,s:1}); }
+  }
+  else if(st.arena==='warehouse'){
+    wall(r,8,1.2,hexRGB('#6A665E'));
+    for(let sx=-1;sx<=1;sx+=2) for(let sz=-1;sz<=1;sz+=2)
+      World.boxes.push({x:sx*r*.5,z:sz*r*.5,hw:.65,hd:.65,h:8,rgb:hexRGB('#6A665E')});
+    for(let i=0;i<7;i++){
+      const p=ring(i*51,r*.78);
+      World.boxes.push({x:p.x,z:p.z,hw:.75,hd:.75,h:1.5,rgb:hexRGB('#4A3A2C')});
+    }
+    for(let i=0;i<6;i++){ const p=ring(i*60,r*.9); World.props.push({type:'lamp',x:p.x,z:p.z,s:1}); }
+  }
+  else if(st.arena==='docks'){
+    // No wall: the openness is the point, containers are the cover.
+    const cols=['#73402F','#33525E','#5A5B47','#472F42','#385844'];
+    for(let i=0;i<9;i++){
+      const a=i*40+rand(0,14), p=ring(a,r*rand(.55,.92));
+      const h=Math.random()<.4?5.2:2.6;
+      World.boxes.push({x:p.x,z:p.z,hw:1.4,hd:3.1,h,rgb:hexRGB(cols[i%5]),yaw:a*DEG});
+    }
+    World.boxes.push({x:r*.8,z:-r*.7,hw:.55,hd:.55,h:18,rgb:hexRGB('#6E7378')});
+    for(let i=0;i<10;i++){ const p=ring(i*36,r*1.02); World.props.push({type:'lamp',x:p.x,z:p.z,s:1}); }
+  }
+  else if(st.arena==='underground'){
+    wall(r,3.2,1.6,hexRGB('#5E5B54'));
+    for(let tier=0;tier<4;tier++){
+      const rad=r+3+tier*2.2, h=1.4+tier*1.1;
+      for(let i=0;i<26;i++){
+        const a=i*(360/26), p=ring(a,rad);
+        World.boxes.push({x:p.x,z:p.z,hw:1.6,hd:1.1,h,rgb:hexRGB('#6A665E'),yaw:a*DEG,noCollide:true});
+      }
+    }
+    for(let i=0;i<8;i++){ const p=ring(i*45,r*.7); World.props.push({type:'lamp',x:p.x,z:p.z,s:1,high:true}); }
+  }
+  else { // rooftop
+    wall(r,1.1,.5,hexRGB('#6A665E'));
+    for(let i=0;i<5;i++){
+      const a=30+i*72, p=ring(a,r*.62), h=rand(2,3.4);
+      World.boxes.push({x:p.x,z:p.z,hw:1.7,hd:1.3,h,rgb:hexRGB('#6E7378'),yaw:a*DEG});
+    }
+    // skyline below the deck, so the edge reads as a drop
+    for(let i=0;i<22;i++){
+      const a=i*(360/22)+rand(0,9), p=ring(a,r+14+rand(0,26)), h=rand(14,46);
+      World.boxes.push({x:p.x,z:p.z,hw:4.5,hd:4.5,h,rgb:hexRGB('#3A3F45'),
+        sunk:h+2, noCollide:true});
+    }
+    for(let i=0;i<6;i++){ const p=ring(i*60,r*.92); World.props.push({type:'lamp',x:p.x,z:p.z,s:1}); }
+  }
+}
+
+/* ---- the runner (ported from StageRunner) ----------------------------- */
+const Stage={
+  index:0, def:null, pending:[], startedAt:0, defeated:0, total:0,
+  running:false, finished:false, boss:null,
+
+  begin(i){
+    this.index=i; this.def=STAGES[i];
+    this.pending=this.def.waves.map(w=>({...w}));
+    this.startedAt=now; this.defeated=0; this.total=stageTotal(this.def);
+    this.running=true; this.finished=false; this.boss=null;
+  },
+  tick(){
+    if(!this.running||this.finished) return;
+    const elapsed=now-this.startedAt;
+    for(let i=this.pending.length-1;i>=0;i--){
+      if(this.pending[i].delay>elapsed) continue;
+      const w=this.pending.splice(i,1)[0];
+      this.spawn(w);
+    }
+    // Cleared only when nothing is left to send and nothing is left alive.
+    const alive=chars.some(c=>c.kind==='enemy'&&c.alive);
+    if(this.pending.length===0 && !alive) this.finish();
+  },
+  spawn(w){
+    const A=ARCHETYPES[w.kind];
+    const bossWave=!!A.boss;
+    const r=this.def.radius;
+    for(let i=0;i<w.count;i++){
+      let a, rad;
+      if(bossWave){
+        // Straight across the arena from the player: it deserves to be seen coming.
+        const dx=-player.pos.x, dz=-player.pos.z;
+        a=Math.atan2(dx,dz); rad=r*.92;
+      } else {
+        a=(i/Math.max(1,w.count))*TAU + rand(-.38,.38);
+        rad=r*lerp(.7,.95, i/Math.max(1,w.count));
+      }
+      const pos={x:Math.sin(a)*rad, y:0, z:Math.cos(a)*rad};
+      const yaw=Math.atan2(-pos.x,-pos.z);
+      const e=makeEnemy(w.kind,pos,yaw);
+      if(bossWave){ this.boss=e; e.isBoss=true; bossPhaseBind(e); HUD.bossShow(e); }
+      chars.push(e);
+    }
+    HUD.objective();
+  },
+  killed(){ this.defeated++; HUD.objective(); },
+  finish(){
+    if(this.finished) return;
+    this.finished=true; this.running=false;
+    Save.data.xp+=this.def.xp; Save.data.money+=this.def.money;
+    Save.complete(this.index);
+    Screens.victory(this.def);
+  },
+  fail(){
+    if(this.finished) return;
+    this.finished=true; this.running=false;
+    Save.write();
+    Screens.defeat(this.def);
+  }
+};
+
+/* ---- boss phases (ported from BossBrain) -----------------------------
+   A boss with more health is a longer fight, not a boss. Phases key off
+   health so the change always lands on something the player did, and they
+   move forward only. */
+const BOSS_PHASES=[
+  { at:1,   cd:1,   speed:1,    dmg:1,   poise:1,    say:null },
+  { at:.65, cd:.76, speed:1.12, dmg:1.1, poise:1.15, say:'ENRAGED' },
+  { at:.3,  cd:.55, speed:1.24, dmg:1.2, poise:1.35, say:'LAST STAND' }
+];
+function bossPhaseBind(e){
+  e.phase=0;
+  e.baseArch=Object.assign({},e.arch);
+}
+function bossPhaseTick(e){
+  if(!e.isBoss||!e.alive) return;
+  const frac=e.hp/e.hpMax;
+  while(e.phase+1<BOSS_PHASES.length && frac<=BOSS_PHASES[e.phase+1].at)
+    bossEnterPhase(e, e.phase+1);
+}
+function bossEnterPhase(e,i){
+  e.phase=i;
+  const ph=BOSS_PHASES[i], b=e.baseArch;
+  // Retune, never rebuild: the damage already dealt has to stay dealt.
+  e.arch=Object.assign({},b,{
+    cd:b.cd*ph.cd, cdVar:b.cdVar*ph.cd, react:b.react*ph.cd,
+    chase:b.chase*ph.speed, strafe:b.strafe*ph.speed, walk:b.walk*ph.speed,
+    dmgMul:(b.dmgMul||1)*ph.dmg,
+    retreat:b.retreat*Math.max(0,1-i*.5)
+  });
+  e.poiseMax=b.poise*ph.poise;
+  e.poise=e.poiseMax;   // the turn itself cannot be interrupted
+  if(!ph.say) return;
+  shakeCam(.5);
+  ring({x:e.pos.x,y:.06,z:e.pos.z},hexRGB('#FF7A3D'),.5,6,.5);
+  sfx('guard_break',e.pos,1,.05);
+  commotion(e.pos,1);
+  HUD.bossPhase(ph.say);
+}
+
+/* ---- title card, HUD and screens -------------------------------------- */
+const Screens={
+  el(id){ return document.getElementById(id); },
+
+  card(st,n){
+    const c=this.el('titleCard');
+    this.el('cardNum').textContent='STAGE '+(n+1);
+    this.el('cardName').textContent=st.name;
+    this.el('cardTag').textContent=st.tagline;
+    // Fades in, holds, fades out - and never blocks input. A card that takes
+    // the game away for three seconds is a loading screen.
+    c.classList.remove('on'); void c.offsetWidth; c.classList.add('on');
+    setTimeout(()=>c.classList.remove('on'),2900);
+  },
+
+  victory(st){
+    this.el('endTitle').textContent='STAGE COMPLETE';
+    this.el('endTitle').style.color='var(--sun)';
+    this.el('endStage').textContent=st.name;
+    this.el('endRewards').innerHTML=`+${st.xp} XP<br>+$${st.money}`;
+    const hasNext=Stage.index+1<STAGES.length;
+    this.el('endNote').textContent=hasNext
+      ? `STAGE ${Stage.index+2} unlocked.`
+      : 'That was the last of them. The city is yours.';
+    this.el('endNext').textContent=hasNext?'NEXT STAGE':'FIGHT IT AGAIN';
+    this.el('endScreen').classList.add('on');
+    Time_.paused=true;
+  },
+
+  defeat(st){
+    this.el('endTitle').textContent='YOU WENT DOWN';
+    this.el('endTitle').style.color='var(--red)';
+    this.el('endStage').textContent=st.name;
+    this.el('endRewards').innerHTML=`XP ${Save.data.xp}<br>$${Save.data.money}`;
+    this.el('endNote').textContent='Everything you earned on the way is kept.';
+    this.el('endNext').textContent='TRY AGAIN';
+    this.el('endScreen').classList.add('on');
+    Time_.paused=true;
+  },
+
+  hideEnd(){ this.el('endScreen').classList.remove('on'); Time_.paused=false; },
+
+  select(){
+    const list=this.el('selectList');
+    list.innerHTML='';
+    STAGES.forEach((st,i)=>{
+      const unlocked=Save.unlocked(i), done=Save.completed(i);
+      const current=unlocked&&!done&&i===Save.data.highestUnlocked;
+      const row=document.createElement('div');
+      row.className='srow'+(unlocked?'':' locked')+(current?' current':'')+(done?' done':'');
+      row.innerHTML=`<div class="smark">${done?'✓':(unlocked?'▶':'✕')}</div>
+        <div class="sbody"><div class="stitle">STAGE ${i+1} — ${st.name}</div>
+        <div class="sdetail">${unlocked?(done?'Cleared':st.tagline):'Locked — clear the stage before it.'}</div></div>`;
+      // A locked row genuinely does not respond; a dimmed row that still
+      // swallows clicks reads as a broken game.
+      if(unlocked) row.onclick=()=>{ this.hideSelect(); enterStage(i); };
+      list.appendChild(row);
+    });
+    this.el('selectScreen').classList.add('on');
+    Time_.paused=true;
+  },
+  hideSelect(){ this.el('selectScreen').classList.remove('on'); Time_.paused=false; }
+};
+
+function enterStage(i){
+  if(!Save.unlocked(i)) return;
+  Save.data.current=i; Save.write();
+
+  Screens.hideEnd(); Screens.hideSelect();
+  const st=STAGES[i];
+
+  chars.length=0; parts.length=0; rings.length=0;
+  Director.reset(); Time_.clear(); Crowd.reset();
+  Shake.trauma=0; Shake.kx=Shake.kz=Shake.vx=Shake.vz=0;
+
+  buildArena(st);
+  if(st.civilians){ Walk.build(); Crowd.population=10; } else { Walk.nodes.length=0; Crowd.population=0; }
+
+  player=makePlayer({x:0,y:0,z:-st.radius*.72});
+  chars.push(player);
+  Director.focus=player;
+  Director.maxAttackers=Save.profile().attackers;
+
+  Stage.begin(i);
+  HUD.bossHide();
+  HUD.objective();
+  Screens.card(st,i);
+
+  Game.running=true; Game.over=false; Game.won=false;
+  Game.manualPause=false; Time_.paused=false;
+  CamState.init=false; cam.yaw=0; cam.pitch=14*DEG;
+  document.getElementById('banner').classList.remove('on');
+}
+</script>
+
+<script>
+"use strict";
 /* ---- camera (ported from ThirdPersonCamera) ---------------------------- */
 const CCFG={ pivotH:1.42, shoulder:.45, dist:5.3, combatDist:4.4, sprintBoost:1.1, minDist:1.1,
   minPitch:-34*DEG, maxPitch:50*DEG, rotSharp:22, followSharp:16, vertSharp:9,
@@ -3115,9 +3691,27 @@ const HUD={
     if(!player||player.combo<2){ box.classList.remove('on'); return; }
     box.classList.add('on'); el('comboN').textContent=player.combo;
   },
+  bossShow(e){
+    el('bossName').textContent=(e.name||'BOSS').toUpperCase();
+    el('bossBar').classList.add('on');
+    HUD._boss=e;
+  },
+  bossHide(){ el('bossBar').classList.remove('on'); HUD._boss=null; },
+  bossTick(){
+    const e=HUD._boss; if(!e) return;
+    if(!e.alive){ HUD.bossHide(); return; }
+    el('bossFill').style.transform=`scaleX(${clamp01(e.hp/e.hpMax)})`;
+  },
+  bossPhase(text){
+    const n=el('bossPhase');
+    n.textContent=text;
+    n.classList.remove('on'); void n.offsetWidth; n.classList.add('on');
+  },
   objective(){
-    const left=Math.max(0,Game.total-Game.kills);
-    el('objCount').textContent = left===0 ? 'Street cleared' : `${left} hostile${left===1?'':'s'} remaining`;
+    if(typeof Stage==='undefined'||!Stage.def) return;
+    el('objLabel').textContent='STAGE '+(Stage.index+1);
+    el('objTitle').textContent=Stage.def.name;
+    el('objCount').textContent=`${Stage.def.objective}  —  ${Stage.defeated} / ${Stage.total}`;
   }
 };
 let bannerTimer=0;
@@ -3144,22 +3738,11 @@ function spawnEncounter(){
   Game.total=total;
 }
 function startGame(){
-  chars.length=0; parts.length=0; rings.length=0;
-  Director.reset(); Time_.clear();
-  Shake.trauma=0; Shake.kx=Shake.kz=Shake.vx=Shake.vz=0;
-  buildWorld();
-  Walk.build();
-  Crowd.reset();
-  player=makePlayer({x:0,y:0,z:-6});
-  chars.push(player);
-  Director.focus=player;
-  spawnEncounter();
-  Game.running=true; Game.over=false; Game.won=false; Game.kills=0; Game.xp=0; Game.money=0;
-  Game.started=unscaled; Game.manualPause=false; Time_.paused=false;
-  CamState.init=false; cam.yaw=0; cam.pitch=14*DEG;
-  el('banner').classList.remove('on'); bannerTimer=0;
-  HUD.objective(); HUD.combo(); HUD.vitals();
+  // The campaign owns setup now: enter wherever the save left off, so a player
+  // who closed the tab on the docks comes back to the docks.
+  enterStage(Save.data.current);
 }
+
 
 /* ---- input wiring ------------------------------------------------------ */
 const KEYMAP={ KeyW:'f', KeyS:'b', KeyA:'l', KeyD:'r', ArrowUp:'f', ArrowDown:'b', ArrowLeft:'l', ArrowRight:'r' };
@@ -3171,7 +3754,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyG') Input.grab=true;
   if(e.code==='Space'){ Input.jump=true; e.preventDefault(); }
   if(e.code==='ControlLeft'||e.code==='ControlRight'||e.code==='KeyC') Input.dodge=true;
-  if(e.code==='KeyR'&&Game.running){ startGame(); Game.manualPause=false; Time_.paused=false; }
+  if(e.code==='KeyR'&&Game.running){ enterStage(Stage.def?Stage.index:Save.data.current); Game.manualPause=false; Time_.paused=false; }
   if(e.code==='KeyM'){ Audio_.muted=!Audio_.muted; showBanner(Audio_.muted?'Sound off':'Sound on'); }
   if(e.code==='Escape') releasePointer();
   if(['Space','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
@@ -3402,6 +3985,9 @@ function frame(){
       }
       Director.tick(dt);
       Crowd.tick();
+      for(const c of chars) if(c.isBoss) bossPhaseTick(c);
+      Stage.tick();
+      HUD.bossTick();
       tickFX(dt);
       for(const c of chars) c.hitFlash=Math.max(0,c.hitFlash-dt*4);
       // the grab hook runs after the move has advanced
@@ -3425,14 +4011,10 @@ function frame(){
 function resizeIfNeeded(){
   if(canvas.clientWidth!==VW||canvas.clientHeight!==VH) resize();
 }
-function checkVictory(){
-  if(Game.over||Game.won) return;
-  if(Game.kills>=Game.total){
-    Game.won=true;
-    showBanner('Street cleared — press R to fight again',true);
-    sfx('chime',null,.8,0);
-  }
-}
+// Completion is owned by Stage.finish, which knows about waves still pending.
+// The old kill-count check fired the moment an arena had nothing alive in it,
+// which on a staged fight means during the gap before the next wave.
+function checkVictory(){}
 function render(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   paintBackdrop();
@@ -3534,7 +4116,27 @@ el('play').addEventListener('click',()=>{
   startGame();
   if(!Touch.enabled && !isCoarse()) canvas.requestPointerLock();
 });
-buildWorld();
+// ---- campaign buttons --------------------------------------------------
+document.getElementById('endNext').addEventListener('click',()=>{
+  Screens.hideEnd();
+  // Past the last stage there is nothing to advance to, so this replays it.
+  const next=Stage.index+1;
+  enterStage(next<STAGES.length && Save.unlocked(next) ? next : Stage.index);
+});
+document.getElementById('endSelect').addEventListener('click',()=>{
+  Screens.hideEnd(); Screens.select();
+});
+document.getElementById('selectBack').addEventListener('click',()=>{
+  Screens.hideSelect();
+  // Backing out returns to the stage in progress, not an empty map.
+  enterStage(Stage.def?Stage.index:Save.data.current);
+});
+addEventListener('keydown',e=>{
+  if(!Game.running) return;
+  if(e.code==='KeyL'){ Screens.select(); }
+});
+
+buildArena(STAGES[Save.data.current]);
 Walk.build();
 player=makePlayer({x:0,y:0,z:-6});
 chars.push(player);

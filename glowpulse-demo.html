@@ -261,6 +261,8 @@ button.mini:hover{ transform:none }
 .sliderrow{ display:flex; align-items:center; gap:12px }
 .sliderrow label{ width:120px; font:400 14px/1 system-ui,sans-serif }
 .sliderrow input{ flex:1; accent-color:var(--cyan) }
+.pauserow{ display:flex; gap:8px; margin-top:18px }
+.pauserow button{ flex:1; margin:0 }
 .sliderrow span{ width:48px; text-align:right; font:400 13px/1 ui-monospace,monospace;
   color:rgba(237,230,218,.6) }
 .bindrow{ display:flex; align-items:center; gap:10px; padding:5px 0 }
@@ -303,7 +305,7 @@ button.mini:hover{ transform:none }
 </div></div>
 
 <div class="overlay" id="settingsScreen"><div class="panel" id="settingsPanel">
-  <h2>SETTINGS</h2>
+  <h2 id="settingsTitle">PAUSED</h2>
 
   <div class="sechead">DIFFICULTY</div>
   <div class="diffrow">
@@ -324,7 +326,11 @@ button.mini:hover{ transform:none }
   <div id="bindList"></div>
   <div class="note" id="bindNote">Click a key to change it. Escape cancels.</div>
 
-  <button id="settingsBack"><span>BACK</span></button>
+  <div class="pauserow">
+    <button id="settingsBack"><span>RESUME</span></button>
+    <button id="pauseRestart"><span>RESTART STAGE</span></button>
+    <button id="pauseSelect"><span>STAGE SELECT</span></button>
+  </div>
 </div></div>
 
 <div id="stage"><canvas id="c"></canvas></div>
@@ -415,7 +421,7 @@ button.mini:hover{ transform:none }
     <div class="go">
       <button id="play"><span>Start fighting</span></button>
       <button id="titleSettings"><span>Settings</span></button>
-      <span class="hint" id="startHint">Click locks the mouse. Esc releases it. O opens settings, L is stage select.</span>
+      <span class="hint" id="startHint">Click locks the mouse. Esc is the pause menu — difficulty, controls, stage select.</span>
     </div>
   </div>
 </div>
@@ -3652,6 +3658,12 @@ const Screens={
      Changes apply as they are made rather than behind an Apply button: a
      sensitivity slider you cannot feel while dragging is useless. */
   settings(){
+    // Titled by context: it is a pause menu mid-fight and a settings screen
+    // from the title, but it is the same panel either way.
+    this.el('settingsTitle').textContent=Game.running?'PAUSED':'SETTINGS';
+    this.el('pauseRestart').style.display=Game.running?'':'none';
+    this.el('pauseSelect').style.display=Game.running?'':'none';
+    this.el('settingsBack').querySelector('span').textContent=Game.running?'RESUME':'BACK';
     this.refreshSettings();
     this.el('settingsScreen').classList.add('on');
     Time_.paused=true;
@@ -3662,6 +3674,8 @@ const Screens={
     Save.write();
     this.el('settingsScreen').classList.remove('on');
     Time_.paused=false;
+    // Give the mouse back to the game, or the camera stays dead after a pause.
+    if(Game.running && !Touch.enabled && !isCoarse()) canvas.requestPointerLock();
   },
   refreshSettings(){
     const d=Save.data;
@@ -3985,10 +3999,18 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyM'){ Audio_.muted=!Audio_.muted; showBanner(Audio_.muted?'Sound off':'Sound on'); }
   if(e.code==='KeyO'&&Game.running) Screens.settings();
   if(e.code==='Escape'){
-    // Escape backs out of whatever screen is open, then releases the pointer.
-    if(document.getElementById('settingsScreen').classList.contains('on')) Screens.hideSettings();
-    else if(document.getElementById('selectScreen').classList.contains('on')) Screens.hideSelect();
+    // Escape is the pause menu, not just a pointer release. Stopping the game
+    // and offering nothing to do is the least useful thing a pause key can do.
+    const settingsOpen=document.getElementById('settingsScreen').classList.contains('on');
+    const selectOpen=document.getElementById('selectScreen').classList.contains('on');
+    const endOpen=document.getElementById('endScreen').classList.contains('on');
+
+    if(settingsOpen) Screens.hideSettings();
+    else if(selectOpen) Screens.hideSelect();
+    else if(endOpen) { /* the end screen is a decision; Escape does not skip it */ }
+    else if(Game.running) Screens.settings();
     else releasePointer();
+    e.preventDefault();
   }
   if(['Space','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
 });
@@ -4392,6 +4414,13 @@ addEventListener('keydown',e=>{
 
 document.getElementById('settingsBack').addEventListener('click',()=>Screens.hideSettings());
 document.getElementById('titleSettings').addEventListener('click',()=>Screens.settings());
+document.getElementById('pauseRestart').addEventListener('click',()=>{
+  Screens.hideSettings();
+  enterStage(Stage.def?Stage.index:Save.data.current);
+});
+document.getElementById('pauseSelect').addEventListener('click',()=>{
+  Screens.hideSettings(); Screens.select();
+});
 document.getElementById('endSettings').addEventListener('click',()=>Screens.settings());
 document.getElementById('selectSettings').addEventListener('click',()=>Screens.settings());
 document.getElementById('bindReset').addEventListener('click',()=>{

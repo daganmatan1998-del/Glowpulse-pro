@@ -1,0 +1,30 @@
+<div class="page-width">
+  <div class="error-page">
+    <span class="error-page__code">404</span>
+    <h1>{{ section.settings.heading }}</h1>
+    <p class="text-muted" style="max-width: 46ch;">{{ section.settings.text }}</p>
+    <div class="button-group button-group--center">
+      <a class="button button--large" href="{{ routes.all_products_collection_url }}">
+        {{ section.settings.button_label }}
+      </a>
+      <a class="button button--large button--secondary" href="{{ routes.root_url }}">Back to home</a>
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "404 page",
+  "tag": "section",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "We cannot find that page" },
+    {
+      "type": "textarea",
+      "id": "text",
+      "label": "Text",
+      "default": "The link may be out of date, or the page may have moved. Everything we sell is one click away."
+    },
+    { "type": "text", "id": "button_label", "label": "Button label", "default": "Browse all products" }
+  ]
+}
+{% endschema %}

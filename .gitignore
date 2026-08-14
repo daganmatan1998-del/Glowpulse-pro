@@ -1,0 +1,9 @@
+node_modules/
+.shopify/
+*.zip
+.DS_Store
+Thumbs.db
+.env
+.env.*
+__pycache__/
+*.pyc

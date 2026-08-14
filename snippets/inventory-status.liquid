@@ -1,0 +1,38 @@
+{%- comment -%}
+  Stock message for one variant.
+
+  Products imported through DSers usually keep "continue selling when out of
+  stock" switched on, in which case Shopify reports no inventory tracking at
+  all. We treat that as in stock rather than inventing a fake number.
+
+  Parameters:
+    variant   (variant, required)
+    threshold (number)  show the "only N left" state at or below this quantity
+{%- endcomment -%}
+
+{%- liquid
+  assign low_threshold = threshold | default: 10
+  assign tracked = false
+  if variant.inventory_management != blank
+    assign tracked = true
+  endif
+-%}
+
+{%- if variant.available == false -%}
+  <p class="inventory-note" style="color: var(--c-muted);">
+    <span class="inventory-dot"></span> Out of stock
+  </p>
+
+{%- elsif tracked and variant.inventory_quantity > 0 and variant.inventory_quantity <= low_threshold -%}
+  <p class="inventory-note inventory-note--low">
+    <span class="inventory-dot"></span>
+    Only {{ variant.inventory_quantity }} left in stock
+  </p>
+  {%- assign percent = variant.inventory_quantity | times: 100 | divided_by: low_threshold -%}
+  <div class="inventory-bar"><span style="width: {{ percent }}%;"></span></div>
+
+{%- else -%}
+  <p class="inventory-note inventory-note--in">
+    <span class="inventory-dot"></span> In stock, ready to ship
+  </p>
+{%- endif -%}

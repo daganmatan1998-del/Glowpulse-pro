@@ -1,0 +1,44 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-cart",
+      "settings": {}
+    },
+    "benefits": {
+      "type": "icon-columns",
+      "blocks": {
+        "b1": {
+          "type": "column",
+          "settings": {
+            "icon": "truck",
+            "heading": "Free worldwide shipping",
+            "text": "Every order ships free with tracking."
+          }
+        },
+        "b2": {
+          "type": "column",
+          "settings": {
+            "icon": "shield",
+            "heading": "30-day guarantee",
+            "text": "Changed your mind? Send it back for a full refund."
+          }
+        },
+        "b3": {
+          "type": "column",
+          "settings": {
+            "icon": "lock",
+            "heading": "Secure checkout",
+            "text": "Encrypted payments through Shopify."
+          }
+        }
+      },
+      "block_order": ["b1", "b2", "b3"],
+      "settings": {
+        "background": "soft",
+        "heading": "",
+        "columns": "3"
+      }
+    }
+  },
+  "order": ["main", "benefits"]
+}

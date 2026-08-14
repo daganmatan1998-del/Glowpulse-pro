@@ -1,0 +1,97 @@
+{%- if section.blocks.size > 0 -%}
+  <div class="announcement" data-announcement data-speed="{{ section.settings.speed | times: 1000 }}">
+    <div class="announcement__inner page-width">
+      <div class="announcement__slides" style="min-height: 1.4em;">
+        {%- for block in section.blocks -%}
+          <div class="announcement__slide{% if forloop.first %} is-active{% endif %}" {{ block.shopify_attributes }}>
+            {%- if block.settings.icon != 'none' -%}
+              {% render 'icon', name: block.settings.icon %}
+            {%- endif -%}
+            {%- if block.settings.link != blank -%}
+              <a href="{{ block.settings.link }}">{{ block.settings.text | escape }}</a>
+            {%- else -%}
+              <span>{{ block.settings.text | escape }}</span>
+            {%- endif -%}
+          </div>
+        {%- endfor -%}
+      </div>
+    </div>
+  </div>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Announcement bar",
+  "class": "announcement-section",
+  "max_blocks": 5,
+  "settings": [
+    {
+      "type": "range",
+      "id": "speed",
+      "min": 3,
+      "max": 12,
+      "step": 1,
+      "unit": "s",
+      "label": "Seconds between messages",
+      "default": 5
+    }
+  ],
+  "blocks": [
+    {
+      "type": "message",
+      "name": "Message",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Text",
+          "default": "Free worldwide shipping on orders over $50"
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Link"
+        },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            { "value": "none", "label": "None" },
+            { "value": "truck", "label": "Delivery" },
+            { "value": "shield", "label": "Guarantee" },
+            { "value": "refresh", "label": "Returns" },
+            { "value": "sparkles", "label": "Sparkles" },
+            { "value": "percent", "label": "Discount" },
+            { "value": "gift", "label": "Gift" },
+            { "value": "clock", "label": "Clock" }
+          ],
+          "default": "truck"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Announcement bar",
+      "blocks": [
+        { "type": "message" },
+        {
+          "type": "message",
+          "settings": {
+            "text": "30-day money-back guarantee",
+            "icon": "shield"
+          }
+        },
+        {
+          "type": "message",
+          "settings": {
+            "text": "Loved by 12,000+ happy customers",
+            "icon": "sparkles"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

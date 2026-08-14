@@ -1,0 +1,51 @@
+<div class="page-width">
+  <div class="customer">
+    <div class="page-hero" style="text-align:left;">
+      <h1>{{ 'customer.account.title' | t }}</h1>
+      <p class="text-muted">{{ customer.email }}</p>
+    </div>
+
+    <div class="button-group" style="margin-bottom:32px;">
+      <a class="button button--secondary button--small" href="{{ routes.account_addresses_url }}">
+        {{ 'customer.account.view_addresses' | t }}
+      </a>
+      <a class="button button--ghost" href="{{ routes.account_logout_url }}">Log out</a>
+    </div>
+
+    <h2 class="h4">{{ 'customer.orders.title' | t }}</h2>
+
+    {%- paginate customer.orders by 20 -%}
+      {%- if customer.orders.size > 0 -%}
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>{{ 'customer.orders.order_number' | t }}</th>
+                <th>{{ 'customer.orders.date' | t }}</th>
+                <th>{{ 'customer.orders.payment_status' | t }}</th>
+                <th>{{ 'customer.orders.fulfillment_status' | t }}</th>
+                <th>{{ 'customer.orders.total' | t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {%- for order in customer.orders -%}
+                <tr>
+                  <td><a class="link-underline" href="{{ order.customer_url }}">{{ order.name }}</a></td>
+                  <td>{{ order.created_at | date: '%d %b %Y' }}</td>
+                  <td>{{ order.financial_status_label }}</td>
+                  <td>{{ order.fulfillment_status_label }}</td>
+                  <td>{{ order.total_price | money }}</td>
+                </tr>
+              {%- endfor -%}
+            </tbody>
+          </table>
+        </div>
+
+        {% render 'pagination', paginate: paginate %}
+      {%- else -%}
+        <p class="text-muted">{{ 'customer.orders.none' | t }}</p>
+        <a class="button" style="margin-top:16px;" href="{{ routes.all_products_collection_url }}">Start shopping</a>
+      {%- endif -%}
+    {%- endpaginate -%}
+  </div>
+</div>

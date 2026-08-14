@@ -1,0 +1,144 @@
+{
+  "sections": {
+    "hero": {
+      "type": "rich-text",
+      "blocks": {
+        "eyebrow": { "type": "eyebrow", "settings": { "text": "Customer reviews" } },
+        "heading": { "type": "heading", "settings": { "text": "What people say after the parcel arrives" } },
+        "text": {
+          "type": "text",
+          "settings": {
+            "text": "<p>Every review below comes from someone who ordered from us. We publish the critical ones too, because a page of nothing but five stars helps nobody decide.</p>"
+          }
+        }
+      },
+      "block_order": ["eyebrow", "heading", "text"],
+      "settings": { "background": "soft" }
+    },
+    "wall": {
+      "type": "reviews-wall",
+      "blocks": {
+        "r1": {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "title": "Exactly what I hoped for",
+            "body": "Arrived faster than I expected and the quality is genuinely better than the photos. I have already ordered a second one.",
+            "author": "Sarah M.",
+            "location": "United Kingdom",
+            "date": "2 weeks ago",
+            "verified": true
+          }
+        },
+        "r2": {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "title": "Worth every penny",
+            "body": "I was nervous ordering online but the whole thing was smooth. Tracking updated the whole way and support answered me the same day.",
+            "author": "Daniel R.",
+            "location": "Canada",
+            "date": "1 month ago",
+            "verified": true
+          }
+        },
+        "r3": {
+          "type": "review",
+          "settings": {
+            "rating": 4,
+            "title": "Really happy with it",
+            "body": "Took about ten days to reach me, which they were upfront about. No complaints at all, it does exactly what it says.",
+            "author": "Amelie D.",
+            "location": "France",
+            "date": "3 weeks ago",
+            "verified": true
+          }
+        },
+        "r4": {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "title": "Bought one for my sister too",
+            "body": "Packaging was neat, everything was as described, and it turned out to be a great gift. Would order again without thinking about it.",
+            "author": "Marco B.",
+            "location": "Italy",
+            "date": "1 week ago",
+            "verified": true
+          }
+        },
+        "r5": {
+          "type": "review",
+          "settings": {
+            "rating": 4,
+            "title": "Good, but be patient with shipping",
+            "body": "The product itself is great and I use it daily. It did take closer to two weeks to arrive, so order early if you need it for a specific date.",
+            "author": "Priya N.",
+            "location": "Australia",
+            "date": "1 month ago",
+            "verified": true
+          }
+        },
+        "r6": {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "title": "Support sorted my mistake",
+            "body": "I put the wrong address in at checkout and emailed straight away. They fixed it before it shipped and kept me updated the whole time.",
+            "author": "Tom H.",
+            "location": "Ireland",
+            "date": "2 months ago",
+            "verified": true
+          }
+        }
+      },
+      "block_order": ["r1", "r2", "r3", "r4", "r5", "r6"],
+      "settings": {
+        "background": "default",
+        "show_summary": true,
+        "summary_note": "Every review here comes from a customer who bought from us.",
+        "columns": "3",
+        "footer_text": "Bought from us? We would love to hear how it went. Email us and we will add your review here."
+      }
+    },
+    "faq": {
+      "type": "faq",
+      "blocks": {
+        "q1": {
+          "type": "question",
+          "settings": {
+            "question": "How do you collect these reviews?",
+            "answer": "<p>We email every customer a few days after their order is delivered and ask how it went. Anything they send back, good or bad, can end up on this page.</p>"
+          }
+        },
+        "q2": {
+          "type": "question",
+          "settings": {
+            "question": "Do you remove negative reviews?",
+            "answer": "<p>No. We publish critical feedback alongside the positive, and we reply to it. If something went wrong with your order, tell us and we will fix it first.</p>"
+          }
+        }
+      },
+      "block_order": ["q1", "q2"],
+      "settings": {
+        "background": "soft",
+        "eyebrow": "",
+        "heading": "About these reviews",
+        "open_first": false,
+        "one_at_a_time": true,
+        "add_schema": false,
+        "footer_text": ""
+      }
+    },
+    "newsletter": {
+      "type": "newsletter",
+      "settings": {
+        "icon": "gift",
+        "heading": "Get 10% off your first order",
+        "subtitle": "Join the list for early access to new products and subscriber-only discounts.",
+        "button_label": "Send my code",
+        "animate_gradient": true
+      }
+    }
+  },
+  "order": ["hero", "wall", "faq", "newsletter"]
+}

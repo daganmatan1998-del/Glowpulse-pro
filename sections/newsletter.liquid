@@ -1,0 +1,92 @@
+<div class="section">
+  <div class="page-width">
+    <div class="newsletter{% if section.settings.animate_gradient %} gradient-shift{% endif %} reveal">
+      <div class="newsletter__inner">
+        {%- if section.settings.icon != 'none' -%}
+          <span style="display:inline-flex; margin-bottom:12px;">{% render 'icon', name: section.settings.icon %}</span>
+        {%- endif -%}
+
+        <h2>{{ section.settings.heading }}</h2>
+
+        {%- if section.settings.subtitle != blank -%}
+          <p>{{ section.settings.subtitle }}</p>
+        {%- endif -%}
+
+        {%- form 'customer' -%}
+          <input type="hidden" name="contact[tags]" value="newsletter">
+
+          {%- if form.posted_successfully? -%}
+            <p class="form-status form-status--success" style="width:100%; margin-top:20px;">
+              {{ section.settings.success_text }}
+            </p>
+          {%- else -%}
+            {%- if form.errors -%}
+              <p class="form-status form-status--error" style="width:100%; margin-top:20px;">
+                {{ form.errors.messages.email }}
+              </p>
+            {%- endif -%}
+
+            <input
+              type="email"
+              name="contact[email]"
+              placeholder="{{ section.settings.placeholder }}"
+              aria-label="Email address"
+              autocomplete="email"
+              required
+            >
+            <button type="submit" class="button">{{ section.settings.button_label }}</button>
+          {%- endif -%}
+        {%- endform -%}
+
+        {%- if section.settings.small_print != blank -%}
+          <p class="newsletter__small">{{ section.settings.small_print }}</p>
+        {%- endif -%}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Newsletter",
+  "tag": "section",
+  "settings": [
+    {
+      "type": "select",
+      "id": "icon",
+      "label": "Icon",
+      "options": [
+        { "value": "none", "label": "None" },
+        { "value": "mail", "label": "Mail" },
+        { "value": "gift", "label": "Gift" },
+        { "value": "sparkles", "label": "Sparkles" },
+        { "value": "percent", "label": "Discount" }
+      ],
+      "default": "gift"
+    },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Get 10% off your first order" },
+    {
+      "type": "textarea",
+      "id": "subtitle",
+      "label": "Subtitle",
+      "default": "Join the list for early access to new products and subscriber-only discounts. No spam, unsubscribe whenever."
+    },
+    { "type": "text", "id": "placeholder", "label": "Field placeholder", "default": "you@example.com" },
+    { "type": "text", "id": "button_label", "label": "Button label", "default": "Send my code" },
+    {
+      "type": "text",
+      "id": "success_text",
+      "label": "Success message",
+      "default": "You are on the list. Check your inbox for your discount code."
+    },
+    {
+      "type": "text",
+      "id": "small_print",
+      "label": "Small print",
+      "default": "By subscribing you agree to receive marketing emails from us."
+    },
+    { "type": "checkbox", "id": "animate_gradient", "label": "Animate the gradient", "default": true }
+  ],
+  "presets": [{ "name": "Newsletter" }]
+}
+{% endschema %}

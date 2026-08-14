@@ -1,0 +1,22 @@
+{%- comment -%}
+  Renders a five-star rating.
+  Parameters:
+    rating (number, required)  e.g. 4.7
+    size   (string)            'sm' | '' | 'lg'
+    label  (string)            optional visually hidden label override
+{%- endcomment -%}
+
+{%- liquid
+  assign value = rating | default: 0 | times: 1.0
+  assign rounded = value | round
+-%}
+
+<span class="stars{% if size == 'sm' %} stars--sm{% elsif size == 'lg' %} stars--lg{% endif %}" role="img" aria-label="{{ label | default: value }} out of 5 stars">
+  {%- for i in (1..5) -%}
+    {%- if i <= rounded -%}
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="m12 2.6 2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1L7.3 14 2.5 9.5l6.6-.9z"/></svg>
+    {%- else -%}
+      <svg class="star--empty" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="m12 2.6 2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1L7.3 14 2.5 9.5l6.6-.9z"/></svg>
+    {%- endif -%}
+  {%- endfor -%}
+</span>

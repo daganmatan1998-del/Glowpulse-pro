@@ -1,0 +1,52 @@
+<div class="page-width">
+  <div class="page-hero reveal">
+    <h1>{{ page_title }}</h1>
+    {%- if section.settings.subtitle != blank -%}
+      <p>{{ section.settings.subtitle }}</p>
+    {%- endif -%}
+  </div>
+
+  <div class="grid grid--3 reveal-group" style="padding-bottom: 48px;">
+    {%- for item in collections -%}
+      {%- if item.products_count > 0 or section.settings.show_empty -%}
+        <a href="{{ item.url }}" style="text-decoration:none;">
+          <div class="media media--landscape{% if settings.anim_image_zoom %} media--zoom{% endif %}">
+            {%- if item.image -%}
+              <img
+                src="{{ item.image | image_url: width: 800 }}"
+                alt="{{ item.image.alt | default: item.title | escape }}"
+                width="{{ item.image.width }}"
+                height="{{ item.image.height }}"
+                loading="lazy"
+              >
+            {%- elsif item.products.first.featured_media -%}
+              <img
+                src="{{ item.products.first.featured_media | image_url: width: 800 }}"
+                alt="{{ item.title | escape }}"
+                width="800"
+                height="600"
+                loading="lazy"
+              >
+            {%- else -%}
+              {{ 'collection-1' | placeholder_svg_tag: 'placeholder-svg' }}
+            {%- endif -%}
+          </div>
+          <h2 class="h4" style="margin-top:14px; margin-bottom:2px;">{{ item.title }}</h2>
+          <p class="text-sm text-muted">{{ item.products_count }} product{% if item.products_count != 1 %}s{% endif %}</p>
+        </a>
+      {%- endif -%}
+    {%- endfor -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Collections list",
+  "tag": "section",
+  "class": "section section--tight",
+  "settings": [
+    { "type": "text", "id": "subtitle", "label": "Subtitle", "default": "Browse everything we sell, grouped by what it is for." },
+    { "type": "checkbox", "id": "show_empty", "label": "Show empty collections", "default": false }
+  ]
+}
+{% endschema %}

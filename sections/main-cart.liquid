@@ -1,0 +1,99 @@
+<div class="page-width cart-page" data-cart-page>
+  {%- comment -%}
+    The section id, not the file name, is what the Section Rendering API wants:
+    inside a JSON template that id is generated, so it has to come from Liquid.
+  {%- endcomment -%}
+  <div data-cart-replace data-section="{{ section.id }}">
+    <span hidden data-cart-total-count="{{ cart.item_count }}"></span>
+
+    <div class="page-hero" style="text-align:left; padding-block: 24px;">
+      <h1>Your cart</h1>
+      {%- if cart.item_count > 0 -%}
+        <p class="text-muted">{{ cart.item_count }} item{% if cart.item_count != 1 %}s{% endif %}</p>
+      {%- endif -%}
+    </div>
+
+    {%- if cart.item_count == 0 -%}
+      <div class="cart-empty">
+        {% render 'icon', name: 'cart' %}
+        <h2>Your cart is empty</h2>
+        <p class="text-muted">Once you add something, it will show up here.</p>
+        <a class="button button--large" href="{{ routes.all_products_collection_url }}">Start shopping</a>
+      </div>
+    {%- else -%}
+      <div class="cart-page__grid">
+        <div>
+          {% render 'free-shipping-bar' %}
+
+          <div class="cart-items" style="gap:24px;">
+            {%- for item in cart.items -%}
+              {% render 'cart-line', item: item, index: forloop.index %}
+            {%- endfor -%}
+          </div>
+        </div>
+
+        <aside class="cart-summary">
+          <h2 class="h4">Order summary</h2>
+
+          {%- if cart.cart_level_discount_applications.size > 0 -%}
+            {%- for discount in cart.cart_level_discount_applications -%}
+              <div class="cart-subtotal" style="font-size:.95rem; color: var(--c-success);">
+                <span>{{ discount.title }}</span>
+                <span>&minus;{{ discount.total_allocated_amount | money }}</span>
+              </div>
+            {%- endfor -%}
+          {%- endif -%}
+
+          <div class="cart-subtotal">
+            <span>Subtotal</span>
+            <span>{{ cart.total_price | money }}</span>
+          </div>
+
+          {%- if settings.cart_footer_text != blank -%}
+            <p class="text-xs text-muted">{{ settings.cart_footer_text }}</p>
+          {%- endif -%}
+
+          {%- if settings.cart_show_note -%}
+            <div style="margin-top:16px;">
+              <label class="form-label" for="CartPageNote">Order note</label>
+              <textarea
+                id="CartPageNote"
+                name="note"
+                rows="3"
+                placeholder="Delivery instructions, gift message…"
+                data-cart-note
+              >{{ cart.note }}</textarea>
+            </div>
+          {%- endif -%}
+
+          <form action="{{ routes.cart_url }}" method="post" novalidate>
+            <button type="submit" name="checkout" class="button button--large button--full" style="margin-top:16px;">
+              <span class="button__label">Checkout &middot; {{ cart.total_price | money }}</span>
+              <span class="button__spinner"><span class="spinner"></span></span>
+            </button>
+          </form>
+
+          <div class="payment-icons" style="justify-content:center; margin-top:16px;">
+            {%- for type in shop.enabled_payment_types -%}
+              {{ type | payment_type_svg_tag: class: 'payment-icon' }}
+            {%- endfor -%}
+          </div>
+
+          <div class="trust-row" style="margin-top:20px; border-bottom:0;">
+            <div class="trust-row__item">{% render 'icon', name: 'lock' %}<span>Secure payment</span></div>
+            <div class="trust-row__item">{% render 'icon', name: 'refresh' %}<span>30-day returns</span></div>
+            <div class="trust-row__item">{% render 'icon', name: 'headset' %}<span>Real support</span></div>
+          </div>
+        </aside>
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Cart",
+  "tag": "section",
+  "class": "section section--tight"
+}
+{% endschema %}

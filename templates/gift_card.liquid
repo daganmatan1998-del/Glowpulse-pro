@@ -1,0 +1,73 @@
+{% layout none %}
+<!doctype html>
+<html lang="{{ request.locale.iso_code }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Gift card &ndash; {{ shop.name }}</title>
+    {{ content_for_header }}
+    {{ 'base.css' | asset_url | stylesheet_tag }}
+    <style>
+      :root {
+        --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+        --font-heading: system-ui, -apple-system, "Segoe UI", sans-serif;
+        --font-heading-weight: 600;
+        --font-heading-case: none;
+        --font-body-scale: 1;
+        --font-heading-scale: 1;
+        --c-bg: {{ settings.color_bg }};
+        --c-surface: {{ settings.color_surface }};
+        --c-text: {{ settings.color_text }};
+        --c-muted: {{ settings.color_text_muted }};
+        --c-border: {{ settings.color_border }};
+        --c-accent: {{ settings.color_accent }};
+        --c-accent-2: {{ settings.color_accent_2 }};
+        --c-on-accent: {{ settings.color_on_accent }};
+        --c-soft: {{ settings.color_soft }};
+        --gradient-accent: linear-gradient(120deg, var(--c-accent) 0%, var(--c-accent-2) 100%);
+        --radius-card: {{ settings.radius_card }}px;
+        --radius-button: {{ settings.radius_button }}px;
+        --radius-sm: {{ settings.radius_card | divided_by: 2 }}px;
+        --shadow-lg: 0 20px 50px rgba(20, 14, 30, .12);
+        --duration-ui: 200ms;
+        --ease-out: cubic-bezier(.22, 1, .36, 1);
+        --page-width: 1340px;
+      }
+    </style>
+  </head>
+  <body class="template-gift-card">
+    <main class="password-layout">
+      <div class="password-card">
+        <h1 class="h3">{{ shop.name }}</h1>
+        <p class="text-muted">Here is your gift card.</p>
+
+        <div style="margin: 24px 0; padding: 28px; border-radius: var(--radius-card); background: var(--gradient-accent); color: var(--c-on-accent);">
+          <div style="font-size: 2.6rem; font-weight: 700; line-height: 1;">
+            {{ gift_card.balance | money }}
+          </div>
+          {%- if gift_card.balance != gift_card.initial_value -%}
+            <p style="margin-top:6px; opacity:.85;">
+              Originally {{ gift_card.initial_value | money }}
+            </p>
+          {%- endif -%}
+        </div>
+
+        {{ gift_card.qr_identifier }}
+
+        <p style="font-family: monospace; font-size: 1.15rem; letter-spacing: .12em; padding: 14px; border: 1px dashed var(--c-border); border-radius: var(--radius-sm);">
+          {{ gift_card.code | format_code }}
+        </p>
+
+        {%- if gift_card.expired -%}
+          <p class="form-status form-status--error">This gift card expired on {{ gift_card.expires_on | date: '%d %b %Y' }}.</p>
+        {%- elsif gift_card.expires_on -%}
+          <p class="text-sm text-muted">Valid until {{ gift_card.expires_on | date: '%d %b %Y' }}.</p>
+        {%- endif -%}
+
+        <a class="button button--full button--large" style="margin-top:20px;" href="{{ shop.url }}">
+          Start shopping
+        </a>
+      </div>
+    </main>
+  </body>
+</html>

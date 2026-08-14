@@ -1,0 +1,145 @@
+<div class="section{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}">
+  <div class="page-width">
+    {%- if section.settings.heading != blank -%}
+      <div class="section-header section-header--center reveal">
+        {%- if section.settings.eyebrow != blank -%}
+          <span class="eyebrow">{{ section.settings.eyebrow }}</span>
+        {%- endif -%}
+        <h2>{{ section.settings.heading }}</h2>
+        {%- if section.settings.subtitle != blank -%}
+          <p>{{ section.settings.subtitle }}</p>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+    <div class="icon-columns icon-columns--{{ section.settings.columns }} reveal-group">
+      {%- for block in section.blocks -%}
+        <div class="icon-column{% if section.settings.boxed %} icon-column--boxed{% endif %}" {{ block.shopify_attributes }}>
+          <span class="icon-column__icon">
+            {%- if block.settings.image != blank -%}
+              <img src="{{ block.settings.image | image_url: width: 120 }}" alt="" width="30" height="30" loading="lazy">
+            {%- else -%}
+              {% render 'icon', name: block.settings.icon %}
+            {%- endif -%}
+          </span>
+          <h3>{{ block.settings.heading }}</h3>
+          {%- if block.settings.text != blank -%}
+            <p>{{ block.settings.text }}</p>
+          {%- endif -%}
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Benefits",
+  "tag": "section",
+  "max_blocks": 8,
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" },
+        { "value": "surface", "label": "Surface" }
+      ],
+      "default": "default"
+    },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Why people keep coming back" },
+    { "type": "textarea", "id": "subtitle", "label": "Subtitle" },
+    {
+      "type": "select",
+      "id": "columns",
+      "label": "Columns on desktop",
+      "options": [
+        { "value": "3", "label": "3" },
+        { "value": "4", "label": "4" }
+      ],
+      "default": "4"
+    },
+    { "type": "checkbox", "id": "boxed", "label": "Show each item in a card", "default": false }
+  ],
+  "blocks": [
+    {
+      "type": "column",
+      "name": "Benefit",
+      "settings": [
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            { "value": "truck", "label": "Delivery" },
+            { "value": "shield", "label": "Guarantee" },
+            { "value": "refresh", "label": "Returns" },
+            { "value": "lock", "label": "Secure" },
+            { "value": "headset", "label": "Support" },
+            { "value": "leaf", "label": "Eco" },
+            { "value": "heart", "label": "Heart" },
+            { "value": "gift", "label": "Gift" },
+            { "value": "sparkles", "label": "Sparkles" },
+            { "value": "zap", "label": "Fast" },
+            { "value": "award", "label": "Quality" },
+            { "value": "package", "label": "Package" },
+            { "value": "globe", "label": "Worldwide" },
+            { "value": "thumbs-up", "label": "Approved" }
+          ],
+          "default": "sparkles"
+        },
+        { "type": "image_picker", "id": "image", "label": "Custom icon image", "info": "Replaces the icon above." },
+        { "type": "text", "id": "heading", "label": "Heading", "default": "Free worldwide shipping" },
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Text",
+          "default": "Every order ships free with tracking, wherever you are."
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Benefits",
+      "blocks": [
+        {
+          "type": "column",
+          "settings": {
+            "icon": "truck",
+            "heading": "Free worldwide shipping",
+            "text": "Every order ships free with tracking, wherever you are."
+          }
+        },
+        {
+          "type": "column",
+          "settings": {
+            "icon": "shield",
+            "heading": "30-day guarantee",
+            "text": "Not for you? Send it back within 30 days for a full refund."
+          }
+        },
+        {
+          "type": "column",
+          "settings": {
+            "icon": "headset",
+            "heading": "Support that replies",
+            "text": "A real person answers every email, usually within a day."
+          }
+        },
+        {
+          "type": "column",
+          "settings": {
+            "icon": "lock",
+            "heading": "Secure checkout",
+            "text": "Encrypted payments through Shopify. Your details stay yours."
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

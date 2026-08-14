@@ -1,0 +1,158 @@
+<div class="section{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}">
+  <div class="page-width page-width--medium">
+    <div class="contact-grid">
+      <div class="reveal">
+        {%- if section.settings.eyebrow != blank -%}
+          <span class="eyebrow">{{ section.settings.eyebrow }}</span>
+        {%- endif -%}
+        <h2>{{ section.settings.heading }}</h2>
+        {%- if section.settings.text != blank -%}
+          <div class="rte text-muted">{{ section.settings.text }}</div>
+        {%- endif -%}
+
+        <div class="contact-card" style="margin-top:24px;">
+          {%- if section.settings.email != blank -%}
+            <div class="contact-card__item">
+              {% render 'icon', name: 'mail' %}
+              <span>
+                <strong style="display:block;">Email</strong>
+                <a href="mailto:{{ section.settings.email }}">{{ section.settings.email }}</a>
+              </span>
+            </div>
+          {%- endif -%}
+
+          {%- if section.settings.hours != blank -%}
+            <div class="contact-card__item">
+              {% render 'icon', name: 'clock' %}
+              <span>
+                <strong style="display:block;">Hours</strong>
+                {{ section.settings.hours }}
+              </span>
+            </div>
+          {%- endif -%}
+
+          {%- if section.settings.address != blank -%}
+            <div class="contact-card__item">
+              {% render 'icon', name: 'map-pin' %}
+              <span>
+                <strong style="display:block;">Address</strong>
+                {{ section.settings.address }}
+              </span>
+            </div>
+          {%- endif -%}
+
+          {%- if section.settings.response_time != blank -%}
+            <div class="contact-card__item">
+              {% render 'icon', name: 'headset' %}
+              <span>
+                <strong style="display:block;">Response time</strong>
+                {{ section.settings.response_time }}
+              </span>
+            </div>
+          {%- endif -%}
+        </div>
+      </div>
+
+      <div class="reveal reveal--right">
+        {%- form 'contact' -%}
+          {%- if form.posted_successfully? -%}
+            <p class="form-status form-status--success">
+              {{ section.settings.success_text }}
+            </p>
+          {%- endif -%}
+
+          {%- if form.errors -%}
+            <div class="form-status form-status--error">
+              <ul>
+                {%- for field in form.errors -%}
+                  <li>{{ form.errors.messages[field] }}</li>
+                {%- endfor -%}
+              </ul>
+            </div>
+          {%- endif -%}
+
+          <div class="field">
+            <label class="field__label" for="ContactName">Name</label>
+            <input
+              type="text"
+              id="ContactName"
+              name="contact[name]"
+              value="{% if form.name %}{{ form.name }}{% elsif customer %}{{ customer.name }}{% endif %}"
+              autocomplete="name"
+              required
+            >
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="ContactEmail">Email</label>
+            <input
+              type="email"
+              id="ContactEmail"
+              name="contact[email]"
+              value="{% if form.email %}{{ form.email }}{% elsif customer %}{{ customer.email }}{% endif %}"
+              autocomplete="email"
+              required
+            >
+          </div>
+
+          {%- if section.settings.show_order_number -%}
+            <div class="field">
+              <label class="field__label" for="ContactOrder">Order number (optional)</label>
+              <input type="text" id="ContactOrder" name="contact[order number]" placeholder="#1024">
+            </div>
+          {%- endif -%}
+
+          <div class="field">
+            <label class="field__label" for="ContactMessage">How can we help?</label>
+            <textarea id="ContactMessage" name="contact[body]" rows="6" required></textarea>
+          </div>
+
+          <button type="submit" class="button button--large button--full">
+            {{ section.settings.button_label }}
+          </button>
+        {%- endform -%}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Contact form",
+  "tag": "section",
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" },
+        { "value": "surface", "label": "Surface" }
+      ],
+      "default": "default"
+    },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Contact" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Talk to a real person" },
+    {
+      "type": "richtext",
+      "id": "text",
+      "label": "Text",
+      "default": "<p>Question about an order, a product or a return? Send us a message and we will get back to you within one business day.</p>"
+    },
+    { "type": "text", "id": "email", "label": "Email address", "default": "support@yourstore.com" },
+    { "type": "text", "id": "hours", "label": "Hours", "default": "Monday to Friday, 9am to 6pm" },
+    { "type": "textarea", "id": "address", "label": "Address" },
+    { "type": "text", "id": "response_time", "label": "Response time", "default": "Usually under 24 hours" },
+    { "type": "checkbox", "id": "show_order_number", "label": "Ask for an order number", "default": true },
+    { "type": "text", "id": "button_label", "label": "Button label", "default": "Send message" },
+    {
+      "type": "text",
+      "id": "success_text",
+      "label": "Success message",
+      "default": "Thanks for reaching out. We will reply within one business day."
+    }
+  ],
+  "presets": [{ "name": "Contact form" }]
+}
+{% endschema %}

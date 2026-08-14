@@ -1,0 +1,128 @@
+<div class="section{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}">
+  <div class="page-width">
+    <div class="hero__grid{% if section.settings.media_position == 'left' %} hero--media-left{% endif %}" style="padding-block: 0;">
+      <div class="hero__content reveal{% if section.settings.media_position == 'left' %} reveal--right{% else %} reveal--left{% endif %}">
+        {%- if section.settings.eyebrow != blank -%}
+          <span class="eyebrow">{{ section.settings.eyebrow }}</span>
+        {%- endif -%}
+
+        <h2>{{ section.settings.heading }}</h2>
+
+        {%- if section.settings.text != blank -%}
+          <div class="rte text-lead">{{ section.settings.text }}</div>
+        {%- endif -%}
+
+        {%- if section.blocks.size > 0 -%}
+          <ul style="display:grid; gap:12px; margin-top:8px;">
+            {%- for block in section.blocks -%}
+              <li style="display:flex; gap:12px; align-items:flex-start;" {{ block.shopify_attributes }}>
+                <span style="color: var(--c-accent); flex-shrink:0; display:flex;">
+                  {% render 'icon', name: block.settings.icon %}
+                </span>
+                <span>
+                  <strong>{{ block.settings.heading }}</strong>
+                  {%- if block.settings.text != blank -%}
+                    <span style="display:block; color: var(--c-muted); font-size:.93rem;">{{ block.settings.text }}</span>
+                  {%- endif -%}
+                </span>
+              </li>
+            {%- endfor -%}
+          </ul>
+        {%- endif -%}
+
+        {%- if section.settings.button_label != blank -%}
+          <div class="button-group">
+            <a class="button" href="{{ section.settings.button_link }}">{{ section.settings.button_label }}</a>
+          </div>
+        {%- endif -%}
+      </div>
+
+      <div class="hero__media reveal{% if section.settings.media_position == 'left' %} reveal--left{% else %} reveal--right{% endif %}">
+        {%- if section.settings.image != blank -%}
+          <img
+            src="{{ section.settings.image | image_url: width: 1200 }}"
+            srcset="
+              {{ section.settings.image | image_url: width: 600 }} 600w,
+              {{ section.settings.image | image_url: width: 1200 }} 1200w
+            "
+            sizes="(min-width: 900px) 48vw, 100vw"
+            alt="{{ section.settings.image.alt | escape }}"
+            width="{{ section.settings.image.width }}"
+            height="{{ section.settings.image.height }}"
+            loading="lazy"
+          >
+        {%- else -%}
+          {{ 'lifestyle-2' | placeholder_svg_tag: 'placeholder-svg' }}
+        {%- endif -%}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Image with text",
+  "tag": "section",
+  "max_blocks": 4,
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" },
+        { "value": "surface", "label": "Surface" }
+      ],
+      "default": "default"
+    },
+    {
+      "type": "select",
+      "id": "media_position",
+      "label": "Image position",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "left"
+    },
+    { "type": "image_picker", "id": "image", "label": "Image" },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Our promise" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Made to be used, not admired" },
+    {
+      "type": "richtext",
+      "id": "text",
+      "label": "Text",
+      "default": "<p>We test every product ourselves before it goes on the site. If we would not use it every day, it does not make the cut.</p>"
+    },
+    { "type": "text", "id": "button_label", "label": "Button label" },
+    { "type": "url", "id": "button_link", "label": "Button link" }
+  ],
+  "blocks": [
+    {
+      "type": "point",
+      "name": "Bullet point",
+      "settings": [
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            { "value": "check-circle", "label": "Check" },
+            { "value": "sparkles", "label": "Sparkles" },
+            { "value": "leaf", "label": "Eco" },
+            { "value": "shield", "label": "Guarantee" },
+            { "value": "heart", "label": "Heart" },
+            { "value": "zap", "label": "Fast" },
+            { "value": "award", "label": "Quality" }
+          ],
+          "default": "check-circle"
+        },
+        { "type": "text", "id": "heading", "label": "Heading", "default": "Tested by us first" },
+        { "type": "text", "id": "text", "label": "Text" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Image with text" }]
+}
+{% endschema %}

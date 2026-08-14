@@ -1,0 +1,39 @@
+{%- comment -%}
+  Rendered by theme.js through the predictive search endpoint. Only the inner
+  markup is used, so this section deliberately has no wrapper chrome.
+{%- endcomment -%}
+
+<div data-predictive-results-inner>
+  {%- if predictive_search.performed -%}
+    {%- if predictive_search.resources.products.size > 0 -%}
+      <p class="search-suggestions__title">Products</p>
+      <div class="search-suggestions__list">
+        {%- for product in predictive_search.resources.products -%}
+          <a class="search-suggestion" href="{{ product.url }}">
+            {%- if product.featured_media -%}
+              <img
+                src="{{ product.featured_media | image_url: width: 120 }}"
+                alt="{{ product.featured_media.alt | escape }}"
+                width="48"
+                height="48"
+                loading="lazy"
+              >
+            {%- endif -%}
+            <span>
+              <span style="display:block; font-weight:600; font-size:.92rem;">{{ product.title | escape }}</span>
+              <span class="text-sm text-muted">{{ product.price | money }}</span>
+            </span>
+          </a>
+        {%- endfor -%}
+      </div>
+    {%- else -%}
+      <p class="text-muted">No products matched that search.</p>
+    {%- endif -%}
+  {%- endif -%}
+</div>
+
+{% schema %}
+{
+  "name": "Predictive search"
+}
+{% endschema %}

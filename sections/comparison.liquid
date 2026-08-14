@@ -1,0 +1,112 @@
+<div class="section{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}">
+  <div class="page-width page-width--medium">
+    <div class="section-header section-header--center reveal">
+      {%- if section.settings.eyebrow != blank -%}
+        <span class="eyebrow">{{ section.settings.eyebrow }}</span>
+      {%- endif -%}
+      <h2>{{ section.settings.heading }}</h2>
+      {%- if section.settings.subtitle != blank -%}
+        <p>{{ section.settings.subtitle }}</p>
+      {%- endif -%}
+    </div>
+
+    <div class="comparison-scroll reveal">
+      <table class="comparison">
+        <thead>
+          <tr>
+            <th scope="col"><span class="visually-hidden">Feature</span></th>
+            <th scope="col" class="is-highlight">{{ section.settings.us_label }}</th>
+            <th scope="col">{{ section.settings.them_label }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {%- for block in section.blocks -%}
+            <tr {{ block.shopify_attributes }}>
+              <th scope="row">{{ block.settings.feature }}</th>
+              <td class="is-highlight">
+                {%- if block.settings.us_text != blank -%}
+                  {{ block.settings.us_text }}
+                {%- elsif block.settings.us_has -%}
+                  <span class="icon-yes">{% render 'icon', name: 'check-circle' %}</span>
+                  <span class="visually-hidden">Yes</span>
+                {%- else -%}
+                  <span class="icon-no">{% render 'icon', name: 'close' %}</span>
+                  <span class="visually-hidden">No</span>
+                {%- endif -%}
+              </td>
+              <td>
+                {%- if block.settings.them_text != blank -%}
+                  {{ block.settings.them_text }}
+                {%- elsif block.settings.them_has -%}
+                  <span class="icon-yes">{% render 'icon', name: 'check-circle' %}</span>
+                  <span class="visually-hidden">Yes</span>
+                {%- else -%}
+                  <span class="icon-no">{% render 'icon', name: 'close' %}</span>
+                  <span class="visually-hidden">No</span>
+                {%- endif -%}
+              </td>
+            </tr>
+          {%- endfor -%}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Comparison table",
+  "tag": "section",
+  "max_blocks": 10,
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" },
+        { "value": "surface", "label": "Surface" }
+      ],
+      "default": "default"
+    },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "The difference" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "How we compare" },
+    { "type": "textarea", "id": "subtitle", "label": "Subtitle" },
+    { "type": "text", "id": "us_label", "label": "Your column label", "default": "Us" },
+    { "type": "text", "id": "them_label", "label": "Their column label", "default": "Typical alternatives" }
+  ],
+  "blocks": [
+    {
+      "type": "row",
+      "name": "Row",
+      "settings": [
+        { "type": "text", "id": "feature", "label": "Feature", "default": "Free worldwide shipping" },
+        { "type": "checkbox", "id": "us_has", "label": "Yes for your column", "default": true },
+        { "type": "text", "id": "us_text", "label": "Custom text for your column", "info": "Replaces the tick or cross." },
+        { "type": "checkbox", "id": "them_has", "label": "Yes for their column", "default": false },
+        { "type": "text", "id": "them_text", "label": "Custom text for their column" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Comparison table",
+      "blocks": [
+        { "type": "row", "settings": { "feature": "Free worldwide shipping", "us_has": true, "them_has": false } },
+        { "type": "row", "settings": { "feature": "30-day money-back guarantee", "us_has": true, "them_has": false } },
+        { "type": "row", "settings": { "feature": "Tracked delivery on every order", "us_has": true, "them_has": false } },
+        {
+          "type": "row",
+          "settings": {
+            "feature": "Support response time",
+            "us_text": "Under 24 hours",
+            "them_text": "3 to 5 days"
+          }
+        },
+        { "type": "row", "settings": { "feature": "Hidden fees at checkout", "us_has": false, "them_has": true } }
+      ]
+    }
+  ]
+}
+{% endschema %}

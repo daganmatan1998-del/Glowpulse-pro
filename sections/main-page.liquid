@@ -1,0 +1,23 @@
+<div class="page-width">
+  <div class="page-hero reveal">
+    <h1>{{ page.title }}</h1>
+    {%- if section.settings.subtitle != blank -%}
+      <p>{{ section.settings.subtitle }}</p>
+    {%- endif -%}
+  </div>
+
+  <div class="page-width--narrow rte reveal" style="margin-inline:auto; padding-bottom: 48px;">
+    {{ page.content }}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Page content",
+  "tag": "section",
+  "class": "section section--tight",
+  "settings": [
+    { "type": "text", "id": "subtitle", "label": "Subtitle" }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,349 @@
+{
+  "sections": {
+    "hero": {
+      "type": "hero",
+      "settings": {
+        "background": "default",
+        "media_position": "right",
+        "show_glow": true,
+        "eyebrow": "New this season",
+        "heading": "The little upgrade your day was missing.",
+        "heading_accent": "",
+        "subtitle": "Thoughtfully made, fairly priced and delivered to your door. Free worldwide shipping and a 30-day money-back guarantee.",
+        "button_label": "Shop the collection",
+        "button_2_label": "How it works",
+        "show_proof": true,
+        "proof_rating": 4.8,
+        "proof_text": "Rated 4.8/5 by 1,200+ customers",
+        "badge_text": "Free worldwide delivery",
+        "badge_icon": "truck"
+      }
+    },
+    "marquee": {
+      "type": "marquee",
+      "blocks": {
+        "m1": { "type": "item", "settings": { "text": "Free worldwide shipping", "icon": "truck" } },
+        "m2": { "type": "item", "settings": { "text": "30-day money-back guarantee", "icon": "shield" } },
+        "m3": { "type": "item", "settings": { "text": "Tracked delivery", "icon": "package" } },
+        "m4": { "type": "item", "settings": { "text": "Real humans on support", "icon": "headset" } },
+        "m5": { "type": "item", "settings": { "text": "Loved by 12,000+ customers", "icon": "heart" } },
+        "m6": { "type": "item", "settings": { "text": "Secure checkout", "icon": "lock" } }
+      },
+      "block_order": ["m1", "m2", "m3", "m4", "m5", "m6"],
+      "settings": {
+        "background": "soft",
+        "speed": 34,
+        "gap": 56
+      }
+    },
+    "benefits": {
+      "type": "icon-columns",
+      "blocks": {
+        "b1": {
+          "type": "column",
+          "settings": {
+            "icon": "truck",
+            "heading": "Free worldwide shipping",
+            "text": "Every order ships free with tracking, wherever you are."
+          }
+        },
+        "b2": {
+          "type": "column",
+          "settings": {
+            "icon": "shield",
+            "heading": "30-day guarantee",
+            "text": "Not for you? Send it back within 30 days for a full refund."
+          }
+        },
+        "b3": {
+          "type": "column",
+          "settings": {
+            "icon": "headset",
+            "heading": "Support that replies",
+            "text": "A real person answers every email, usually within a day."
+          }
+        },
+        "b4": {
+          "type": "column",
+          "settings": {
+            "icon": "lock",
+            "heading": "Secure checkout",
+            "text": "Encrypted payments through Shopify. Your details stay yours."
+          }
+        }
+      },
+      "block_order": ["b1", "b2", "b3", "b4"],
+      "settings": {
+        "background": "default",
+        "heading": "Why people keep coming back",
+        "columns": "4",
+        "boxed": false
+      }
+    },
+    "best-sellers": {
+      "type": "featured-collection",
+      "settings": {
+        "background": "default",
+        "source": "collection",
+        "eyebrow": "Most popular",
+        "heading": "Our best sellers",
+        "subtitle": "The products our customers order again and tell their friends about.",
+        "center_heading": true,
+        "products_to_show": 8,
+        "columns": "4",
+        "button_label": "View all products",
+        "fallback_rating": 0,
+        "fallback_count": 0
+      }
+    },
+    "story": {
+      "type": "image-with-text",
+      "blocks": {
+        "p1": {
+          "type": "point",
+          "settings": {
+            "icon": "check-circle",
+            "heading": "We test everything first",
+            "text": "Nothing goes on the site until we have used it ourselves."
+          }
+        },
+        "p2": {
+          "type": "point",
+          "settings": {
+            "icon": "shield",
+            "heading": "Honest about delivery",
+            "text": "We tell you the real timeline up front, not the one that sounds best."
+          }
+        },
+        "p3": {
+          "type": "point",
+          "settings": {
+            "icon": "heart",
+            "heading": "Easy to reach",
+            "text": "One email address, answered by a person, usually within a day."
+          }
+        }
+      },
+      "block_order": ["p1", "p2", "p3"],
+      "settings": {
+        "background": "default",
+        "media_position": "left",
+        "eyebrow": "Our promise",
+        "heading": "Made to be used, not admired",
+        "text": "<p>We started with one product and a simple rule: only sell things we would happily buy ourselves. That rule has not changed.</p>"
+      }
+    },
+    "how-it-works": {
+      "type": "steps",
+      "blocks": {
+        "s1": {
+          "type": "step",
+          "settings": {
+            "heading": "Pick your favourite",
+            "text": "Choose the colour and size that suit you and add it to your cart.",
+            "icon": "tag"
+          }
+        },
+        "s2": {
+          "type": "step",
+          "settings": {
+            "heading": "Check out securely",
+            "text": "Pay with card, PayPal, Apple Pay or Google Pay. Your details are encrypted.",
+            "icon": "credit-card"
+          }
+        },
+        "s3": {
+          "type": "step",
+          "settings": {
+            "heading": "Track it to your door",
+            "text": "We dispatch within 48 hours and email you a tracking link straight away.",
+            "icon": "truck"
+          }
+        }
+      },
+      "block_order": ["s1", "s2", "s3"],
+      "settings": {
+        "background": "soft",
+        "eyebrow": "How it works",
+        "heading": "From cart to doorstep in three steps",
+        "show_icons": false
+      }
+    },
+    "comparison": {
+      "type": "comparison",
+      "blocks": {
+        "r1": { "type": "row", "settings": { "feature": "Free worldwide shipping", "us_has": true, "them_has": false } },
+        "r2": { "type": "row", "settings": { "feature": "30-day money-back guarantee", "us_has": true, "them_has": false } },
+        "r3": { "type": "row", "settings": { "feature": "Tracked delivery on every order", "us_has": true, "them_has": false } },
+        "r4": {
+          "type": "row",
+          "settings": {
+            "feature": "Support response time",
+            "us_text": "Under 24 hours",
+            "them_text": "3 to 5 days"
+          }
+        },
+        "r5": { "type": "row", "settings": { "feature": "Hidden fees at checkout", "us_has": false, "them_has": true } }
+      },
+      "block_order": ["r1", "r2", "r3", "r4", "r5"],
+      "settings": {
+        "background": "default",
+        "eyebrow": "The difference",
+        "heading": "How we compare",
+        "us_label": "Us",
+        "them_label": "Typical alternatives"
+      }
+    },
+    "reviews": {
+      "type": "testimonials",
+      "blocks": {
+        "t1": {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "title": "Exactly what I hoped for",
+            "body": "Arrived faster than I expected and the quality is genuinely better than the photos. I have already ordered a second one.",
+            "author": "Sarah M.",
+            "location": "United Kingdom",
+            "date": "2 weeks ago",
+            "verified": true
+          }
+        },
+        "t2": {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "title": "Worth every penny",
+            "body": "I was nervous ordering online but the whole thing was smooth. Tracking updated the whole way and support answered me the same day.",
+            "author": "Daniel R.",
+            "location": "Canada",
+            "date": "1 month ago",
+            "verified": true
+          }
+        },
+        "t3": {
+          "type": "review",
+          "settings": {
+            "rating": 4,
+            "title": "Really happy with it",
+            "body": "Took about ten days to reach me, which they were upfront about. No complaints at all, it does exactly what it says.",
+            "author": "Amelie D.",
+            "location": "France",
+            "date": "3 weeks ago",
+            "verified": true
+          }
+        },
+        "t4": {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "title": "Bought one for my sister too",
+            "body": "Packaging was neat, everything was as described, and it turned out to be a great gift. Would order again without thinking about it.",
+            "author": "Marco B.",
+            "location": "Italy",
+            "date": "1 week ago",
+            "verified": true
+          }
+        }
+      },
+      "block_order": ["t1", "t2", "t3", "t4"],
+      "settings": {
+        "background": "soft",
+        "layout": "slider",
+        "eyebrow": "Reviews",
+        "heading": "What customers say",
+        "button_label": "Read all reviews"
+      }
+    },
+    "gallery": {
+      "type": "gallery-grid",
+      "blocks": {
+        "g1": { "type": "photo", "settings": { "caption": "" } },
+        "g2": { "type": "photo", "settings": { "caption": "" } },
+        "g3": { "type": "photo", "settings": { "caption": "" } },
+        "g4": { "type": "photo", "settings": { "caption": "" } }
+      },
+      "block_order": ["g1", "g2", "g3", "g4"],
+      "settings": {
+        "background": "default",
+        "eyebrow": "From our community",
+        "heading": "In real homes, not studios",
+        "columns": "4",
+        "ratio": "square"
+      }
+    },
+    "faq": {
+      "type": "faq",
+      "blocks": {
+        "q1": {
+          "type": "question",
+          "settings": {
+            "question": "How long does delivery take?",
+            "answer": "<p>Orders leave our warehouse within 48 hours. Delivery usually takes 7 to 14 business days depending on your country, and you get a tracking link by email as soon as it ships.</p>"
+          }
+        },
+        "q2": {
+          "type": "question",
+          "settings": {
+            "question": "Where do you ship from?",
+            "answer": "<p>We work with fulfilment partners in Asia and Europe, and your order is sent from whichever warehouse can reach you fastest.</p>"
+          }
+        },
+        "q3": {
+          "type": "question",
+          "settings": {
+            "question": "What if it is not right for me?",
+            "answer": "<p>You have 30 days from delivery to request a return for any reason. Email us and we will send you instructions and a refund once the item is on its way back.</p>"
+          }
+        },
+        "q4": {
+          "type": "question",
+          "settings": {
+            "question": "Will I pay customs or import fees?",
+            "answer": "<p>For most countries, no. If your country does charge import duty on parcels of this value, that fee is set by your customs authority and is not included in the price you pay us.</p>"
+          }
+        },
+        "q5": {
+          "type": "question",
+          "settings": {
+            "question": "Is my payment secure?",
+            "answer": "<p>Yes. Checkout runs on Shopify's PCI-compliant payment system. We never see or store your card details.</p>"
+          }
+        }
+      },
+      "block_order": ["q1", "q2", "q3", "q4", "q5"],
+      "settings": {
+        "background": "default",
+        "eyebrow": "FAQ",
+        "heading": "Questions people ask before ordering",
+        "open_first": true,
+        "one_at_a_time": true,
+        "add_schema": true,
+        "footer_text": "Still unsure? Email us and a real person will get back to you."
+      }
+    },
+    "newsletter": {
+      "type": "newsletter",
+      "settings": {
+        "icon": "gift",
+        "heading": "Get 10% off your first order",
+        "subtitle": "Join the list for early access to new products and subscriber-only discounts. No spam, unsubscribe whenever.",
+        "button_label": "Send my code",
+        "animate_gradient": true
+      }
+    }
+  },
+  "order": [
+    "hero",
+    "marquee",
+    "benefits",
+    "best-sellers",
+    "story",
+    "how-it-works",
+    "comparison",
+    "reviews",
+    "gallery",
+    "faq",
+    "newsletter"
+  ]
+}

@@ -1,0 +1,95 @@
+<div class="cart-drawer" id="CartDrawer" data-cart-drawer aria-hidden="true" role="dialog" aria-modal="true" aria-label="Cart">
+  <div data-cart-replace data-section="{{ section.id }}" style="display: contents;">
+    <span hidden data-cart-total-count="{{ cart.item_count }}"></span>
+
+    <div class="cart-drawer__head">
+      <h2>Your cart {% if cart.item_count > 0 %}({{ cart.item_count }}){% endif %}</h2>
+      <button type="button" class="icon-button" data-panel-close aria-label="Close cart">
+        {% render 'icon', name: 'close' %}
+      </button>
+    </div>
+
+    {%- if cart.item_count == 0 -%}
+      <div class="cart-drawer__body">
+        <div class="cart-empty">
+          {% render 'icon', name: 'cart' %}
+          <h3>Your cart is empty</h3>
+          <p class="text-muted">Add something you love and it will show up here.</p>
+          <a class="button" href="{{ routes.all_products_collection_url }}" data-panel-close>Start shopping</a>
+        </div>
+      </div>
+    {%- else -%}
+      <div class="cart-drawer__body">
+        {% render 'free-shipping-bar' %}
+
+        <div class="cart-items">
+          {%- for item in cart.items -%}
+            {% render 'cart-line', item: item, index: forloop.index %}
+          {%- endfor -%}
+        </div>
+      </div>
+
+      <div class="cart-drawer__foot">
+        {%- if cart.cart_level_discount_applications.size > 0 -%}
+          {%- for discount in cart.cart_level_discount_applications -%}
+            <div class="cart-subtotal" style="font-size:.92rem; color: var(--c-success);">
+              <span>{{ discount.title }}</span>
+              <span>&minus;{{ discount.total_allocated_amount | money }}</span>
+            </div>
+          {%- endfor -%}
+        {%- endif -%}
+
+        <div class="cart-subtotal">
+          <span>Subtotal</span>
+          <span>{{ cart.total_price | money }}</span>
+        </div>
+
+        {%- if settings.cart_show_note -%}
+          <button
+            type="button"
+            class="cart-note-toggle"
+            data-cart-note-toggle
+            aria-expanded="false"
+            aria-controls="CartDrawerNote"
+          >
+            Add a note to your order
+          </button>
+          <div id="CartDrawerNote" hidden>
+            <textarea
+              name="note"
+              rows="3"
+              placeholder="Delivery instructions, gift message…"
+              data-cart-note
+              aria-label="Order note"
+            >{{ cart.note }}</textarea>
+          </div>
+        {%- endif -%}
+
+        <form action="{{ routes.cart_url }}" method="post">
+          <button type="submit" name="checkout" class="button button--large button--full">
+            <span class="button__label">Checkout &middot; {{ cart.total_price | money }}</span>
+            <span class="button__spinner"><span class="spinner"></span></span>
+          </button>
+        </form>
+
+        <a class="button button--ghost button--full" href="{{ routes.cart_url }}">View full cart</a>
+
+        {%- if settings.cart_footer_text != blank -%}
+          <p class="cart-foot-note">{{ settings.cart_footer_text }}</p>
+        {%- endif -%}
+
+        <div class="payment-icons" style="justify-content:center; margin-top:10px;">
+          {%- for type in shop.enabled_payment_types limit: 6 -%}
+            {{ type | payment_type_svg_tag: class: 'payment-icon' }}
+          {%- endfor -%}
+        </div>
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Cart drawer"
+}
+{% endschema %}

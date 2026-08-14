@@ -1,0 +1,43 @@
+{%- comment -%}
+  Outputs the inline `style` value for one colour swatch.
+
+  Products imported from AliExpress through DSers almost always ship a photo per
+  colour, so the variant image is the most accurate swatch we can show. We fall
+  back to the option value used directly as a CSS colour (works for "Red",
+  "Black", "Sky Blue" once handleized), and finally to a neutral tint.
+
+  Parameters:
+    product (product, required)
+    value   (string, required)  the option value, e.g. "Rose Gold"
+{%- endcomment -%}
+
+{%- liquid
+  assign swatch_image = null
+  assign lower_value = value | downcase
+
+  for variant in product.variants
+    if variant.image == blank
+      continue
+    endif
+    assign found = false
+    for option_value in variant.options
+      assign normalised = option_value | downcase
+      if normalised == lower_value
+        assign found = true
+        break
+      endif
+    endfor
+    if found
+      assign swatch_image = variant.image
+      break
+    endif
+  endfor
+
+  assign css_color = value | handle | replace: '-', ''
+-%}
+
+{%- if swatch_image -%}
+  background-image: url({{ swatch_image | image_url: width: 80, height: 80, crop: 'center' }});
+{%- else -%}
+  background-color: {{ css_color }}; background-image: linear-gradient(135deg, var(--c-soft), var(--c-border));
+{%- endif -%}

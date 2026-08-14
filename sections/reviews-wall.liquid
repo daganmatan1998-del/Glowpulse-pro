@@ -1,0 +1,193 @@
+{%- comment -%}
+  The full reviews page: an average score, a star distribution and every review.
+  The summary is calculated from the review blocks below it, so the numbers on
+  the page always match the reviews a visitor can actually read.
+{%- endcomment -%}
+
+{%- liquid
+  assign total = 0
+  assign count = section.blocks.size
+  assign five = 0
+  assign four = 0
+  assign three = 0
+  assign two = 0
+  assign one = 0
+  assign photo_count = 0
+
+  for block in section.blocks
+    assign rating = block.settings.rating | default: 5
+    assign total = total | plus: rating
+
+    case rating
+      when 5
+        assign five = five | plus: 1
+      when 4
+        assign four = four | plus: 1
+      when 3
+        assign three = three | plus: 1
+      when 2
+        assign two = two | plus: 1
+      else
+        assign one = one | plus: 1
+    endcase
+
+    if block.settings.image != blank
+      assign photo_count = photo_count | plus: 1
+    endif
+  endfor
+
+  assign average = 0
+  if count > 0
+    assign average = total | times: 1.0 | divided_by: count
+  endif
+-%}
+
+<div class="section{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}">
+  <div class="page-width">
+    {%- if section.settings.heading != blank -%}
+      <div class="section-header section-header--center reveal">
+        {%- if section.settings.eyebrow != blank -%}
+          <span class="eyebrow">{{ section.settings.eyebrow }}</span>
+        {%- endif -%}
+        <h2>{{ section.settings.heading }}</h2>
+        {%- if section.settings.subtitle != blank -%}
+          <p>{{ section.settings.subtitle }}</p>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+    {%- if section.settings.show_summary and count > 0 -%}
+      <div class="rating-summary reveal" style="margin-bottom: 40px;">
+        <div class="rating-summary__score">
+          <div class="rating-summary__number">
+            <span class="count-up" data-count-to="{{ average | round: 1 }}">{{ average | round: 1 }}</span>
+          </div>
+          {% render 'stars', rating: average, size: 'lg' %}
+          <p class="text-sm text-muted" style="margin-top:8px;">
+            Based on {{ count }} review{% if count != 1 %}s{% endif %}
+          </p>
+        </div>
+
+        <div class="rating-bars">
+          {%- assign counts = five | append: ',' | append: four | append: ',' | append: three | append: ',' | append: two | append: ',' | append: one | split: ',' -%}
+          {%- for star_count in counts -%}
+            {%- liquid
+              assign stars_label = 5 | minus: forloop.index0
+              assign n = star_count | times: 1
+              assign percent = 0
+              if count > 0
+                assign percent = n | times: 100 | divided_by: count
+              endif
+            -%}
+            <div class="rating-bar">
+              <span>{{ stars_label }} star{% if stars_label != 1 %}s{% endif %}</span>
+              <span class="rating-bar__track">
+                <span class="rating-bar__fill" data-rating-fill="{{ percent }}"></span>
+              </span>
+              <span>{{ n }}</span>
+            </div>
+          {%- endfor -%}
+        </div>
+
+        {%- if section.settings.summary_note != blank -%}
+          <div style="text-align:center;">
+            <p class="text-sm text-muted" style="max-width: 20ch; margin-inline:auto;">
+              {{ section.settings.summary_note }}
+            </p>
+            {%- if photo_count > 0 -%}
+              <p class="badge" style="margin-top:10px;">
+                {% render 'icon', name: 'image' %} {{ photo_count }} with photos
+              </p>
+            {%- endif -%}
+          </div>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+    {%- if count > 0 -%}
+      <div class="review-grid review-grid--{{ section.settings.columns }} review-grid--masonry">
+        {%- for block in section.blocks -%}
+          {% render 'review-card', block: block %}
+        {%- endfor -%}
+      </div>
+    {%- else -%}
+      <p class="text-center text-muted">No reviews yet. Add your first one from the theme editor.</p>
+    {%- endif -%}
+
+    {%- if section.settings.footer_text != blank -%}
+      <p class="text-center text-muted text-sm" style="margin-top: 40px;">{{ section.settings.footer_text }}</p>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Reviews page",
+  "tag": "section",
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" },
+        { "value": "surface", "label": "Surface" }
+      ],
+      "default": "default"
+    },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow" },
+    { "type": "text", "id": "heading", "label": "Heading" },
+    { "type": "textarea", "id": "subtitle", "label": "Subtitle" },
+    { "type": "checkbox", "id": "show_summary", "label": "Show rating summary", "default": true },
+    {
+      "type": "text",
+      "id": "summary_note",
+      "label": "Note beside the summary",
+      "default": "Every review here comes from a customer who bought from us."
+    },
+    {
+      "type": "select",
+      "id": "columns",
+      "label": "Columns on desktop",
+      "options": [
+        { "value": "2", "label": "2" },
+        { "value": "3", "label": "3" }
+      ],
+      "default": "3"
+    },
+    {
+      "type": "textarea",
+      "id": "footer_text",
+      "label": "Text at the bottom",
+      "default": "Bought from us? We would love to hear how it went. Email us and we will add your review here."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "review",
+      "name": "Review",
+      "settings": [
+        {
+          "type": "range",
+          "id": "rating",
+          "min": 1,
+          "max": 5,
+          "step": 1,
+          "label": "Rating",
+          "default": 5
+        },
+        { "type": "text", "id": "title", "label": "Headline" },
+        { "type": "textarea", "id": "body", "label": "Review" },
+        { "type": "text", "id": "author", "label": "Name" },
+        { "type": "text", "id": "location", "label": "Location" },
+        { "type": "text", "id": "date", "label": "Date" },
+        { "type": "checkbox", "id": "verified", "label": "Show \"verified purchase\"", "default": true },
+        { "type": "image_picker", "id": "image", "label": "Photo from the customer" },
+        { "type": "image_picker", "id": "avatar", "label": "Profile picture" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Reviews page" }]
+}
+{% endschema %}

@@ -1,0 +1,96 @@
+<div class="page-width">
+  <article class="article-body">
+    <div class="article-hero reveal">
+      <div class="article-card__meta" style="justify-content:center;">
+        <span>{{ article.published_at | date: '%B %d, %Y' }}</span>
+        {%- if article.author != blank -%}<span>&middot; {{ article.author }}</span>{%- endif -%}
+      </div>
+      <h1>{{ article.title }}</h1>
+    </div>
+
+    {%- if article.image -%}
+      <div class="article-hero__image reveal">
+        <img
+          src="{{ article.image | image_url: width: 1400 }}"
+          alt="{{ article.image.alt | default: article.title | escape }}"
+          width="{{ article.image.width }}"
+          height="{{ article.image.height }}"
+          loading="eager"
+        >
+      </div>
+    {%- endif -%}
+
+    <div class="rte reveal">{{ article.content }}</div>
+
+    {%- if blog.comments_enabled? -%}
+      <section style="margin-top:56px;">
+        <h2 class="h3">
+          {%- if article.comments_count > 0 -%}
+            {{ article.comments_count }} comment{% if article.comments_count != 1 %}s{% endif %}
+          {%- else -%}
+            Leave a comment
+          {%- endif -%}
+        </h2>
+
+        {%- for comment in article.comments -%}
+          <div class="comment">
+            <div class="comment__meta">
+              <strong>{{ comment.author }}</strong> &middot; {{ comment.created_at | date: '%B %d, %Y' }}
+            </div>
+            <div class="rte">{{ comment.content }}</div>
+          </div>
+        {%- endfor -%}
+
+        {%- form 'new_comment', article -%}
+          {%- if form.posted_successfully? -%}
+            <p class="form-status form-status--success">
+              Thanks. Your comment will appear once it is approved.
+            </p>
+          {%- endif -%}
+
+          {%- if form.errors -%}
+            <div class="form-status form-status--error">
+              <ul>
+                {%- for field in form.errors -%}
+                  <li>{{ form.errors.messages[field] }}</li>
+                {%- endfor -%}
+              </ul>
+            </div>
+          {%- endif -%}
+
+          <div class="grid grid--2" style="margin-top:20px;">
+            <div class="field">
+              <label class="field__label" for="CommentAuthor">Name</label>
+              <input type="text" id="CommentAuthor" name="comment[author]" required>
+            </div>
+            <div class="field">
+              <label class="field__label" for="CommentEmail">Email</label>
+              <input type="email" id="CommentEmail" name="comment[email]" required>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="CommentBody">Comment</label>
+            <textarea id="CommentBody" name="comment[body]" rows="5" required></textarea>
+          </div>
+
+          <button type="submit" class="button">Post comment</button>
+        {%- endform -%}
+      </section>
+    {%- endif -%}
+
+    <div style="margin-top:48px;">
+      <a class="button button--ghost" href="{{ blog.url }}">
+        {% render 'icon', name: 'arrow-left' %} Back to {{ blog.title }}
+      </a>
+    </div>
+  </article>
+</div>
+
+{% schema %}
+{
+  "name": "Blog post",
+  "tag": "section",
+  "class": "section section--tight"
+}
+{% endschema %}

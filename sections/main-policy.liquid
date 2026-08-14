@@ -1,0 +1,66 @@
+{%- comment -%}
+  Layout for legal pages. Works both for Shopify's built-in policy pages
+  (Settings > Policies, served at /policies/...) and for regular pages that use
+  the "policy" template.
+{%- endcomment -%}
+
+{%- liquid
+  assign policy_title = page.title | default: page_title
+  assign policy_content = page.content
+  if policy_content == blank
+    assign policy_content = policy.body
+  endif
+-%}
+
+<div class="page-width">
+  <div class="page-hero reveal">
+    <span class="eyebrow">{{ section.settings.eyebrow }}</span>
+    <h1>{{ policy_title }}</h1>
+    {%- if section.settings.updated_note != blank -%}
+      <p class="text-sm">{{ section.settings.updated_note }}</p>
+    {%- endif -%}
+  </div>
+
+  <div class="legal-page reveal">
+    {%- if section.settings.intro != blank -%}
+      <div class="legal-toc">{{ section.settings.intro }}</div>
+    {%- endif -%}
+
+    <div class="rte">{{ policy_content }}</div>
+
+    {%- if section.settings.contact_note != blank -%}
+      <div class="legal-toc" style="margin-top: 40px; margin-bottom: 0;">
+        {{ section.settings.contact_note }}
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Policy page",
+  "tag": "section",
+  "class": "section section--tight",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Legal" },
+    {
+      "type": "text",
+      "id": "updated_note",
+      "label": "Last updated note",
+      "default": "Please read this page carefully before placing an order."
+    },
+    {
+      "type": "richtext",
+      "id": "intro",
+      "label": "Intro box",
+      "info": "Shown in a highlighted box above the policy text."
+    },
+    {
+      "type": "richtext",
+      "id": "contact_note",
+      "label": "Contact box",
+      "default": "<p>Questions about this policy? Email us and we will get back to you within one business day.</p>"
+    }
+  ]
+}
+{% endschema %}

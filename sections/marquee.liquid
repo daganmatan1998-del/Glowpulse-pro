@@ -1,0 +1,102 @@
+<div
+  class="marquee-section{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}"
+  style="border-block: 1px solid var(--c-border);"
+>
+  <div
+    class="marquee"
+    data-marquee
+    style="--marquee-duration: {{ section.settings.speed }}s; --marquee-gap: {{ section.settings.gap }}px;"
+  >
+    <div class="marquee__track">
+      {%- for block in section.blocks -%}
+        <span class="marquee__item" {{ block.shopify_attributes }}>
+          {%- if block.settings.icon != 'none' -%}
+            {% render 'icon', name: block.settings.icon %}
+          {%- endif -%}
+          {{ block.settings.text }}
+        </span>
+      {%- endfor -%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Scrolling strip",
+  "tag": "section",
+  "max_blocks": 12,
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" },
+        { "value": "surface", "label": "Surface" },
+        { "value": "dark", "label": "Dark" }
+      ],
+      "default": "soft"
+    },
+    {
+      "type": "range",
+      "id": "speed",
+      "min": 12,
+      "max": 80,
+      "step": 2,
+      "unit": "s",
+      "label": "Time for one loop",
+      "default": 34
+    },
+    {
+      "type": "range",
+      "id": "gap",
+      "min": 24,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "label": "Space between items",
+      "default": 56
+    }
+  ],
+  "blocks": [
+    {
+      "type": "item",
+      "name": "Item",
+      "settings": [
+        { "type": "text", "id": "text", "label": "Text", "default": "Free worldwide shipping" },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            { "value": "none", "label": "None" },
+            { "value": "truck", "label": "Delivery" },
+            { "value": "shield", "label": "Guarantee" },
+            { "value": "refresh", "label": "Returns" },
+            { "value": "sparkles", "label": "Sparkles" },
+            { "value": "heart", "label": "Heart" },
+            { "value": "award", "label": "Quality" },
+            { "value": "leaf", "label": "Eco" },
+            { "value": "zap", "label": "Fast" },
+            { "value": "headset", "label": "Support" }
+          ],
+          "default": "sparkles"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Scrolling strip",
+      "blocks": [
+        { "type": "item", "settings": { "text": "Free worldwide shipping", "icon": "truck" } },
+        { "type": "item", "settings": { "text": "30-day money-back guarantee", "icon": "shield" } },
+        { "type": "item", "settings": { "text": "Tracked delivery", "icon": "package" } },
+        { "type": "item", "settings": { "text": "Real humans on support", "icon": "headset" } },
+        { "type": "item", "settings": { "text": "Loved by 12,000+ customers", "icon": "heart" } }
+      ]
+    }
+  ]
+}
+{% endschema %}

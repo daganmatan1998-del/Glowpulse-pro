@@ -1,0 +1,13 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-404",
+      "settings": {
+        "heading": "We cannot find that page",
+        "text": "The link may be out of date, or the page may have moved. Everything we sell is one click away.",
+        "button_label": "Browse all products"
+      }
+    }
+  },
+  "order": ["main"]
+}

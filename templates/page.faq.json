@@ -1,0 +1,149 @@
+{
+  "sections": {
+    "hero": {
+      "type": "rich-text",
+      "blocks": {
+        "eyebrow": { "type": "eyebrow", "settings": { "text": "Help centre" } },
+        "heading": { "type": "heading", "settings": { "text": "Everything you might want to ask" } },
+        "text": {
+          "type": "text",
+          "settings": {
+            "text": "<p>Shipping, returns, payments and the awkward questions. If yours is not here, email us.</p>"
+          }
+        }
+      },
+      "block_order": ["eyebrow", "heading", "text"],
+      "settings": { "background": "soft" }
+    },
+    "shipping-faq": {
+      "type": "faq",
+      "blocks": {
+        "q1": {
+          "type": "question",
+          "settings": {
+            "question": "How long does delivery take?",
+            "answer": "<p>Orders leave our warehouse within 48 hours. Delivery usually takes 7 to 14 business days depending on your country, and you get a tracking link by email as soon as it ships.</p>"
+          }
+        },
+        "q2": {
+          "type": "question",
+          "settings": {
+            "question": "How much does shipping cost?",
+            "answer": "<p>Standard shipping is free on every order. If you choose an express option at checkout, the cost is shown before you pay.</p>"
+          }
+        },
+        "q3": {
+          "type": "question",
+          "settings": {
+            "question": "Do you ship to my country?",
+            "answer": "<p>We ship worldwide with a small number of exceptions. If your country is not selectable at checkout, we cannot currently deliver there.</p>"
+          }
+        },
+        "q4": {
+          "type": "question",
+          "settings": {
+            "question": "Why did my order arrive in separate parcels?",
+            "answer": "<p>Items are sometimes stocked in different warehouses. When that happens we send them separately so nothing waits, and you get a tracking number for each parcel.</p>"
+          }
+        },
+        "q5": {
+          "type": "question",
+          "settings": {
+            "question": "Will I pay customs or import fees?",
+            "answer": "<p>For most countries, no. If your country does charge import duty on parcels of this value, that fee is set by your customs authority and is not included in the price you pay us.</p>"
+          }
+        }
+      },
+      "block_order": ["q1", "q2", "q3", "q4", "q5"],
+      "settings": {
+        "background": "default",
+        "eyebrow": "Shipping",
+        "heading": "Delivery",
+        "open_first": true,
+        "one_at_a_time": true,
+        "add_schema": true,
+        "footer_text": ""
+      }
+    },
+    "returns-faq": {
+      "type": "faq",
+      "blocks": {
+        "q1": {
+          "type": "question",
+          "settings": {
+            "question": "What is your return window?",
+            "answer": "<p>30 days from the day your order is delivered. Email us within that window and we will start the return.</p>"
+          }
+        },
+        "q2": {
+          "type": "question",
+          "settings": {
+            "question": "Who pays for return postage?",
+            "answer": "<p>If the item is faulty, damaged or not what you ordered, we do. If you simply changed your mind, return postage is yours to cover.</p>"
+          }
+        },
+        "q3": {
+          "type": "question",
+          "settings": {
+            "question": "How long do refunds take?",
+            "answer": "<p>We refund within 3 business days of the returned item being scanned by the carrier. Your bank then takes 5 to 10 days to show it.</p>"
+          }
+        }
+      },
+      "block_order": ["q1", "q2", "q3"],
+      "settings": {
+        "background": "soft",
+        "eyebrow": "Returns",
+        "heading": "Returns and refunds",
+        "open_first": false,
+        "one_at_a_time": true,
+        "add_schema": false,
+        "footer_text": ""
+      }
+    },
+    "orders-faq": {
+      "type": "faq",
+      "blocks": {
+        "q1": {
+          "type": "question",
+          "settings": {
+            "question": "Which payment methods do you accept?",
+            "answer": "<p>All major debit and credit cards, plus any wallet enabled on your checkout such as PayPal, Apple Pay, Google Pay and Shop Pay.</p>"
+          }
+        },
+        "q2": {
+          "type": "question",
+          "settings": {
+            "question": "Is my payment secure?",
+            "answer": "<p>Yes. Checkout runs on Shopify's PCI-compliant payment system. We never see or store your card details.</p>"
+          }
+        },
+        "q3": {
+          "type": "question",
+          "settings": {
+            "question": "Can I change my address after ordering?",
+            "answer": "<p>If the order has not shipped, yes. Email us your order number and the correct address as soon as possible.</p>"
+          }
+        },
+        "q4": {
+          "type": "question",
+          "settings": {
+            "question": "I did not get an order confirmation.",
+            "answer": "<p>Check your spam folder first. If it is not there, email us and we will resend it and confirm the address on file.</p>"
+          }
+        }
+      },
+      "block_order": ["q1", "q2", "q3", "q4"],
+      "settings": {
+        "background": "default",
+        "eyebrow": "Orders",
+        "heading": "Payments and orders",
+        "open_first": false,
+        "one_at_a_time": true,
+        "add_schema": false,
+        "footer_text": "Still stuck? Email us and a real person will get back to you within one business day."
+      }
+    }
+  },
+  "order": ["hero", "shipping-faq", "returns-faq", "orders-faq"]
+}

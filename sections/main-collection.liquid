@@ -1,0 +1,168 @@
+<div class="page-width">
+  {%- if section.settings.show_header -%}
+    <div class="collection-hero reveal">
+      <h1>{{ collection.title }}</h1>
+      {%- if collection.description != blank -%}
+        <div class="collection-hero__description rte">{{ collection.description }}</div>
+      {%- endif -%}
+    </div>
+  {%- endif -%}
+
+  {%- paginate collection.products by section.settings.products_per_page -%}
+    {%- if section.settings.show_filters and collection.filters.size > 0 -%}
+      <form class="collection-toolbar" data-facet-form>
+        <div class="facets">
+          {%- for filter in collection.filters -%}
+            {%- case filter.type -%}
+              {%- when 'list' -%}
+                <details class="facet-details">
+                  <summary>
+                    {% render 'icon', name: 'filter' %}
+                    {{ filter.label }}
+                    {%- if filter.active_values.size > 0 %} ({{ filter.active_values.size }}){% endif -%}
+                  </summary>
+                  <div class="facet-panel">
+                    {%- for value in filter.values -%}
+                      <label>
+                        <input
+                          type="checkbox"
+                          name="{{ value.param_name }}"
+                          value="{{ value.value }}"
+                          {% if value.active %}checked{% endif %}
+                          {% if value.count == 0 and value.active == false %}disabled{% endif %}
+                        >
+                        <span>{{ value.label }} ({{ value.count }})</span>
+                      </label>
+                    {%- endfor -%}
+                  </div>
+                </details>
+
+              {%- when 'price_range' -%}
+                <details class="facet-details">
+                  <summary>{% render 'icon', name: 'tag' %} {{ filter.label }}</summary>
+                  <div class="facet-panel">
+                    <div style="display:flex; gap:10px; align-items:center;">
+                      <input
+                        type="number"
+                        name="{{ filter.min_value.param_name }}"
+                        value="{{ filter.min_value.value | divided_by: 100 }}"
+                        placeholder="0"
+                        min="0"
+                        aria-label="Minimum price"
+                      >
+                      <span>to</span>
+                      <input
+                        type="number"
+                        name="{{ filter.max_value.param_name }}"
+                        value="{{ filter.max_value.value | divided_by: 100 }}"
+                        placeholder="{{ filter.range_max | divided_by: 100 }}"
+                        min="0"
+                        aria-label="Maximum price"
+                      >
+                    </div>
+                  </div>
+                </details>
+            {%- endcase -%}
+          {%- endfor -%}
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span class="collection-toolbar__count">{{ collection.products_count }} products</span>
+          {%- if section.settings.show_sorting -%}
+            <select name="sort_by" aria-label="Sort by">
+              {%- assign sort_by = collection.sort_by | default: collection.default_sort_by -%}
+              {%- for option in collection.sort_options -%}
+                <option value="{{ option.value }}" {% if option.value == sort_by %}selected{% endif %}>
+                  {{ option.name }}
+                </option>
+              {%- endfor -%}
+            </select>
+          {%- endif -%}
+        </div>
+      </form>
+
+      {%- assign has_active = false -%}
+      {%- for filter in collection.filters -%}
+        {%- if filter.active_values.size > 0 -%}{%- assign has_active = true -%}{%- endif -%}
+      {%- endfor -%}
+
+      {%- if has_active -%}
+        <div class="active-facets">
+          {%- for filter in collection.filters -%}
+            {%- for value in filter.active_values -%}
+              <a class="active-facet" href="{{ value.url_to_remove }}">
+                {{ value.label }} {% render 'icon', name: 'close' %}
+              </a>
+            {%- endfor -%}
+          {%- endfor -%}
+          <a class="active-facet" href="{{ collection.url }}">Clear all</a>
+        </div>
+      {%- endif -%}
+    {%- endif -%}
+
+    {%- if collection.products.size > 0 -%}
+      <div class="product-grid product-grid--{{ section.settings.columns }} reveal-group">
+        {%- for item in collection.products -%}
+          {% render 'product-card',
+            product: item,
+            fallback_rating: section.settings.fallback_rating,
+            fallback_count: section.settings.fallback_count,
+            lazy: forloop.index > 4
+          %}
+        {%- endfor -%}
+      </div>
+
+      {% render 'pagination', paginate: paginate %}
+    {%- else -%}
+      <div class="error-page">
+        <h2>Nothing here yet</h2>
+        <p class="text-muted">Try removing a filter, or browse everything we sell.</p>
+        <a class="button" href="{{ routes.all_products_collection_url }}">Browse all products</a>
+      </div>
+    {%- endif -%}
+  {%- endpaginate -%}
+</div>
+
+{% schema %}
+{
+  "name": "Collection",
+  "tag": "section",
+  "class": "section section--tight",
+  "settings": [
+    { "type": "checkbox", "id": "show_header", "label": "Show collection title and description", "default": true },
+    { "type": "checkbox", "id": "show_filters", "label": "Show filters", "default": true },
+    { "type": "checkbox", "id": "show_sorting", "label": "Show sorting", "default": true },
+    {
+      "type": "range",
+      "id": "products_per_page",
+      "min": 8,
+      "max": 48,
+      "step": 4,
+      "label": "Products per page",
+      "default": 24
+    },
+    {
+      "type": "select",
+      "id": "columns",
+      "label": "Columns on desktop",
+      "options": [
+        { "value": "3", "label": "3" },
+        { "value": "4", "label": "4" },
+        { "value": "5", "label": "5" }
+      ],
+      "default": "4"
+    },
+    { "type": "header", "content": "Rating fallback" },
+    {
+      "type": "range",
+      "id": "fallback_rating",
+      "min": 0,
+      "max": 5,
+      "step": 0.1,
+      "label": "Fallback rating",
+      "default": 0
+    },
+    { "type": "number", "id": "fallback_count", "label": "Fallback review count", "default": 0 }
+  ]
+}
+{% endschema %}

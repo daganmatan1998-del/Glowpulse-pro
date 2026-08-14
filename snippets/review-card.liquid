@@ -1,0 +1,62 @@
+{%- comment -%}
+  One customer review. Fed by a section block so the merchant edits reviews in
+  the theme editor without needing a paid review app.
+
+  Parameters:
+    block (block object with settings: rating, title, body, author, location,
+           date, verified, image)
+{%- endcomment -%}
+
+{%- liquid
+  assign s = block.settings
+  assign initial = s.author | strip | slice: 0 | upcase
+-%}
+
+<article class="review-card reveal" {{ block.shopify_attributes }}>
+  <div class="review-card__head">
+    {% render 'stars', rating: s.rating, size: 'sm' %}
+    {%- if s.verified -%}
+      <span class="review-card__verified">
+        {% render 'icon', name: 'check-circle' %} Verified purchase
+      </span>
+    {%- endif -%}
+  </div>
+
+  {%- if s.title != blank -%}
+    <h3 class="review-card__title">{{ s.title | escape }}</h3>
+  {%- endif -%}
+
+  {%- if s.body != blank -%}
+    <p class="review-card__body">{{ s.body }}</p>
+  {%- endif -%}
+
+  {%- if s.image != blank -%}
+    <div class="review-card__media">
+      <img
+        src="{{ s.image | image_url: width: 600 }}"
+        alt="{{ s.image.alt | default: s.title | escape }}"
+        width="{{ s.image.width }}"
+        height="{{ s.image.height }}"
+        loading="lazy"
+      >
+    </div>
+  {%- endif -%}
+
+  <footer class="review-card__footer">
+    <span class="review-card__avatar">
+      {%- if s.avatar != blank -%}
+        <img src="{{ s.avatar | image_url: width: 80 }}" alt="" width="36" height="36" loading="lazy">
+      {%- else -%}
+        {{ initial | default: 'C' }}
+      {%- endif -%}
+    </span>
+    <span>
+      <span class="review-card__name">{{ s.author | default: 'Verified customer' | escape }}</span>
+      {%- if s.location != blank or s.date != blank -%}
+        <span class="review-card__meta" style="display:block;">
+          {{ s.location }}{% if s.location != blank and s.date != blank %} &middot; {% endif %}{{ s.date }}
+        </span>
+      {%- endif -%}
+    </span>
+  </footer>
+</article>

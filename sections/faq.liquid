@@ -1,0 +1,153 @@
+<div class="section{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}">
+  <div class="page-width page-width--narrow">
+    <div class="section-header section-header--center reveal">
+      {%- if section.settings.eyebrow != blank -%}
+        <span class="eyebrow">{{ section.settings.eyebrow }}</span>
+      {%- endif -%}
+      <h2>{{ section.settings.heading }}</h2>
+      {%- if section.settings.subtitle != blank -%}
+        <p>{{ section.settings.subtitle }}</p>
+      {%- endif -%}
+    </div>
+
+    <div class="accordion reveal" {% if section.settings.one_at_a_time %}data-accordion-exclusive{% endif %}>
+      {%- for block in section.blocks -%}
+        <div class="accordion__item" {{ block.shopify_attributes }}>
+          <button
+            type="button"
+            class="accordion__trigger"
+            data-accordion-trigger
+            aria-expanded="{% if forloop.first and section.settings.open_first %}true{% else %}false{% endif %}"
+            aria-controls="Faq-{{ block.id }}"
+          >
+            {{ block.settings.question }}
+            <span class="accordion__icon" aria-hidden="true"></span>
+          </button>
+          <div class="accordion__panel" id="Faq-{{ block.id }}">
+            <div class="accordion__panel-inner rte">{{ block.settings.answer }}</div>
+          </div>
+        </div>
+      {%- endfor -%}
+    </div>
+
+    {%- if section.settings.footer_text != blank -%}
+      <p class="text-center text-muted" style="margin-top: 32px;">{{ section.settings.footer_text }}</p>
+    {%- endif -%}
+  </div>
+</div>
+
+{%- if section.settings.add_schema and section.blocks.size > 0 -%}
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {%- for block in section.blocks -%}
+          {
+            "@type": "Question",
+            "name": {{ block.settings.question | json }},
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": {{ block.settings.answer | strip_html | json }}
+            }
+          }{% unless forloop.last %},{% endunless %}
+        {%- endfor -%}
+      ]
+    }
+  </script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "FAQ",
+  "tag": "section",
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" },
+        { "value": "surface", "label": "Surface" }
+      ],
+      "default": "default"
+    },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "FAQ" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Questions people ask before ordering" },
+    { "type": "textarea", "id": "subtitle", "label": "Subtitle" },
+    { "type": "checkbox", "id": "open_first", "label": "Open the first question", "default": true },
+    { "type": "checkbox", "id": "one_at_a_time", "label": "Only one question open at a time", "default": true },
+    {
+      "type": "checkbox",
+      "id": "add_schema",
+      "label": "Add FAQ structured data",
+      "default": true,
+      "info": "Helps Google show your questions directly in search results. Only switch this on for one FAQ section per page."
+    },
+    {
+      "type": "text",
+      "id": "footer_text",
+      "label": "Text at the bottom",
+      "default": "Still unsure? Email us and a real person will get back to you."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "question",
+      "name": "Question",
+      "settings": [
+        { "type": "text", "id": "question", "label": "Question", "default": "How long does delivery take?" },
+        {
+          "type": "richtext",
+          "id": "answer",
+          "label": "Answer",
+          "default": "<p>Orders leave our warehouse within 48 hours. Delivery usually takes 7 to 14 business days depending on your country, and you get a tracking link by email as soon as it ships.</p>"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "FAQ",
+      "blocks": [
+        {
+          "type": "question",
+          "settings": {
+            "question": "How long does delivery take?",
+            "answer": "<p>Orders leave our warehouse within 48 hours. Delivery usually takes 7 to 14 business days depending on your country, and you get a tracking link by email as soon as it ships.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "Where do you ship from?",
+            "answer": "<p>We work with fulfilment partners in Asia and Europe, and your order is sent from whichever warehouse can reach you fastest.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "What if it is not right for me?",
+            "answer": "<p>You have 30 days from delivery to request a return for any reason. Email us and we will send you instructions and a refund once the item is on its way back.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "Will I pay customs or import fees?",
+            "answer": "<p>For most countries, no. If your country does charge import duty on parcels of this value, that fee is set by your customs authority and is not included in the price you pay us.</p>"
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "Is my payment secure?",
+            "answer": "<p>Yes. Checkout runs on Shopify's PCI-compliant payment system. We never see or store your card details.</p>"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

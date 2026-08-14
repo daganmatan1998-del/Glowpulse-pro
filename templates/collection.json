@@ -1,0 +1,62 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-collection",
+      "settings": {
+        "show_header": true,
+        "show_filters": true,
+        "show_sorting": true,
+        "products_per_page": 24,
+        "columns": "4",
+        "fallback_rating": 0,
+        "fallback_count": 0
+      }
+    },
+    "benefits": {
+      "type": "icon-columns",
+      "blocks": {
+        "b1": {
+          "type": "column",
+          "settings": {
+            "icon": "truck",
+            "heading": "Free worldwide shipping",
+            "text": "Every order ships free with tracking, wherever you are."
+          }
+        },
+        "b2": {
+          "type": "column",
+          "settings": {
+            "icon": "shield",
+            "heading": "30-day guarantee",
+            "text": "Not for you? Send it back within 30 days for a full refund."
+          }
+        },
+        "b3": {
+          "type": "column",
+          "settings": {
+            "icon": "headset",
+            "heading": "Support that replies",
+            "text": "A real person answers every email, usually within a day."
+          }
+        }
+      },
+      "block_order": ["b1", "b2", "b3"],
+      "settings": {
+        "background": "soft",
+        "heading": "",
+        "columns": "3"
+      }
+    },
+    "newsletter": {
+      "type": "newsletter",
+      "settings": {
+        "icon": "gift",
+        "heading": "Get 10% off your first order",
+        "subtitle": "Join the list for early access to new products and subscriber-only discounts.",
+        "button_label": "Send my code",
+        "animate_gradient": true
+      }
+    }
+  },
+  "order": ["main", "benefits", "newsletter"]
+}

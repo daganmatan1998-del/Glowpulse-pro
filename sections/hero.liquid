@@ -1,0 +1,167 @@
+<div class="hero section--flush-top section--flush-bottom{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}{% if section.settings.media_position == 'left' %} hero--media-left{% endif %}">
+  {%- if section.settings.show_glow -%}
+    <span class="hero__blob hero__blob--a" aria-hidden="true"></span>
+    <span class="hero__blob hero__blob--b" aria-hidden="true"></span>
+  {%- endif -%}
+
+  <div class="page-width">
+    <div class="hero__grid">
+      <div class="hero__content reveal">
+        {%- if section.settings.eyebrow != blank -%}
+          <span class="eyebrow">{{ section.settings.eyebrow }}</span>
+        {%- endif -%}
+
+        <h1 class="h0">
+          {{ section.settings.heading }}
+          {%- if section.settings.heading_accent != blank -%}
+            <span class="text-gradient">{{ section.settings.heading_accent }}</span>
+          {%- endif -%}
+        </h1>
+
+        {%- if section.settings.subtitle != blank -%}
+          <p class="hero__subtitle">{{ section.settings.subtitle }}</p>
+        {%- endif -%}
+
+        <div class="button-group">
+          {%- if section.settings.button_label != blank -%}
+            <a class="button button--large" href="{{ section.settings.button_link | default: routes.all_products_collection_url }}">
+              {{ section.settings.button_label }}
+            </a>
+          {%- endif -%}
+          {%- if section.settings.button_2_label != blank -%}
+            <a class="button button--large button--secondary" href="{{ section.settings.button_2_link }}">
+              {{ section.settings.button_2_label }}
+            </a>
+          {%- endif -%}
+        </div>
+
+        {%- if section.settings.show_proof -%}
+          <div class="hero__proof">
+            {%- if section.settings.proof_rating > 0 -%}
+              {% render 'stars', rating: section.settings.proof_rating, size: 'sm' %}
+            {%- endif -%}
+            {%- if section.settings.proof_text != blank -%}
+              <span>{{ section.settings.proof_text }}</span>
+            {%- endif -%}
+          </div>
+        {%- endif -%}
+      </div>
+
+      <div class="hero__media reveal reveal--right">
+        {%- if section.settings.image != blank -%}
+          <img
+            src="{{ section.settings.image | image_url: width: 1200 }}"
+            srcset="
+              {{ section.settings.image | image_url: width: 600 }} 600w,
+              {{ section.settings.image | image_url: width: 900 }} 900w,
+              {{ section.settings.image | image_url: width: 1400 }} 1400w
+            "
+            sizes="(min-width: 900px) 48vw, 100vw"
+            alt="{{ section.settings.image.alt | escape }}"
+            width="{{ section.settings.image.width }}"
+            height="{{ section.settings.image.height }}"
+            loading="eager"
+            fetchpriority="high"
+          >
+        {%- else -%}
+          {{ 'lifestyle-1' | placeholder_svg_tag: 'placeholder-svg' }}
+        {%- endif -%}
+
+        {%- if section.settings.badge_text != blank -%}
+          <div class="hero__floating-card float-slow">
+            {% render 'icon', name: section.settings.badge_icon %}
+            {{ section.settings.badge_text }}
+          </div>
+        {%- endif -%}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Hero",
+  "tag": "section",
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" },
+        { "value": "surface", "label": "Surface" }
+      ],
+      "default": "default"
+    },
+    {
+      "type": "select",
+      "id": "media_position",
+      "label": "Image position",
+      "options": [
+        { "value": "right", "label": "Right" },
+        { "value": "left", "label": "Left" }
+      ],
+      "default": "right"
+    },
+    { "type": "checkbox", "id": "show_glow", "label": "Show background glow", "default": true },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "New this season" },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "The little upgrade your day was missing."
+    },
+    {
+      "type": "text",
+      "id": "heading_accent",
+      "label": "Highlighted words",
+      "info": "Shown in the accent gradient, straight after the heading."
+    },
+    {
+      "type": "textarea",
+      "id": "subtitle",
+      "label": "Subtitle",
+      "default": "Thoughtfully made, fairly priced and delivered to your door. Free worldwide shipping and a 30-day money-back guarantee."
+    },
+    { "type": "text", "id": "button_label", "label": "Button label", "default": "Shop the collection" },
+    { "type": "url", "id": "button_link", "label": "Button link" },
+    { "type": "text", "id": "button_2_label", "label": "Second button label", "default": "How it works" },
+    { "type": "url", "id": "button_2_link", "label": "Second button link" },
+    { "type": "header", "content": "Social proof" },
+    { "type": "checkbox", "id": "show_proof", "label": "Show proof line", "default": true },
+    {
+      "type": "range",
+      "id": "proof_rating",
+      "min": 0,
+      "max": 5,
+      "step": 0.1,
+      "label": "Star rating",
+      "default": 4.8
+    },
+    {
+      "type": "text",
+      "id": "proof_text",
+      "label": "Proof text",
+      "default": "Rated 4.8/5 by 1,200+ customers"
+    },
+    { "type": "header", "content": "Image" },
+    { "type": "image_picker", "id": "image", "label": "Image" },
+    { "type": "text", "id": "badge_text", "label": "Floating badge text", "default": "Free worldwide delivery" },
+    {
+      "type": "select",
+      "id": "badge_icon",
+      "label": "Floating badge icon",
+      "options": [
+        { "value": "truck", "label": "Delivery" },
+        { "value": "sparkles", "label": "Sparkles" },
+        { "value": "shield", "label": "Guarantee" },
+        { "value": "heart", "label": "Heart" },
+        { "value": "zap", "label": "Fast" }
+      ],
+      "default": "truck"
+    }
+  ],
+  "presets": [{ "name": "Hero" }]
+}
+{% endschema %}

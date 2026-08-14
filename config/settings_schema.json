@@ -1,0 +1,464 @@
+[
+  {
+    "name": "theme_info",
+    "theme_name": "GlowPulse",
+    "theme_version": "1.0.0",
+    "theme_author": "GlowPulse",
+    "theme_documentation_url": "https://github.com/daganmatan1998-del/Glowpulse-pro/blob/main/docs/SETUP.md",
+    "theme_support_url": "https://github.com/daganmatan1998-del/Glowpulse-pro/issues"
+  },
+  {
+    "name": "Brand",
+    "settings": [
+      {
+        "type": "image_picker",
+        "id": "logo",
+        "label": "Logo"
+      },
+      {
+        "type": "range",
+        "id": "logo_width",
+        "min": 60,
+        "max": 260,
+        "step": 5,
+        "unit": "px",
+        "label": "Logo width",
+        "default": 130
+      },
+      {
+        "type": "image_picker",
+        "id": "favicon",
+        "label": "Favicon",
+        "info": "32 x 32px .png recommended"
+      },
+      {
+        "type": "text",
+        "id": "brand_tagline",
+        "label": "Short tagline",
+        "default": "Designed to make every day feel a little better."
+      }
+    ]
+  },
+  {
+    "name": "Colors",
+    "settings": [
+      {
+        "type": "header",
+        "content": "Base"
+      },
+      {
+        "type": "color",
+        "id": "color_bg",
+        "label": "Page background",
+        "default": "#FBF8F5"
+      },
+      {
+        "type": "color",
+        "id": "color_surface",
+        "label": "Cards and surfaces",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "color_text",
+        "label": "Text",
+        "default": "#1A1520"
+      },
+      {
+        "type": "color",
+        "id": "color_text_muted",
+        "label": "Muted text",
+        "default": "#6B6472"
+      },
+      {
+        "type": "color",
+        "id": "color_border",
+        "label": "Borders",
+        "default": "#E7E0EA"
+      },
+      {
+        "type": "header",
+        "content": "Accent"
+      },
+      {
+        "type": "color",
+        "id": "color_accent",
+        "label": "Primary accent",
+        "default": "#7C3AED"
+      },
+      {
+        "type": "color",
+        "id": "color_accent_2",
+        "label": "Secondary accent",
+        "default": "#EC4899",
+        "info": "Used as the second stop of gradients."
+      },
+      {
+        "type": "color",
+        "id": "color_on_accent",
+        "label": "Text on accent",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "color_soft",
+        "label": "Soft tint background",
+        "default": "#F4EEFB",
+        "info": "Used for badges, highlights and alternating sections."
+      },
+      {
+        "type": "header",
+        "content": "Status"
+      },
+      {
+        "type": "color",
+        "id": "color_sale",
+        "label": "Sale / urgency",
+        "default": "#D92D20"
+      },
+      {
+        "type": "color",
+        "id": "color_success",
+        "label": "Success / in stock",
+        "default": "#12805C"
+      },
+      {
+        "type": "color",
+        "id": "color_star",
+        "label": "Star rating",
+        "default": "#F0A20C"
+      },
+      {
+        "type": "header",
+        "content": "Footer"
+      },
+      {
+        "type": "color",
+        "id": "color_footer_bg",
+        "label": "Footer background",
+        "default": "#171320"
+      },
+      {
+        "type": "color",
+        "id": "color_footer_text",
+        "label": "Footer text",
+        "default": "#EDE9F2"
+      }
+    ]
+  },
+  {
+    "name": "Typography",
+    "settings": [
+      {
+        "type": "font_picker",
+        "id": "font_heading",
+        "label": "Heading font",
+        "default": "poppins_n4"
+      },
+      {
+        "type": "range",
+        "id": "font_heading_weight",
+        "min": 400,
+        "max": 800,
+        "step": 100,
+        "label": "Heading weight",
+        "default": 600
+      },
+      {
+        "type": "range",
+        "id": "font_heading_scale",
+        "min": 90,
+        "max": 130,
+        "step": 5,
+        "unit": "%",
+        "label": "Heading size",
+        "default": 100
+      },
+      {
+        "type": "select",
+        "id": "font_heading_case",
+        "label": "Heading letter case",
+        "options": [
+          { "value": "none", "label": "Normal" },
+          { "value": "uppercase", "label": "Uppercase" }
+        ],
+        "default": "none"
+      },
+      {
+        "type": "font_picker",
+        "id": "font_body",
+        "label": "Body font",
+        "default": "assistant_n4"
+      },
+      {
+        "type": "range",
+        "id": "font_body_scale",
+        "min": 90,
+        "max": 120,
+        "step": 5,
+        "unit": "%",
+        "label": "Body size",
+        "default": 100
+      }
+    ]
+  },
+  {
+    "name": "Layout & shape",
+    "settings": [
+      {
+        "type": "range",
+        "id": "page_width",
+        "min": 1100,
+        "max": 1600,
+        "step": 20,
+        "unit": "px",
+        "label": "Maximum page width",
+        "default": 1340
+      },
+      {
+        "type": "range",
+        "id": "section_spacing",
+        "min": 40,
+        "max": 140,
+        "step": 4,
+        "unit": "px",
+        "label": "Space between sections",
+        "default": 88
+      },
+      {
+        "type": "range",
+        "id": "radius_card",
+        "min": 0,
+        "max": 32,
+        "step": 2,
+        "unit": "px",
+        "label": "Card corner radius",
+        "default": 18
+      },
+      {
+        "type": "range",
+        "id": "radius_button",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Button corner radius",
+        "default": 40
+      },
+      {
+        "type": "select",
+        "id": "shadow_style",
+        "label": "Shadow style",
+        "options": [
+          { "value": "none", "label": "None" },
+          { "value": "soft", "label": "Soft" },
+          { "value": "lifted", "label": "Lifted" }
+        ],
+        "default": "soft"
+      }
+    ]
+  },
+  {
+    "name": "Buttons",
+    "settings": [
+      {
+        "type": "select",
+        "id": "button_style",
+        "label": "Primary button fill",
+        "options": [
+          { "value": "solid", "label": "Solid" },
+          { "value": "gradient", "label": "Gradient" }
+        ],
+        "default": "gradient"
+      },
+      {
+        "type": "checkbox",
+        "id": "button_uppercase",
+        "label": "Uppercase button text",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "button_shine",
+        "label": "Shine sweep on hover",
+        "default": true
+      }
+    ]
+  },
+  {
+    "name": "Animations",
+    "settings": [
+      {
+        "type": "paragraph",
+        "content": "All animations are automatically disabled for visitors who turn on \"reduce motion\" in their device settings."
+      },
+      {
+        "type": "checkbox",
+        "id": "anim_enabled",
+        "label": "Enable animations",
+        "default": true
+      },
+      {
+        "type": "select",
+        "id": "anim_reveal",
+        "label": "Scroll reveal style",
+        "options": [
+          { "value": "fade", "label": "Fade" },
+          { "value": "rise", "label": "Rise up" },
+          { "value": "zoom", "label": "Zoom in" },
+          { "value": "blur", "label": "Blur in" }
+        ],
+        "default": "rise"
+      },
+      {
+        "type": "select",
+        "id": "anim_speed",
+        "label": "Animation speed",
+        "options": [
+          { "value": "fast", "label": "Fast" },
+          { "value": "normal", "label": "Normal" },
+          { "value": "slow", "label": "Slow" }
+        ],
+        "default": "normal"
+      },
+      {
+        "type": "checkbox",
+        "id": "anim_image_zoom",
+        "label": "Zoom product images on hover",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "anim_hover_lift",
+        "label": "Lift cards on hover",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "anim_page_fade",
+        "label": "Fade pages in on load",
+        "default": true
+      }
+    ]
+  },
+  {
+    "name": "Product cards",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "card_show_second_image",
+        "label": "Show second image on hover",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "card_show_rating",
+        "label": "Show star rating",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "card_show_vendor",
+        "label": "Show vendor",
+        "default": false
+      },
+      {
+        "type": "checkbox",
+        "id": "card_show_swatches",
+        "label": "Show colour swatches",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "card_show_quick_add",
+        "label": "Show quick add button",
+        "default": true
+      },
+      {
+        "type": "select",
+        "id": "card_badge",
+        "label": "Discount badge",
+        "options": [
+          { "value": "none", "label": "Hide" },
+          { "value": "sale", "label": "Say \"Sale\"" },
+          { "value": "percent", "label": "Show percent saved" },
+          { "value": "amount", "label": "Show amount saved" }
+        ],
+        "default": "percent"
+      },
+      {
+        "type": "select",
+        "id": "card_image_ratio",
+        "label": "Image shape",
+        "options": [
+          { "value": "square", "label": "Square" },
+          { "value": "portrait", "label": "Portrait" },
+          { "value": "natural", "label": "Natural" }
+        ],
+        "default": "square"
+      }
+    ]
+  },
+  {
+    "name": "Cart",
+    "settings": [
+      {
+        "type": "select",
+        "id": "cart_type",
+        "label": "Cart behaviour",
+        "options": [
+          { "value": "drawer", "label": "Slide-out drawer" },
+          { "value": "page", "label": "Go to cart page" }
+        ],
+        "default": "drawer"
+      },
+      {
+        "type": "checkbox",
+        "id": "cart_free_shipping_bar",
+        "label": "Show free shipping progress bar",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "cart_free_shipping_threshold",
+        "label": "Free shipping over",
+        "default": "50",
+        "info": "Amount in your store currency, numbers only. Set to 0 to always show \"free shipping unlocked\"."
+      },
+      {
+        "type": "checkbox",
+        "id": "cart_show_note",
+        "label": "Let customers add an order note",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "cart_footer_text",
+        "label": "Text under the checkout button",
+        "default": "Taxes and shipping calculated at checkout"
+      }
+    ]
+  },
+  {
+    "name": "Social media",
+    "settings": [
+      { "type": "text", "id": "social_instagram", "label": "Instagram" },
+      { "type": "text", "id": "social_tiktok", "label": "TikTok" },
+      { "type": "text", "id": "social_facebook", "label": "Facebook" },
+      { "type": "text", "id": "social_youtube", "label": "YouTube" },
+      { "type": "text", "id": "social_pinterest", "label": "Pinterest" },
+      { "type": "text", "id": "social_x", "label": "X (Twitter)" }
+    ]
+  },
+  {
+    "name": "Social sharing image",
+    "settings": [
+      {
+        "type": "image_picker",
+        "id": "share_image",
+        "label": "Default sharing image",
+        "info": "1200 x 628px recommended. Used when a page has no image of its own."
+      }
+    ]
+  }
+]

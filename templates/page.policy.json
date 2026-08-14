@@ -1,0 +1,13 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-policy",
+      "settings": {
+        "eyebrow": "Legal",
+        "updated_note": "Please read this page carefully before placing an order.",
+        "contact_note": "<p>Questions about this policy? Email us and we will get back to you within one business day.</p>"
+      }
+    }
+  },
+  "order": ["main"]
+}

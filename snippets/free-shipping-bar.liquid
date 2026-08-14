@@ -1,0 +1,38 @@
+{%- comment -%}
+  Progress towards the free shipping threshold set in Theme settings > Cart.
+  The threshold is entered in whole currency units and converted to cents here.
+{%- endcomment -%}
+
+{%- if settings.cart_free_shipping_bar -%}
+  {%- liquid
+    assign threshold = settings.cart_free_shipping_threshold | times: 1 | times: 100
+    assign total = cart.total_price
+    assign remaining = threshold | minus: total
+
+    assign percent = 100
+    if threshold > 0
+      assign percent = total | times: 100.0 | divided_by: threshold | round
+      if percent > 100
+        assign percent = 100
+      endif
+    endif
+
+    assign unlocked = false
+    if threshold <= 0 or remaining <= 0
+      assign unlocked = true
+    endif
+  -%}
+
+  <div class="free-shipping-bar{% if unlocked %} is-complete{% endif %}">
+    <p class="free-shipping-bar__text">
+      {%- if unlocked -%}
+        {% render 'icon', name: 'truck' %} Your order ships free
+      {%- else -%}
+        You are <strong>{{ remaining | money }}</strong> away from free shipping
+      {%- endif -%}
+    </p>
+    <div class="free-shipping-bar__track">
+      <span class="free-shipping-bar__fill" style="width: {{ percent }}%;"></span>
+    </div>
+  </div>
+{%- endif -%}

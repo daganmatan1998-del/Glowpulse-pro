@@ -1,0 +1,103 @@
+{
+  "sections": {
+    "hero": {
+      "type": "rich-text",
+      "blocks": {
+        "eyebrow": { "type": "eyebrow", "settings": { "text": "About us" } },
+        "heading": { "type": "heading", "settings": { "text": "A small shop with a short list of rules" } },
+        "text": {
+          "type": "text",
+          "settings": {
+            "text": "<p>We only sell things we would use ourselves, we are honest about how long delivery takes, and we answer every email. That is the whole business.</p>"
+          }
+        }
+      },
+      "block_order": ["eyebrow", "heading", "text"],
+      "settings": { "background": "soft" }
+    },
+    "story": {
+      "type": "image-with-text",
+      "blocks": {
+        "p1": {
+          "type": "point",
+          "settings": {
+            "icon": "check-circle",
+            "heading": "We test everything first",
+            "text": "Nothing goes on the site until we have used it ourselves."
+          }
+        },
+        "p2": {
+          "type": "point",
+          "settings": {
+            "icon": "shield",
+            "heading": "Honest about delivery",
+            "text": "We tell you the real timeline up front, not the one that sounds best."
+          }
+        },
+        "p3": {
+          "type": "point",
+          "settings": {
+            "icon": "heart",
+            "heading": "Easy to reach",
+            "text": "One email address, answered by a person, usually within a day."
+          }
+        }
+      },
+      "block_order": ["p1", "p2", "p3"],
+      "settings": {
+        "background": "default",
+        "media_position": "left",
+        "eyebrow": "Our promise",
+        "heading": "Made to be used, not admired",
+        "text": "<p>We started with one product and a simple rule: only sell things we would happily buy ourselves. That rule has not changed as the catalogue has grown.</p>"
+      }
+    },
+    "benefits": {
+      "type": "icon-columns",
+      "blocks": {
+        "b1": {
+          "type": "column",
+          "settings": {
+            "icon": "globe",
+            "heading": "Shipping worldwide",
+            "text": "Customers in more than 40 countries, all shipped free and tracked."
+          }
+        },
+        "b2": {
+          "type": "column",
+          "settings": {
+            "icon": "shield",
+            "heading": "30-day guarantee",
+            "text": "If it is not right, send it back. No arguments, no restocking fee."
+          }
+        },
+        "b3": {
+          "type": "column",
+          "settings": {
+            "icon": "headset",
+            "heading": "One inbox",
+            "text": "No ticket numbers or phone trees. Just email, answered by us."
+          }
+        }
+      },
+      "block_order": ["b1", "b2", "b3"],
+      "settings": {
+        "background": "soft",
+        "heading": "How we work",
+        "columns": "3",
+        "boxed": true
+      }
+    },
+    "newsletter": {
+      "type": "newsletter",
+      "settings": {
+        "icon": "gift",
+        "heading": "Get 10% off your first order",
+        "subtitle": "Join the list for early access to new products and subscriber-only discounts.",
+        "button_label": "Send my code",
+        "animate_gradient": true
+      }
+    }
+  },
+  "order": ["hero", "story", "benefits", "newsletter"]
+}

@@ -1,0 +1,252 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-product",
+      "blocks": {
+        "title": {
+          "type": "title",
+          "settings": {
+            "show_vendor": false,
+            "show_rating": true,
+            "fallback_rating": 4.8,
+            "fallback_count": 0
+          }
+        },
+        "price": { "type": "price", "settings": { "show_tax_note": true } },
+        "text": {
+          "type": "text",
+          "settings": {
+            "text": "<p>A short, punchy summary of why this product is worth buying. Two sentences maximum.</p>"
+          }
+        },
+        "highlights": {
+          "type": "highlights",
+          "settings": {
+            "item_1": "Ships free worldwide",
+            "item_2": "30-day money-back guarantee",
+            "item_3": "Tracked delivery on every order"
+          }
+        },
+        "variant_picker": {
+          "type": "variant_picker",
+          "settings": {
+            "colour_swatches": true,
+            "dropdown_after": 12,
+            "low_stock_threshold": 10
+          }
+        },
+        "inventory": { "type": "inventory", "settings": { "low_stock_threshold": 10 } },
+        "buy_buttons": {
+          "type": "buy_buttons",
+          "settings": {
+            "button_label": "Add to cart",
+            "show_quantity": true,
+            "show_dynamic_checkout": true,
+            "pulse": false,
+            "under_button_text": "Secure checkout. Cancel any time before dispatch."
+          }
+        },
+        "delivery": {
+          "type": "delivery",
+          "settings": {
+            "heading": "Estimated delivery: 7 to 14 business days",
+            "text": "Dispatched within 48 hours. Tracking sent by email."
+          }
+        },
+        "trust": {
+          "type": "trust",
+          "settings": {
+            "icon_1": "truck",
+            "text_1": "Free tracked shipping",
+            "icon_2": "refresh",
+            "text_2": "30-day returns",
+            "icon_3": "lock",
+            "text_3": "Secure checkout"
+          }
+        },
+        "description": {
+          "type": "description",
+          "settings": {
+            "heading": "Description",
+            "collapsible": true,
+            "open_by_default": false
+          }
+        },
+        "shipping": {
+          "type": "collapsible",
+          "settings": {
+            "heading": "Shipping and delivery",
+            "icon": "truck",
+            "content": "<p>Orders are dispatched within 48 hours. Standard delivery takes 7 to 14 business days depending on your country. You will receive a tracking link by email as soon as your parcel leaves the warehouse.</p>"
+          }
+        },
+        "returns": {
+          "type": "collapsible",
+          "settings": {
+            "heading": "Returns and refunds",
+            "icon": "refresh",
+            "content": "<p>If it is not right for you, email us within 30 days of delivery and we will walk you through the return. Refunds are issued to your original payment method once the item is on its way back to us.</p>"
+          }
+        },
+        "payment_icons": {
+          "type": "payment_icons",
+          "settings": { "heading": "Checkout securely with" }
+        }
+      },
+      "block_order": [
+        "title",
+        "price",
+        "text",
+        "highlights",
+        "variant_picker",
+        "inventory",
+        "buy_buttons",
+        "delivery",
+        "trust",
+        "description",
+        "shipping",
+        "returns",
+        "payment_icons"
+      ],
+      "settings": {
+        "show_breadcrumbs": true,
+        "sticky_gallery": true,
+        "sticky_atc": true
+      }
+    },
+    "benefits": {
+      "type": "icon-columns",
+      "blocks": {
+        "b1": {
+          "type": "column",
+          "settings": {
+            "icon": "truck",
+            "heading": "Free worldwide shipping",
+            "text": "Every order ships free with tracking, wherever you are."
+          }
+        },
+        "b2": {
+          "type": "column",
+          "settings": {
+            "icon": "shield",
+            "heading": "30-day guarantee",
+            "text": "Not for you? Send it back within 30 days for a full refund."
+          }
+        },
+        "b3": {
+          "type": "column",
+          "settings": {
+            "icon": "headset",
+            "heading": "Support that replies",
+            "text": "A real person answers every email, usually within a day."
+          }
+        }
+      },
+      "block_order": ["b1", "b2", "b3"],
+      "settings": {
+        "background": "soft",
+        "heading": "",
+        "columns": "3",
+        "boxed": false
+      }
+    },
+    "reviews": {
+      "type": "testimonials",
+      "blocks": {
+        "t1": {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "title": "Exactly what I hoped for",
+            "body": "Arrived faster than I expected and the quality is genuinely better than the photos. I have already ordered a second one.",
+            "author": "Sarah M.",
+            "location": "United Kingdom",
+            "date": "2 weeks ago",
+            "verified": true
+          }
+        },
+        "t2": {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "title": "Worth every penny",
+            "body": "I was nervous ordering online but the whole thing was smooth. Tracking updated the whole way and support answered me the same day.",
+            "author": "Daniel R.",
+            "location": "Canada",
+            "date": "1 month ago",
+            "verified": true
+          }
+        },
+        "t3": {
+          "type": "review",
+          "settings": {
+            "rating": 4,
+            "title": "Really happy with it",
+            "body": "Took about ten days to reach me, which they were upfront about. No complaints at all, it does exactly what it says.",
+            "author": "Amelie D.",
+            "location": "France",
+            "date": "3 weeks ago",
+            "verified": true
+          }
+        }
+      },
+      "block_order": ["t1", "t2", "t3"],
+      "settings": {
+        "background": "default",
+        "layout": "slider",
+        "eyebrow": "Reviews",
+        "heading": "What customers say",
+        "button_label": "Read all reviews"
+      }
+    },
+    "related": {
+      "type": "featured-collection",
+      "settings": {
+        "background": "soft",
+        "source": "related",
+        "heading": "You may also like",
+        "center_heading": true,
+        "products_to_show": 4,
+        "columns": "4",
+        "button_label": ""
+      }
+    },
+    "faq": {
+      "type": "faq",
+      "blocks": {
+        "q1": {
+          "type": "question",
+          "settings": {
+            "question": "How long does delivery take?",
+            "answer": "<p>Orders leave our warehouse within 48 hours. Delivery usually takes 7 to 14 business days depending on your country, and you get a tracking link by email as soon as it ships.</p>"
+          }
+        },
+        "q2": {
+          "type": "question",
+          "settings": {
+            "question": "What if it does not fit or I change my mind?",
+            "answer": "<p>You have 30 days from delivery to request a return for any reason. Email us and we will send you instructions and a refund once the item is on its way back.</p>"
+          }
+        },
+        "q3": {
+          "type": "question",
+          "settings": {
+            "question": "Can I track my order?",
+            "answer": "<p>Yes. As soon as your parcel leaves the warehouse we email you a tracking number and a link to follow it.</p>"
+          }
+        }
+      },
+      "block_order": ["q1", "q2", "q3"],
+      "settings": {
+        "background": "default",
+        "eyebrow": "",
+        "heading": "Before you order",
+        "open_first": false,
+        "one_at_a_time": true,
+        "add_schema": false,
+        "footer_text": ""
+      }
+    }
+  },
+  "order": ["main", "benefits", "reviews", "related", "faq"]
+}

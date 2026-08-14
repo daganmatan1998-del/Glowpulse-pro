@@ -1,0 +1,57 @@
+<div class="page-width">
+  <div class="page-hero reveal">
+    <h1>Search</h1>
+  </div>
+
+  <form action="{{ routes.search_url }}" method="get" role="search" style="max-width:560px; margin:0 auto 40px; display:flex; gap:10px;">
+    <input
+      type="search"
+      name="q"
+      value="{{ search.terms | escape }}"
+      placeholder="Search products"
+      aria-label="Search products"
+    >
+    <button type="submit" class="button">Search</button>
+  </form>
+
+  {%- if search.performed -%}
+    {%- paginate search.results by 24 -%}
+      <p class="text-center text-muted" style="margin-bottom:28px;">
+        {{ search.results_count }} result{% if search.results_count != 1 %}s{% endif %} for &ldquo;{{ search.terms | escape }}&rdquo;
+      </p>
+
+      {%- if search.results_count > 0 -%}
+        <div class="product-grid product-grid--4 reveal-group">
+          {%- for item in search.results -%}
+            {%- if item.object_type == 'product' -%}
+              {% render 'product-card', product: item %}
+            {%- else -%}
+              <article class="card">
+                <div class="card__info">
+                  <h3 class="card__title"><a href="{{ item.url }}">{{ item.title }}</a></h3>
+                  <p class="text-sm text-muted">{{ item.content | strip_html | truncatewords: 24 }}</p>
+                </div>
+              </article>
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+
+        {% render 'pagination', paginate: paginate %}
+      {%- else -%}
+        <div class="error-page">
+          <h2>Nothing matched that search</h2>
+          <p class="text-muted">Try a shorter phrase, or browse everything we sell.</p>
+          <a class="button" href="{{ routes.all_products_collection_url }}">Browse all products</a>
+        </div>
+      {%- endif -%}
+    {%- endpaginate -%}
+  {%- endif -%}
+</div>
+
+{% schema %}
+{
+  "name": "Search results",
+  "tag": "section",
+  "class": "section section--tight"
+}
+{% endschema %}

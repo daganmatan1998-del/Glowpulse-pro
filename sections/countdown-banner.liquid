@@ -1,0 +1,98 @@
+<div class="section section--tight{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}">
+  <div class="page-width">
+    <div
+      class="newsletter{% if section.settings.animate_gradient %} gradient-shift{% endif %} reveal"
+      data-countdown
+      data-countdown-hours="{{ section.settings.hours }}"
+      data-countdown-key="banner-{{ section.id }}"
+      {% if section.settings.end_date != blank %}data-countdown-until="{{ section.settings.end_date }}"{% endif %}
+    >
+      <div class="newsletter__inner">
+        {%- if section.settings.eyebrow != blank -%}
+          <span class="eyebrow" style="color: inherit; opacity:.85;">{{ section.settings.eyebrow }}</span>
+        {%- endif -%}
+
+        <h2>{{ section.settings.heading }}</h2>
+
+        {%- if section.settings.text != blank -%}
+          <p>{{ section.settings.text }}</p>
+        {%- endif -%}
+
+        <div style="display:flex; justify-content:center; gap:12px; margin-top:24px; flex-wrap:wrap;">
+          {%- if section.settings.show_days -%}
+            <div style="min-width:74px; padding:12px; border-radius:var(--radius-sm); background:rgba(255,255,255,.16);">
+              <div style="font-size:1.9rem; font-weight:700; font-variant-numeric:tabular-nums;" data-countdown-days>00</div>
+              <div style="font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; opacity:.85;">Days</div>
+            </div>
+          {%- endif -%}
+          <div style="min-width:74px; padding:12px; border-radius:var(--radius-sm); background:rgba(255,255,255,.16);">
+            <div style="font-size:1.9rem; font-weight:700; font-variant-numeric:tabular-nums;" data-countdown-hours-value>00</div>
+            <div style="font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; opacity:.85;">Hours</div>
+          </div>
+          <div style="min-width:74px; padding:12px; border-radius:var(--radius-sm); background:rgba(255,255,255,.16);">
+            <div style="font-size:1.9rem; font-weight:700; font-variant-numeric:tabular-nums;" data-countdown-minutes>00</div>
+            <div style="font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; opacity:.85;">Minutes</div>
+          </div>
+          <div style="min-width:74px; padding:12px; border-radius:var(--radius-sm); background:rgba(255,255,255,.16);">
+            <div style="font-size:1.9rem; font-weight:700; font-variant-numeric:tabular-nums;" data-countdown-seconds>00</div>
+            <div style="font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; opacity:.85;">Seconds</div>
+          </div>
+        </div>
+
+        {%- if section.settings.button_label != blank -%}
+          <div class="button-group button-group--center" style="margin-top:28px;">
+            <a class="button button--large" href="{{ section.settings.button_link }}">{{ section.settings.button_label }}</a>
+          </div>
+        {%- endif -%}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Countdown banner",
+  "tag": "section",
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Section background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" }
+      ],
+      "default": "default"
+    },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Limited time" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Launch pricing ends soon" },
+    {
+      "type": "textarea",
+      "id": "text",
+      "label": "Text",
+      "default": "Prices go back up when the timer runs out."
+    },
+    {
+      "type": "text",
+      "id": "end_date",
+      "label": "Fixed end date",
+      "info": "Format: 2026-12-31T23:59:00. Leave empty to use a rolling countdown instead."
+    },
+    {
+      "type": "range",
+      "id": "hours",
+      "min": 1,
+      "max": 168,
+      "step": 1,
+      "unit": "h",
+      "label": "Rolling countdown length",
+      "default": 24
+    },
+    { "type": "checkbox", "id": "show_days", "label": "Show days", "default": false },
+    { "type": "checkbox", "id": "animate_gradient", "label": "Animate the gradient", "default": true },
+    { "type": "text", "id": "button_label", "label": "Button label", "default": "Shop the offer" },
+    { "type": "url", "id": "button_link", "label": "Button link" }
+  ],
+  "presets": [{ "name": "Countdown banner" }]
+}
+{% endschema %}

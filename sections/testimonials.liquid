@@ -1,0 +1,148 @@
+<div class="section{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}">
+  <div class="page-width">
+    <div class="section-header section-header--center reveal">
+      {%- if section.settings.eyebrow != blank -%}
+        <span class="eyebrow">{{ section.settings.eyebrow }}</span>
+      {%- endif -%}
+      <h2>{{ section.settings.heading }}</h2>
+      {%- if section.settings.subtitle != blank -%}
+        <p>{{ section.settings.subtitle }}</p>
+      {%- endif -%}
+    </div>
+
+    {%- if section.settings.layout == 'slider' -%}
+      <div class="testimonial-slider" data-slider>
+        <div class="testimonial-track" data-slider-track>
+          {%- for block in section.blocks -%}
+            {% render 'review-card', block: block %}
+          {%- endfor -%}
+        </div>
+
+        {%- if section.blocks.size > 3 -%}
+          <div class="slider-controls">
+            <button type="button" class="slider-button" data-slider-prev aria-label="Previous reviews">
+              {% render 'icon', name: 'chevron-left' %}
+            </button>
+            <button type="button" class="slider-button" data-slider-next aria-label="More reviews">
+              {% render 'icon', name: 'chevron-right' %}
+            </button>
+          </div>
+        {%- endif -%}
+      </div>
+    {%- else -%}
+      <div class="review-grid review-grid--3">
+        {%- for block in section.blocks -%}
+          {% render 'review-card', block: block %}
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+
+    {%- if section.settings.button_label != blank -%}
+      <div class="button-group button-group--center" style="margin-top: 36px;">
+        <a class="button button--secondary" href="{{ section.settings.button_link }}">{{ section.settings.button_label }}</a>
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Customer reviews",
+  "tag": "section",
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" },
+        { "value": "surface", "label": "Surface" }
+      ],
+      "default": "soft"
+    },
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "Layout",
+      "options": [
+        { "value": "slider", "label": "Slider" },
+        { "value": "grid", "label": "Grid" }
+      ],
+      "default": "slider"
+    },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Reviews" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "What customers say" },
+    { "type": "textarea", "id": "subtitle", "label": "Subtitle" },
+    { "type": "text", "id": "button_label", "label": "Button label", "default": "Read all reviews" },
+    { "type": "url", "id": "button_link", "label": "Button link" }
+  ],
+  "blocks": [
+    {
+      "type": "review",
+      "name": "Review",
+      "settings": [
+        {
+          "type": "range",
+          "id": "rating",
+          "min": 1,
+          "max": 5,
+          "step": 1,
+          "label": "Rating",
+          "default": 5
+        },
+        { "type": "text", "id": "title", "label": "Headline", "default": "Exactly what I hoped for" },
+        {
+          "type": "textarea",
+          "id": "body",
+          "label": "Review",
+          "default": "Arrived faster than I expected and the quality is genuinely better than the photos. I have already ordered a second one."
+        },
+        { "type": "text", "id": "author", "label": "Name", "default": "Sarah M." },
+        { "type": "text", "id": "location", "label": "Location", "default": "United Kingdom" },
+        { "type": "text", "id": "date", "label": "Date", "default": "2 weeks ago" },
+        { "type": "checkbox", "id": "verified", "label": "Show \"verified purchase\"", "default": true },
+        { "type": "image_picker", "id": "image", "label": "Photo from the customer" },
+        { "type": "image_picker", "id": "avatar", "label": "Profile picture" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Customer reviews",
+      "blocks": [
+        {
+          "type": "review",
+          "settings": {
+            "title": "Exactly what I hoped for",
+            "body": "Arrived faster than I expected and the quality is genuinely better than the photos. I have already ordered a second one.",
+            "author": "Sarah M.",
+            "location": "United Kingdom"
+          }
+        },
+        {
+          "type": "review",
+          "settings": {
+            "title": "Worth every penny",
+            "body": "I was nervous ordering online but the whole thing was smooth. Tracking updated the whole way and support answered me the same day.",
+            "author": "Daniel R.",
+            "location": "Canada",
+            "date": "1 month ago"
+          }
+        },
+        {
+          "type": "review",
+          "settings": {
+            "rating": 4,
+            "title": "Really happy with it",
+            "body": "Took about ten days to reach me, which they were upfront about. No complaints at all, it does exactly what it says.",
+            "author": "Amelie D.",
+            "location": "France",
+            "date": "3 weeks ago"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

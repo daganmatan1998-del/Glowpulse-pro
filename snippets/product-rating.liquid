@@ -1,0 +1,41 @@
+{%- comment -%}
+  Star rating for a product.
+
+  Reads the standard `reviews.rating` / `reviews.rating_count` metafields, which
+  are written by Shopify's own review apps (Judge.me, Loox, Okendo, Shopify
+  Product Reviews). If a product has no review data yet, the section can pass a
+  merchant-configured fallback so a brand new store still shows social proof it
+  has explicitly chosen to display.
+
+  Parameters:
+    product        (product, required)
+    size           (string) 'sm' | '' | 'lg'
+    show_count     (boolean, default true)
+    fallback_rating (number) used only when the product has no review metafield
+    fallback_count  (number)
+{%- endcomment -%}
+
+{%- liquid
+  assign rating_value = null
+  assign rating_count = 0
+
+  if product.metafields.reviews.rating.value != blank
+    assign rating_value = product.metafields.reviews.rating.value.rating | times: 1.0
+    assign rating_count = product.metafields.reviews.rating_count.value | default: 0
+  elsif fallback_rating != blank and fallback_rating > 0
+    assign rating_value = fallback_rating | times: 1.0
+    assign rating_count = fallback_count | default: 0
+  endif
+-%}
+
+{%- if rating_value -%}
+  <div class="rating-row">
+    {% render 'stars', rating: rating_value, size: size %}
+    {%- unless show_count == false -%}
+      <span>
+        {{ rating_value | round: 1 }}
+        {%- if rating_count > 0 %} ({{ rating_count }}){% endif -%}
+      </span>
+    {%- endunless -%}
+  </div>
+{%- endif -%}

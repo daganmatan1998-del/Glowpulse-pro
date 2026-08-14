@@ -1,0 +1,6 @@
+docs/
+scripts/
+README.md
+.gitignore
+.claude/
+design-system/

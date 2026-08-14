@@ -1,0 +1,227 @@
+/* ==========================================================================
+   GlowPulse — animations.css
+   Every effect is opt-in via the theme editor and every effect is switched
+   off automatically when the visitor asks for reduced motion.
+   ========================================================================== */
+
+/* ------------------------------------------------------- Scroll reveal -- */
+.anim-on .reveal {
+  opacity: 0;
+  will-change: transform, opacity;
+  transition:
+    opacity var(--duration-reveal) var(--ease-out),
+    transform var(--duration-reveal) var(--ease-out),
+    filter var(--duration-reveal) var(--ease-out);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.anim-on[data-anim-reveal="rise"] .reveal { transform: translateY(28px); }
+.anim-on[data-anim-reveal="zoom"] .reveal { transform: scale(.94); }
+.anim-on[data-anim-reveal="blur"] .reveal { filter: blur(10px); transform: translateY(14px); }
+
+.anim-on .reveal.is-visible {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* Directional variants a section can request explicitly */
+.anim-on .reveal--left { transform: translateX(-32px); }
+.anim-on .reveal--right { transform: translateX(32px); }
+.anim-on .reveal--left.is-visible,
+.anim-on .reveal--right.is-visible { transform: none; }
+
+/* Staggered children — the index is set inline as --reveal-delay */
+.anim-on .reveal-group > * {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity var(--duration-reveal) var(--ease-out),
+    transform var(--duration-reveal) var(--ease-out);
+}
+.anim-on .reveal-group.is-visible > * {
+  opacity: 1;
+  transform: none;
+}
+.anim-on .reveal-group.is-visible > *:nth-child(1) { transition-delay: 0ms; }
+.anim-on .reveal-group.is-visible > *:nth-child(2) { transition-delay: 70ms; }
+.anim-on .reveal-group.is-visible > *:nth-child(3) { transition-delay: 140ms; }
+.anim-on .reveal-group.is-visible > *:nth-child(4) { transition-delay: 210ms; }
+.anim-on .reveal-group.is-visible > *:nth-child(5) { transition-delay: 280ms; }
+.anim-on .reveal-group.is-visible > *:nth-child(6) { transition-delay: 350ms; }
+.anim-on .reveal-group.is-visible > *:nth-child(7) { transition-delay: 420ms; }
+.anim-on .reveal-group.is-visible > *:nth-child(8) { transition-delay: 490ms; }
+.anim-on .reveal-group.is-visible > *:nth-child(n + 9) { transition-delay: 560ms; }
+
+/* When JS is unavailable nothing may stay invisible */
+html:not(.js) .reveal,
+html:not(.js) .reveal-group > * {
+  opacity: 1 !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+/* --------------------------------------------------------- Page enter -- */
+.anim-on.page-fade .main-content {
+  animation: page-enter 520ms var(--ease-out) both;
+}
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* --------------------------------------------------------- Hover lift -- */
+.anim-on.hover-lift .card,
+.anim-on.hover-lift .review-card,
+.anim-on.hover-lift .icon-column--boxed {
+  transition:
+    transform var(--duration-ui) var(--ease-out),
+    box-shadow var(--duration-ui) var(--ease-out);
+}
+.anim-on.hover-lift .card:hover,
+.anim-on.hover-lift .review-card:hover,
+.anim-on.hover-lift .icon-column--boxed:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* -------------------------------------------------------- Image zoom -- */
+.anim-on.image-zoom .card__media:hover img,
+.anim-on.image-zoom .media--zoom:hover img {
+  transform: scale(1.06);
+}
+
+/* ------------------------------------------------------------ Accents -- */
+.float-slow { animation: float-y 6s ease-in-out infinite; }
+.float-slower { animation: float-y 9s ease-in-out infinite; }
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+
+.pulse-ring { position: relative; }
+.pulse-ring::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 2px solid var(--c-accent);
+  opacity: 0;
+  animation: pulse-ring 2.4s var(--ease-out) infinite;
+  pointer-events: none;
+}
+@keyframes pulse-ring {
+  0% { transform: scale(.92); opacity: .6; }
+  70% { transform: scale(1.12); opacity: 0; }
+  100% { opacity: 0; }
+}
+
+.gradient-shift {
+  background-size: 200% 200%;
+  animation: gradient-shift 9s ease infinite;
+}
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Attention nudge for the add-to-cart button */
+.anim-on .attention-nudge { animation: attention-nudge 3.6s var(--ease-out) 1.5s infinite; }
+@keyframes attention-nudge {
+  0%, 88%, 100% { transform: scale(1); }
+  92% { transform: scale(1.025); }
+  96% { transform: scale(.995); }
+}
+
+/* Cart icon bump when an item is added */
+.cart-bump { animation: cart-bump 520ms var(--ease-spring); }
+@keyframes cart-bump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.24) rotate(-6deg); }
+  70% { transform: scale(.94) rotate(3deg); }
+  100% { transform: scale(1); }
+}
+
+/* Loading spinner used by add-to-cart buttons */
+.spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.button.is-loading .button__label { opacity: 0; }
+.button.is-loading .button__spinner { opacity: 1; }
+.button__spinner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 160ms var(--ease-out);
+}
+
+/* Skeleton placeholder while cart sections re-render */
+.skeleton {
+  background: linear-gradient(90deg, var(--c-text-a06) 25%, var(--c-soft) 50%, var(--c-text-a06) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* Underline that draws in on hover */
+.link-underline {
+  position: relative;
+  text-decoration: none;
+}
+.link-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 1.5px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform var(--duration-ui) var(--ease-out);
+}
+.link-underline:hover::after { transform: scaleX(1); transform-origin: left; }
+
+/* Number that counts up (driven by theme.js) */
+.count-up { font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------- Reduced motion wins -- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .anim-on .reveal,
+  .anim-on .reveal-group > * {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+
+  .marquee__track { animation: none !important; }
+  .float-slow,
+  .float-slower,
+  .pulse-ring::before,
+  .gradient-shift,
+  .anim-on .attention-nudge { animation: none !important; }
+}

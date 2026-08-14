@@ -1,0 +1,51 @@
+{%- comment -%}
+  Renders a price block for a product or a single variant.
+  Parameters:
+    target    (product or variant, required)
+    show_save (boolean)  append "Save X" next to the compare-at price
+    class     (string)   extra class names
+{%- endcomment -%}
+
+{%- liquid
+  if target.compare_at_price
+    assign compare_at = target.compare_at_price
+  else
+    assign compare_at = target.compare_at_price_max
+  endif
+
+  assign current = target.price
+  if target.price_min and target.price_min != target.price_max
+    assign is_range = true
+  endif
+
+  assign on_sale = false
+  if compare_at and compare_at > current
+    assign on_sale = true
+  endif
+-%}
+
+<div class="price{% if on_sale %} price--on-sale{% endif %}{% if class %} {{ class }}{% endif %}">
+  <span class="price__current">
+    {%- if is_range -%}
+      From {{ target.price_min | money }}
+    {%- else -%}
+      {{ current | money }}
+    {%- endif -%}
+  </span>
+
+  {%- if on_sale -%}
+    <s class="price__was">{{ compare_at | money }}</s>
+
+    {%- if show_save -%}
+      {%- assign saved = compare_at | minus: current -%}
+      {%- assign percent = saved | times: 100.0 | divided_by: compare_at | round -%}
+      <span class="price__save">Save {{ saved | money }} ({{ percent }}%)</span>
+    {%- endif -%}
+  {%- endif -%}
+
+  {%- if target.unit_price_measurement -%}
+    <span class="price__unit">
+      {{ target.unit_price | money }} / {% if target.unit_price_measurement.reference_value != 1 %}{{ target.unit_price_measurement.reference_value }}{% endif %}{{ target.unit_price_measurement.reference_unit }}
+    </span>
+  {%- endif -%}
+</div>

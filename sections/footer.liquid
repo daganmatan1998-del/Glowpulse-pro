@@ -1,0 +1,144 @@
+<footer class="footer">
+  <div class="page-width">
+    <div class="footer__grid">
+      <div class="footer__brand">
+        <a class="footer__logo" href="{{ routes.root_url }}">
+          {%- if settings.logo != blank -%}
+            <img src="{{ settings.logo | image_url: width: 400 }}" alt="{{ shop.name | escape }}" width="160" height="48" loading="lazy">
+          {%- else -%}
+            {{ shop.name }}
+          {%- endif -%}
+        </a>
+
+        {%- if section.settings.about != blank -%}
+          <p>{{ section.settings.about }}</p>
+        {%- elsif settings.brand_tagline != blank -%}
+          <p>{{ settings.brand_tagline }}</p>
+        {%- endif -%}
+
+        {% render 'social-icons' %}
+      </div>
+
+      {%- for block in section.blocks -%}
+        {%- case block.type -%}
+          {%- when 'menu' -%}
+            <div {{ block.shopify_attributes }}>
+              <h2 class="footer__heading">{{ block.settings.heading }}</h2>
+              <ul class="footer__list">
+                {%- for link in block.settings.menu.links -%}
+                  <li><a href="{{ link.url }}">{{ link.title }}</a></li>
+                {%- endfor -%}
+              </ul>
+            </div>
+
+          {%- when 'text' -%}
+            <div {{ block.shopify_attributes }}>
+              <h2 class="footer__heading">{{ block.settings.heading }}</h2>
+              <div class="footer__list rte" style="color: var(--c-footer-text-a60);">
+                {{ block.settings.text }}
+              </div>
+            </div>
+
+          {%- when 'newsletter' -%}
+            <div {{ block.shopify_attributes }}>
+              <h2 class="footer__heading">{{ block.settings.heading }}</h2>
+              <p style="color: var(--c-footer-text-a60); font-size:.92rem;">{{ block.settings.text }}</p>
+
+              {%- form 'customer', class: 'footer__newsletter' -%}
+                <input type="hidden" name="contact[tags]" value="newsletter">
+                {%- if form.posted_successfully? -%}
+                  <p class="form-status form-status--success" style="margin-top:12px;">Thanks for subscribing.</p>
+                {%- else -%}
+                  <div style="display:flex; gap:8px; margin-top:12px;">
+                    <input
+                      type="email"
+                      name="contact[email]"
+                      placeholder="you@example.com"
+                      aria-label="Email"
+                      required
+                      style="border-radius: var(--radius-button);"
+                    >
+                    <button type="submit" class="button button--small" aria-label="Subscribe">
+                      {% render 'icon', name: 'arrow-right' %}
+                    </button>
+                  </div>
+                {%- endif -%}
+              {%- endform -%}
+            </div>
+        {%- endcase -%}
+      {%- endfor -%}
+    </div>
+
+    <div class="footer__bottom">
+      <span>&copy; {{ 'now' | date: '%Y' }} {{ shop.name }}. All rights reserved.</span>
+
+      <ul class="footer__policies">
+        {%- for policy in shop.policies -%}
+          {%- if policy != blank -%}
+            <li><a href="{{ policy.url }}">{{ policy.title }}</a></li>
+          {%- endif -%}
+        {%- endfor -%}
+      </ul>
+
+      {%- if section.settings.show_payment_icons -%}
+        <div class="payment-icons">
+          {%- for type in shop.enabled_payment_types -%}
+            {{ type | payment_type_svg_tag: class: 'payment-icon' }}
+          {%- endfor -%}
+        </div>
+      {%- endif -%}
+    </div>
+  </div>
+</footer>
+
+{% schema %}
+{
+  "name": "Footer",
+  "max_blocks": 3,
+  "settings": [
+    {
+      "type": "textarea",
+      "id": "about",
+      "label": "About text",
+      "default": "We design products people actually keep using. Fast worldwide delivery, honest pricing and a team that answers within a day."
+    },
+    {
+      "type": "checkbox",
+      "id": "show_payment_icons",
+      "label": "Show payment icons",
+      "default": true
+    }
+  ],
+  "blocks": [
+    {
+      "type": "menu",
+      "name": "Menu",
+      "settings": [
+        { "type": "text", "id": "heading", "label": "Heading", "default": "Shop" },
+        { "type": "link_list", "id": "menu", "label": "Menu", "default": "footer" }
+      ]
+    },
+    {
+      "type": "text",
+      "name": "Text",
+      "settings": [
+        { "type": "text", "id": "heading", "label": "Heading", "default": "Get in touch" },
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Text",
+          "default": "<p>support@yourstore.com<br>Mon to Fri, 9am to 6pm</p>"
+        }
+      ]
+    },
+    {
+      "type": "newsletter",
+      "name": "Newsletter",
+      "settings": [
+        { "type": "text", "id": "heading", "label": "Heading", "default": "Stay in the loop" },
+        { "type": "text", "id": "text", "label": "Text", "default": "New drops and subscriber-only discounts." }
+      ]
+    }
+  ]
+}
+{% endschema %}

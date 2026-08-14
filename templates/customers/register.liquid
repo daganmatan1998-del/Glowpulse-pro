@@ -1,0 +1,47 @@
+<div class="page-width">
+  <div class="customer customer--narrow">
+    <div class="page-hero">
+      <h1>{{ 'customer.register.title' | t }}</h1>
+    </div>
+
+    {%- form 'create_customer', novalidate: 'novalidate' -%}
+      {%- if form.errors -%}
+        <div class="form-status form-status--error">
+          <ul>
+            {%- for field in form.errors -%}
+              <li>{{ form.errors.messages[field] }}</li>
+            {%- endfor -%}
+          </ul>
+        </div>
+      {%- endif -%}
+
+      <div class="field">
+        <label class="field__label" for="RegisterFirstName">{{ 'customer.register.first_name' | t }}</label>
+        <input type="text" id="RegisterFirstName" name="customer[first_name]" autocomplete="given-name">
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="RegisterLastName">{{ 'customer.register.last_name' | t }}</label>
+        <input type="text" id="RegisterLastName" name="customer[last_name]" autocomplete="family-name">
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="RegisterEmail">{{ 'customer.register.email' | t }}</label>
+        <input type="email" id="RegisterEmail" name="customer[email]" autocomplete="email" required>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="RegisterPassword">{{ 'customer.register.password' | t }}</label>
+        <input type="password" id="RegisterPassword" name="customer[password]" autocomplete="new-password" required>
+      </div>
+
+      <button type="submit" class="button button--full button--large">
+        {{ 'customer.register.submit' | t }}
+      </button>
+
+      <p class="text-center text-sm" style="margin-top:16px;">
+        <a href="{{ routes.account_login_url }}" class="link-underline">{{ 'customer.login_page.sign_in' | t }}</a>
+      </p>
+    {%- endform -%}
+  </div>
+</div>

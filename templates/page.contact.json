@@ -1,0 +1,71 @@
+{
+  "sections": {
+    "hero": {
+      "type": "rich-text",
+      "blocks": {
+        "eyebrow": { "type": "eyebrow", "settings": { "text": "Contact" } },
+        "heading": { "type": "heading", "settings": { "text": "We are easy to reach" } },
+        "text": {
+          "type": "text",
+          "settings": {
+            "text": "<p>One inbox, answered by a person. Most messages get a reply the same working day.</p>"
+          }
+        }
+      },
+      "block_order": ["eyebrow", "heading", "text"],
+      "settings": { "background": "soft" }
+    },
+    "form": {
+      "type": "contact-form",
+      "settings": {
+        "background": "default",
+        "eyebrow": "",
+        "heading": "Send us a message",
+        "text": "<p>Question about an order, a product or a return? Fill in the form and we will get back to you within one business day.</p>",
+        "email": "support@yourstore.com",
+        "hours": "Monday to Friday, 9am to 6pm",
+        "response_time": "Usually under 24 hours",
+        "show_order_number": true,
+        "button_label": "Send message",
+        "success_text": "Thanks for reaching out. We will reply within one business day."
+      }
+    },
+    "faq": {
+      "type": "faq",
+      "blocks": {
+        "q1": {
+          "type": "question",
+          "settings": {
+            "question": "Where is my order?",
+            "answer": "<p>Check the tracking link in your shipping confirmation email first. If tracking has not moved in five days, send us your order number and we will chase it.</p>"
+          }
+        },
+        "q2": {
+          "type": "question",
+          "settings": {
+            "question": "Can I change or cancel my order?",
+            "answer": "<p>If it has not shipped yet, yes. Email us with your order number as soon as you can and we will do our best to catch it before dispatch.</p>"
+          }
+        },
+        "q3": {
+          "type": "question",
+          "settings": {
+            "question": "Something arrived damaged. What now?",
+            "answer": "<p>Send us a photo and your order number. We will send a replacement or refund you, whichever you prefer, and you will not need to pay return postage.</p>"
+          }
+        }
+      },
+      "block_order": ["q1", "q2", "q3"],
+      "settings": {
+        "background": "soft",
+        "eyebrow": "",
+        "heading": "Quick answers",
+        "open_first": false,
+        "one_at_a_time": true,
+        "add_schema": false,
+        "footer_text": ""
+      }
+    }
+  },
+  "order": ["hero", "form", "faq"]
+}

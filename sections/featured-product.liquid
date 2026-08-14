@@ -1,0 +1,143 @@
+{%- liquid
+  assign featured = section.settings.product
+  assign current_variant = featured.selected_or_first_available_variant
+-%}
+
+<div class="section{% if section.settings.background != 'default' %} section--{{ section.settings.background }}{% endif %}">
+  <div class="page-width">
+    {%- if featured != blank -%}
+      <div class="product" style="padding-block: 0;">
+        <div class="media media--square{% if settings.anim_image_zoom %} media--zoom{% endif %} reveal reveal--left">
+          {%- if featured.featured_media -%}
+            <img
+              src="{{ featured.featured_media | image_url: width: 1000 }}"
+              srcset="
+                {{ featured.featured_media | image_url: width: 500 }} 500w,
+                {{ featured.featured_media | image_url: width: 1000 }} 1000w
+              "
+              sizes="(min-width: 900px) 50vw, 100vw"
+              alt="{{ featured.featured_media.alt | escape }}"
+              width="{{ featured.featured_media.width }}"
+              height="{{ featured.featured_media.height }}"
+              loading="lazy"
+            >
+          {%- else -%}
+            {{ 'product-1' | placeholder_svg_tag: 'placeholder-svg' }}
+          {%- endif -%}
+        </div>
+
+        <div class="product-info reveal reveal--right">
+          {%- if section.settings.eyebrow != blank -%}
+            <span class="eyebrow">{{ section.settings.eyebrow }}</span>
+          {%- endif -%}
+
+          <h2 style="margin:0;">{{ featured.title }}</h2>
+
+          {% render 'product-rating',
+            product: featured,
+            fallback_rating: section.settings.fallback_rating,
+            fallback_count: section.settings.fallback_count
+          %}
+
+          <div class="product-price-row">
+            {% render 'price', target: featured, show_save: true %}
+          </div>
+
+          {%- if section.settings.text != blank -%}
+            <div class="rte text-lead">{{ section.settings.text }}</div>
+          {%- else -%}
+            <div class="rte">{{ featured.description | strip_html | truncatewords: 45 }}</div>
+          {%- endif -%}
+
+          {%- if section.blocks.size > 0 -%}
+            <ul style="display:grid; gap:10px;">
+              {%- for block in section.blocks -%}
+                <li style="display:flex; gap:10px; align-items:flex-start;" {{ block.shopify_attributes }}>
+                  <span style="color: var(--c-success); flex-shrink:0; display:flex;">
+                    {% render 'icon', name: 'check-circle' %}
+                  </span>
+                  <span>{{ block.settings.text }}</span>
+                </li>
+              {%- endfor -%}
+            </ul>
+          {%- endif -%}
+
+          {%- if featured.variants.size == 1 -%}
+            <form action="{{ routes.cart_add_url }}" method="post" data-product-form>
+              <input type="hidden" name="id" value="{{ current_variant.id }}">
+              <input type="hidden" name="quantity" value="1">
+              <button
+                type="submit"
+                class="button button--large button--full"
+                data-add-button
+                {% unless featured.available %}disabled{% endunless %}
+              >
+                <span class="button__label">
+                  {% if featured.available %}{{ section.settings.button_label }}{% else %}Sold out{% endif %}
+                </span>
+                <span class="button__spinner"><span class="spinner"></span></span>
+              </button>
+            </form>
+          {%- else -%}
+            <a class="button button--large button--full" href="{{ featured.url }}">{{ section.settings.button_label }}</a>
+          {%- endif -%}
+
+          <a class="button button--ghost" href="{{ featured.url }}">See full details</a>
+        </div>
+      </div>
+    {%- else -%}
+      <p class="text-center text-muted">Choose a product for this section in the theme editor.</p>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Featured product",
+  "tag": "section",
+  "max_blocks": 5,
+  "settings": [
+    {
+      "type": "select",
+      "id": "background",
+      "label": "Background",
+      "options": [
+        { "value": "default", "label": "Page background" },
+        { "value": "soft", "label": "Soft tint" },
+        { "value": "surface", "label": "Surface" }
+      ],
+      "default": "surface"
+    },
+    { "type": "product", "id": "product", "label": "Product" },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Our best seller" },
+    {
+      "type": "richtext",
+      "id": "text",
+      "label": "Text",
+      "info": "Leave empty to use the start of the product description."
+    },
+    { "type": "text", "id": "button_label", "label": "Button label", "default": "Add to cart" },
+    { "type": "header", "content": "Rating fallback" },
+    {
+      "type": "range",
+      "id": "fallback_rating",
+      "min": 0,
+      "max": 5,
+      "step": 0.1,
+      "label": "Fallback rating",
+      "default": 0
+    },
+    { "type": "number", "id": "fallback_count", "label": "Fallback review count", "default": 0 }
+  ],
+  "blocks": [
+    {
+      "type": "point",
+      "name": "Selling point",
+      "settings": [
+        { "type": "text", "id": "text", "label": "Text", "default": "Free worldwide shipping" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Featured product" }]
+}
+{% endschema %}

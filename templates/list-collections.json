@@ -1,0 +1,12 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-list-collections",
+      "settings": {
+        "subtitle": "Browse everything we sell, grouped by what it is for.",
+        "show_empty": false
+      }
+    }
+  },
+  "order": ["main"]
+}

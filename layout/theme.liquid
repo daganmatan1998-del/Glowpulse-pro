@@ -1,0 +1,185 @@
+<!doctype html>
+<html
+  lang="{{ request.locale.iso_code }}"
+  class="{% if settings.anim_enabled %}anim-on{% endif %}{% if settings.anim_hover_lift %} hover-lift{% endif %}{% if settings.anim_image_zoom %} image-zoom{% endif %}{% if settings.button_uppercase %} button-uppercase{% endif %}{% if settings.button_shine %} button-shine{% endif %}{% if settings.button_style == 'solid' %} button-solid{% endif %}"
+  data-anim-reveal="{{ settings.anim_reveal }}"
+>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="{{ settings.color_bg }}">
+    <link rel="canonical" href="{{ canonical_url }}">
+    <link rel="preconnect" href="https://cdn.shopify.com" crossorigin>
+
+    {%- if settings.favicon != blank -%}
+      <link rel="icon" type="image/png" href="{{ settings.favicon | image_url: width: 32, height: 32 }}">
+      <link rel="apple-touch-icon" href="{{ settings.favicon | image_url: width: 180, height: 180 }}">
+    {%- endif -%}
+
+    <title>
+      {{ page_title }}
+      {%- if current_tags %} &ndash; tagged "{{ current_tags | join: ', ' }}"{% endif -%}
+      {%- if current_page != 1 %} &ndash; Page {{ current_page }}{% endif -%}
+      {%- unless page_title contains shop.name %} &ndash; {{ shop.name }}{% endunless -%}
+    </title>
+
+    {%- if page_description -%}
+      <meta name="description" content="{{ page_description | escape }}">
+    {%- endif -%}
+
+    {% render 'meta-tags' %}
+
+    {{ content_for_header }}
+
+    {%- liquid
+      assign body_font = settings.font_body
+      assign body_font_bold = body_font | font_modify: 'weight', 'bolder'
+      assign body_font_italic = body_font | font_modify: 'style', 'italic'
+      assign heading_font = settings.font_heading
+      assign heading_font_bold = heading_font | font_modify: 'weight', 'bolder'
+    -%}
+
+    {{ body_font | font_face: font_display: 'swap' }}
+    {{ body_font_bold | font_face: font_display: 'swap' }}
+    {{ body_font_italic | font_face: font_display: 'swap' }}
+    {{ heading_font | font_face: font_display: 'swap' }}
+    {{ heading_font_bold | font_face: font_display: 'swap' }}
+
+    {%- liquid
+      case settings.anim_speed
+        when 'fast'
+          assign reveal_duration = '450ms'
+          assign ui_duration = '140ms'
+        when 'slow'
+          assign reveal_duration = '1000ms'
+          assign ui_duration = '300ms'
+        else
+          assign reveal_duration = '700ms'
+          assign ui_duration = '220ms'
+      endcase
+
+      case settings.shadow_style
+        when 'none'
+          assign shadow_sm = 'none'
+          assign shadow_md = 'none'
+          assign shadow_lg = 'none'
+        when 'lifted'
+          assign shadow_sm = '0 2px 6px rgba(20, 14, 30, .08)'
+          assign shadow_md = '0 14px 34px rgba(20, 14, 30, .14)'
+          assign shadow_lg = '0 30px 70px rgba(20, 14, 30, .20)'
+        else
+          assign shadow_sm = '0 1px 3px rgba(20, 14, 30, .05)'
+          assign shadow_md = '0 8px 24px rgba(20, 14, 30, .08)'
+          assign shadow_lg = '0 20px 50px rgba(20, 14, 30, .12)'
+      endcase
+    -%}
+
+    <style>
+      :root {
+        --font-body: {{ body_font.family }}, {{ body_font.fallback_families }};
+        --font-body-weight: {{ body_font.weight }};
+        --font-heading: {{ heading_font.family }}, {{ heading_font.fallback_families }};
+        --font-heading-weight: {{ settings.font_heading_weight }};
+        --font-heading-case: {{ settings.font_heading_case }};
+        --font-body-scale: {{ settings.font_body_scale | divided_by: 100.0 }};
+        --font-heading-scale: {{ settings.font_heading_scale | divided_by: 100.0 }};
+
+        --c-bg: {{ settings.color_bg }};
+        --c-surface: {{ settings.color_surface }};
+        --c-text: {{ settings.color_text }};
+        --c-muted: {{ settings.color_text_muted }};
+        --c-border: {{ settings.color_border }};
+        --c-accent: {{ settings.color_accent }};
+        --c-accent-2: {{ settings.color_accent_2 }};
+        --c-on-accent: {{ settings.color_on_accent }};
+        --c-soft: {{ settings.color_soft }};
+        --c-sale: {{ settings.color_sale }};
+        --c-success: {{ settings.color_success }};
+        --c-star: {{ settings.color_star }};
+        --c-footer-bg: {{ settings.color_footer_bg }};
+        --c-footer-text: {{ settings.color_footer_text }};
+
+        --c-text-a10: {{ settings.color_text | color_modify: 'alpha', 0.1 }};
+        --c-text-a06: {{ settings.color_text | color_modify: 'alpha', 0.06 }};
+        --c-accent-a12: {{ settings.color_accent | color_modify: 'alpha', 0.12 }};
+        --c-accent-a30: {{ settings.color_accent | color_modify: 'alpha', 0.3 }};
+        --c-footer-text-a12: {{ settings.color_footer_text | color_modify: 'alpha', 0.12 }};
+        --c-footer-text-a60: {{ settings.color_footer_text | color_modify: 'alpha', 0.6 }};
+
+        --gradient-accent: linear-gradient(120deg, var(--c-accent) 0%, var(--c-accent-2) 100%);
+
+        --page-width: {{ settings.page_width }}px;
+        --section-space: {{ settings.section_spacing }}px;
+        --radius-card: {{ settings.radius_card }}px;
+        --radius-button: {{ settings.radius_button }}px;
+        --radius-sm: {{ settings.radius_card | divided_by: 2 }}px;
+
+        --shadow-sm: {{ shadow_sm }};
+        --shadow-md: {{ shadow_md }};
+        --shadow-lg: {{ shadow_lg }};
+
+        --duration-ui: {{ ui_duration }};
+        --duration-reveal: {{ reveal_duration }};
+        --ease-out: cubic-bezier(.22, 1, .36, 1);
+        --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+
+        --header-height: 68px;
+      }
+    </style>
+
+    {{ 'base.css' | asset_url | stylesheet_tag }}
+    {{ 'animations.css' | asset_url | stylesheet_tag }}
+
+    <script>
+      window.theme = {
+        cartType: {{ settings.cart_type | json }},
+        freeShippingBar: {{ settings.cart_free_shipping_bar | json }},
+        freeShippingThreshold: {{ settings.cart_free_shipping_threshold | default: 0 | times: 1 | json }},
+        moneyFormat: {{ shop.money_format | json }},
+        currency: {{ cart.currency.iso_code | json }},
+        routes: {
+          cart: {{ routes.cart_url | json }},
+          cartAdd: "{{ routes.cart_add_url }}.js",
+          cartChange: "{{ routes.cart_change_url }}.js",
+          cartUpdate: "{{ routes.cart_update_url }}.js",
+          cartJson: "{{ routes.cart_url }}.js",
+          predictiveSearch: {{ routes.predictive_search_url | json }},
+          search: {{ routes.search_url | json }}
+        },
+        strings: {
+          addToCart: "Add to cart",
+          soldOut: "Sold out",
+          unavailable: "Unavailable",
+          adding: "Adding…",
+          added: "Added",
+          error: "Something went wrong. Please try again."
+        }
+      };
+      document.documentElement.classList.add('js');
+    </script>
+    <script src="{{ 'theme.js' | asset_url }}" defer></script>
+  </head>
+
+  <body class="template-{{ template.name | handle }} {% if settings.anim_page_fade %}page-fade{% endif %}">
+    <a class="skip-link button" href="#MainContent">Skip to content</a>
+
+    {% sections 'header-group' %}
+
+    <main id="MainContent" class="main-content" role="main" tabindex="-1">
+      {{ content_for_layout }}
+    </main>
+
+    {% sections 'footer-group' %}
+
+    {%- if settings.cart_type == 'drawer' -%}
+      {% section 'cart-drawer' %}
+    {%- endif -%}
+
+    <div class="toast-stack" id="ToastStack" aria-live="polite" aria-atomic="true"></div>
+
+    <ul hidden>
+      <li id="a11y-new-window-message">Opens in a new window.</li>
+    </ul>
+  </body>
+</html>

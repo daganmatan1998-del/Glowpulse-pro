@@ -1,0 +1,162 @@
+{%- comment -%}
+  Product card used by every grid in the theme.
+
+  Parameters:
+    product         (product, required)
+    image_ratio     (string) overrides the global setting
+    show_quick_add  (boolean) overrides the global setting
+    fallback_rating (number) passed through to product-rating
+    fallback_count  (number)
+    lazy            (boolean, default true)
+{%- endcomment -%}
+
+{%- liquid
+  assign ratio = image_ratio | default: settings.card_image_ratio
+  assign quick_add = show_quick_add
+  if quick_add == blank
+    assign quick_add = settings.card_show_quick_add
+  endif
+
+  assign loading = 'lazy'
+  if lazy == false
+    assign loading = 'eager'
+  endif
+
+  assign on_sale = false
+  if product.compare_at_price > product.price
+    assign on_sale = true
+  endif
+
+  assign second_image = product.media[1].preview_image
+-%}
+
+<div class="card" data-product-card>
+  <a
+    class="card__media media media--{{ ratio }}{% if settings.anim_image_zoom %} media--zoom{% endif %}"
+    href="{{ product.url }}"
+    tabindex="-1"
+    aria-hidden="true"
+  >
+    {%- if product.featured_media -%}
+      <img
+        class="card__image--primary"
+        src="{{ product.featured_media | image_url: width: 700 }}"
+        srcset="
+          {{ product.featured_media | image_url: width: 350 }} 350w,
+          {{ product.featured_media | image_url: width: 550 }} 550w,
+          {{ product.featured_media | image_url: width: 750 }} 750w
+        "
+        sizes="(min-width: 990px) 24vw, (min-width: 750px) 32vw, 46vw"
+        alt="{{ product.featured_media.alt | escape }}"
+        width="{{ product.featured_media.width }}"
+        height="{{ product.featured_media.height }}"
+        loading="{{ loading }}"
+      >
+
+      {%- if settings.card_show_second_image and second_image -%}
+        <img
+          class="card__image--secondary"
+          src="{{ second_image | image_url: width: 700 }}"
+          alt=""
+          width="{{ second_image.width }}"
+          height="{{ second_image.height }}"
+          loading="lazy"
+        >
+      {%- endif -%}
+    {%- else -%}
+      {{ 'product-1' | placeholder_svg_tag: 'placeholder-svg' }}
+    {%- endif -%}
+  </a>
+
+  <div class="card__badges">
+    {%- unless product.available -%}
+      <span class="badge badge--soldout">Sold out</span>
+    {%- else -%}
+      {%- if on_sale and settings.card_badge != 'none' -%}
+        {%- liquid
+          assign saved = product.compare_at_price | minus: product.price
+          assign percent = saved | times: 100.0 | divided_by: product.compare_at_price | round
+        -%}
+        <span class="badge badge--sale">
+          {%- case settings.card_badge -%}
+            {%- when 'percent' -%}-{{ percent }}%
+            {%- when 'amount' -%}Save {{ saved | money }}
+            {%- else -%}Sale
+          {%- endcase -%}
+        </span>
+      {%- endif -%}
+    {%- endunless -%}
+  </div>
+
+  {%- if quick_add and product.available -%}
+    <div class="card__quick-add">
+      {%- if product.variants.size == 1 -%}
+        <form action="{{ routes.cart_add_url }}" method="post" data-product-form>
+          <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}">
+          <input type="hidden" name="quantity" value="1">
+          <button
+            type="submit"
+            class="button button--small button--full"
+            data-add-button
+            aria-label="Add {{ product.title | escape }} to cart"
+          >
+            <span class="button__label">Add to cart</span>
+            <span class="button__spinner"><span class="spinner"></span></span>
+          </button>
+        </form>
+      {%- else -%}
+        <a class="button button--small button--full button--secondary" href="{{ product.url }}">
+          Choose options
+        </a>
+      {%- endif -%}
+    </div>
+  {%- endif -%}
+
+  <div class="card__info">
+    {%- if settings.card_show_vendor and product.vendor != blank -%}
+      <span class="card__vendor">{{ product.vendor }}</span>
+    {%- endif -%}
+
+    <h3 class="card__title">
+      <a href="{{ product.url }}">{{ product.title | escape }}</a>
+    </h3>
+
+    {%- if settings.card_show_rating -%}
+      {% render 'product-rating',
+        product: product,
+        size: 'sm',
+        fallback_rating: fallback_rating,
+        fallback_count: fallback_count
+      %}
+    {%- endif -%}
+
+    {% render 'price', target: product %}
+
+    {%- if settings.card_show_swatches -%}
+      {%- for option in product.options_with_values -%}
+        {%- liquid
+          assign option_name = option.name | downcase
+          assign is_color = false
+          if option_name contains 'color' or option_name contains 'colour'
+            assign is_color = true
+          endif
+        -%}
+        {%- if is_color -%}
+          <div class="card__swatches">
+            {%- for value in option.values limit: 5 -%}
+              <span
+                class="swatch-dot"
+                style="{% render 'swatch-style', product: product, value: value %}"
+                title="{{ value | escape }}"
+              ></span>
+            {%- endfor -%}
+            {%- if option.values.size > 5 -%}
+              <span class="card__swatches-more">+{{ option.values.size | minus: 5 }}</span>
+            {%- endif -%}
+          </div>
+          {%- break -%}
+        {%- endif -%}
+      {%- endfor -%}
+    {%- endif -%}
+  </div>
+</div>

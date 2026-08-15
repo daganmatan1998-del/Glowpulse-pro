@@ -639,6 +639,12 @@ html[data-theme="dark"][data-pal="neon"]{ --aur-alpha:.54 }
   background:linear-gradient(135deg,var(--accent),var(--accent-2));
 }
 .langrow.plain i{background:var(--ink-3); opacity:.35}
+.langwrap.busy #langBtn{position:relative}
+.langwrap.busy #langBtn::after{
+  content:''; position:absolute; inset:-3px; border-radius:var(--r-pill);
+  border:2px solid transparent; border-top-color:var(--accent);
+  animation:spin360 .8s linear infinite;
+}
 .langnone{padding:22px 14px; text-align:center; color:var(--ink-3); font-size:13.5px}
 @media (max-width:640px){
   .langpop{
@@ -4087,6 +4093,10 @@ function applyLang(code, save){
   paintProgress();
   paintStageMeta();
 
+  // Titles are fetched or translated in the background; the page is usable
+  // in English throughout and repaints when they land.
+  TitleBook.ensure(LANG).then(changed => { if (changed) repaintTitles(); });
+
   // The two homepage strings that live only in script, not in markup.
   if (!spinning){
     $('startBtn').textContent = tr('start') + '  \u00a0' + (info.rtl ? '←' : '→');
@@ -4206,6 +4216,124 @@ const MT = {
   }
 };
 
+
+/* =========================================================================
+   TITLE BOOK
+   The 295 topic titles and 28 category names, translated once per language
+   and kept. They are short — about 1,200 words in total — so unlike the
+   article text they can be done in one pass and stored, which makes every
+   later visit instant.
+
+   Titles are translated for DISPLAY ONLY. Progress, saved recordings and
+   every internal lookup stay keyed on the English title, because those must
+   survive a change of language.
+   ========================================================================= */
+let TITLES = null;                 // { t:{en->translated}, c:{en->translated} }
+const titleOf = x => (TITLES && TITLES.t[x.t]) || x.t;
+const catOf   = c => (TITLES && TITLES.c[c])   || c;
+
+const TitleBook = {
+  db:null, broken:false,
+  failed:new Set(),                // languages that would not translate
+  token:0,                         // guards against a stale result landing late
+
+  open(){
+    if (this.db) return Promise.resolve(this.db);
+    if (this.broken || !window.indexedDB) return Promise.resolve(null);
+    return new Promise(resolve => {
+      let req;
+      try{ req = indexedDB.open('lsn.i18n', 1); }
+      catch(e){ this.broken = true; return resolve(null); }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('books')) db.createObjectStore('books', { keyPath:'lang' });
+      };
+      req.onsuccess = () => { this.db = req.result; resolve(this.db); };
+      req.onerror = req.onblocked = () => { this.broken = true; resolve(null); };
+    });
+  },
+
+  async read(lang){
+    const db = await this.open();
+    if (!db) return null;
+    return new Promise(resolve => {
+      const r = db.transaction('books', 'readonly').objectStore('books').get(lang);
+      r.onsuccess = () => resolve(r.result ? r.result.map : null);
+      r.onerror   = () => resolve(null);
+    });
+  },
+
+  async write(lang, map){
+    const db = await this.open();
+    if (!db) return;
+    return new Promise(resolve => {
+      const r = db.transaction('books', 'readwrite').objectStore('books')
+                  .put({ lang, map, at: Date.now(), n: Object.keys(map.t).length });
+      r.onsuccess = r.onerror = () => resolve();
+    });
+  },
+
+  /* Makes TITLES correct for `lang`, translating and storing if needed.
+     Returns true when the titles on screen changed. */
+  async ensure(lang){
+    const mine = ++this.token;
+
+    if (lang === 'en'){ TITLES = null; return true; }
+
+    const cached = await this.read(lang);
+    if (mine !== this.token) return false;          // language changed again
+    if (cached){ TITLES = cached; return true; }
+
+    if (!MT.api || this.failed.has(lang)){ TITLES = null; return true; }
+
+    // A one-off pass of roughly 320 short strings. The spinner on the globe
+    // button is the only sign of it; the site stays usable in English.
+    document.querySelector('.langwrap').classList.add('busy');
+
+    const titles = TOPICS.map(x => x.t);
+    const cats   = CATS.slice();
+    const done   = await MT.many(titles.concat(cats), lang, 10);
+
+    document.querySelector('.langwrap').classList.remove('busy');
+    if (mine !== this.token) return false;
+
+    if (!done || done.some(x => x === null)){
+      this.failed.add(lang);
+      TITLES = null;
+      return true;
+    }
+
+    const map = { t:{}, c:{} };
+    titles.forEach((s, i) => map.t[s] = done[i]);
+    cats.forEach((s, i) => map.c[s] = done[titles.length + i]);
+
+    TITLES = map;
+    this.write(lang, map);
+    return true;
+  }
+};
+
+/* Redraw everything that shows a title. Held back during a spin, because
+   swapping the words under a moving reel is worse than waiting for it. */
+let titlesPending = false;
+function repaintTitles(){
+  if (spinning){ titlesPending = true; return; }
+  titlesPending = false;
+
+  renderCats();
+  if (state.view === 'explore') renderGrid();
+  if (state.view === 'gallery') renderGallery();
+  if (state.view === 'topic' && state.open) renderArticle(state.open);
+  if (state.started){
+    const el = $('topicEl');
+    if (el) el.innerHTML = topicMarkup(current());
+  } else if ($('topicEl')) {
+    $('topicEl').innerHTML = idleMarkup();
+  }
+  if ($('veil').classList.contains('on')) runSearch($('q').value);
+  if ($('studio').classList.contains('on')) Studio.fillTopics();
+}
+
 /* A translated copy of a topic, or null if it could not be produced. Cached
    per language, because re-opening an article should be instant. */
 const topicCache = new Map();
@@ -4241,6 +4369,9 @@ async function translateTopic(topic, target){
 /* The one string on the homepage that matters most, translated on its own
    because it is cheap and it is the largest text on the screen. */
 async function translateStageTitle(){
+  // The title book covers every title, including this one, so this is only a
+  // stopgap for the moment before it has loaded.
+  if (TITLES) return;
   if (!MT.usable() || !state.started) return;
   const topic = current();
   const out = await MT.one(topic.t, LANG);
@@ -4294,9 +4425,9 @@ for (const b of $('navlinks').children){
 /* ---- the topic stage ---------------------------------------------------- */
 function topicMarkup(x){
   const done = Progress.has(x);
-  return x.t +
+  return esc(titleOf(x)) +
     `<div class="meta">
-       <span class="chip cat">${x.c}</span>
+       <span class="chip cat">${esc(catOf(x.c))}</span>
        <span class="chip">${tr('min_read', { n: x.m })}</span>
        ${done ? `<span class="chip done">✓ ${tr('learned')}</span>` : ''}
      </div>`;
@@ -4391,7 +4522,7 @@ function spin(onDone){
   const reel = document.createElement('div');
   reel.className = 'reel';
   reel.innerHTML = rows.map(i =>
-    `<div class="row" style="height:${rowH}px">${esc(TOPICS[i].t)}</div>`).join('');
+    `<div class="row" style="height:${rowH}px">${esc(titleOf(TOPICS[i]))}</div>`).join('');
 
   const mask = document.createElement('div');
   mask.className = 'reelmask';
@@ -4433,6 +4564,7 @@ function spin(onDone){
    it and a few sparks scatter. Brief and quiet — the point is punctuation, not
    fireworks. */
 function landOn(){
+  if (titlesPending) setTimeout(repaintTitles, 60);
   show(1);
   const el = $('topicEl');
   el.classList.add('landed');
@@ -4522,7 +4654,7 @@ function respin(){
   spin(() => { $('yourTopic').classList.add('on'); landOn(); });
 }
 
-function idleMarkup(){ return TOPICS[state.order[0]].t; }
+function idleMarkup(){ return esc(titleOf(TOPICS[state.order[0]])); }
 
 function surprise(){
   // From anywhere else, go to the homepage and spin — the roulette is the
@@ -4569,11 +4701,11 @@ function renderArticle(orig, shown){
 
   $('article').innerHTML = `
     <div class="tags">
-      <span class="chip cat">${esc(t.c)}</span>
+      <span class="chip cat">${esc(shown ? t.c : catOf(orig.c))}</span>
       <span class="chip">${tr('est_time', { n: t.m })}</span>
       ${done ? `<span class="chip done">✓ ${tr('learned')}</span>` : ''}
     </div>
-    <h1>${esc(t.t)}</h1>
+    <h1>${esc(shown ? t.t : titleOf(orig))}</h1>
     <p class="lede">${esc(t.hook)}</p>
 
     <div class="sec"><h2>${tr('sec_why')}</h2><div class="callout">${esc(t.why)}</div></div>
@@ -4608,7 +4740,7 @@ function renderArticle(orig, shown){
     <div class="sec" style="display:none"><h2>${tr('your_expl')}</h2>
       <div class="mine" id="mine"></div></div>
 
-    ${related.length ? `<div class="sec"><h2>${esc(tr('more_in', { c: t.c }))}</h2>
+    ${related.length ? `<div class="sec"><h2>${esc(tr('more_in', { c: catOf(orig.c) }))}</h2>
       <div class="grid" style="padding-bottom:0">${related.map(r => cardMarkup(r)).join('')}</div></div>` : ''}
   `;
 
@@ -4704,9 +4836,9 @@ async function runTranslation(topic, box){
 function cardMarkup(t){
   const done = Progress.has(t);
   return `<button class="card" data-topic="${esc(t.t)}">
-    <h3>${esc(t.t)}</h3>
+    <h3>${esc(titleOf(t))}</h3>
     <p class="hook">${esc(t.hook)}</p>
-    <div class="foot"><span class="chip cat">${esc(t.c)}</span>
+    <div class="foot"><span class="chip cat">${esc(catOf(t.c))}</span>
       <span>${tr('min', { n: t.m })}</span>${done ? '<span class="tick">✓</span>' : ''}</div>
   </button>`;
 }
@@ -4720,8 +4852,10 @@ function wireCards(root){
 }
 function renderCats(){
   const counts = {}; TOPICS.forEach(t => counts[t.c] = (counts[t.c] || 0) + 1);
-  $('cats').innerHTML = ['All', ...CATS].map(c =>
-    `<button class="cat ${c === state.filter ? 'on' : ''}" data-cat="${esc(c)}">${esc(c === 'All' ? tr('all') : c)}
+  const shownCats = CATS.slice().sort((a, b) =>
+    catOf(a).localeCompare(catOf(b), LANG));
+  $('cats').innerHTML = ['All', ...shownCats].map(c =>
+    `<button class="cat ${c === state.filter ? 'on' : ''}" data-cat="${esc(c)}">${esc(c === 'All' ? tr('all') : catOf(c))}
       <span style="opacity:.5">${c === 'All' ? TOPICS.length : counts[c]}</span></button>`).join('');
   $('cats').querySelectorAll('.cat').forEach(b => {
     b.onclick = () => { state.filter = b.dataset.cat; renderCats(); renderGrid(); };
@@ -4760,11 +4894,16 @@ function runSearch(term){
   // Rank title matches above category and hook matches, so typing a subject
   // still finds the topic named after it first.
   hits = (q ? TOPICS.map(t => {
-      const title = t.t.toLowerCase(), cat = t.c.toLowerCase(), hook = t.hook.toLowerCase();
+      const title = t.t.toLowerCase(), hook = t.hook.toLowerCase();
+      const shown = titleOf(t).toLowerCase();
+      const cat = (t.c + ' ' + catOf(t.c)).toLowerCase();
       let score = 0;
-      if (title.includes(q)) score = title.startsWith(q) ? 100 : 60;
-      else if (cat.includes(q)) score = 30;
-      else if (hook.includes(q)) score = 15;
+      // The translated title is checked first, then the English one, so a
+      // reader can type in either and the ranking still makes sense.
+      if (shown.includes(q))      score = shown.startsWith(q) ? 100 : 60;
+      else if (title.includes(q)) score = title.startsWith(q) ? 95 : 55;
+      else if (cat.includes(q))   score = 30;
+      else if (hook.includes(q))  score = 15;
       return { t, score };
     }).filter(r => r.score > 0).sort((a, b) => b.score - a.score).map(r => r.t)
     : TOPICS.slice(0, 8));
@@ -4773,7 +4912,7 @@ function runSearch(term){
   $('results').innerHTML = hits.length
     ? hits.slice(0, 40).map((t, i) =>
         `<button class="result ${i === 0 ? 'sel' : ''}" data-i="${i}">
-           <b>${esc(t.t)}</b><small>${esc(t.c)} · ${t.m} min</small></button>`).join('')
+           <b>${esc(titleOf(t))}</b><small>${esc(catOf(t.c))} · ${tr('min', { n: t.m })}</small></button>`).join('')
     : `<div class="empty" style="padding:34px">${tr('search_none')}</div>`;
 
   $('results').querySelectorAll('.result').forEach(r => {
@@ -4937,7 +5076,7 @@ const Studio = {
     this.topic = topic || null;
     $('studio').classList.add('on');
     $('stTitle').textContent = topic ? tr('st_title2') : tr('st_title');
-    $('stSub').textContent = topic ? tr('st_sub2', { t: topic.t }) : tr('st_sub');
+    $('stSub').textContent = topic ? tr('st_sub2', { t: titleOf(topic) }) : tr('st_sub');
     this.reset();
     this.fillTopics();
     document.body.style.overflow = 'hidden';
@@ -5100,9 +5239,10 @@ const Studio = {
     const groups = {};
     for (const t of TOPICS) (groups[t.c] = groups[t.c] || []).push(t);
 
-    sel.innerHTML = Object.keys(groups).sort().map(c =>
-      `<optgroup label="${esc(c)}">${groups[c].map(t =>
-        `<option value="${esc(t.t)}">${esc(t.t)}</option>`).join('')}</optgroup>`).join('');
+    sel.innerHTML = Object.keys(groups)
+      .sort((a, b) => catOf(a).localeCompare(catOf(b), LANG))
+      .map(c => `<optgroup label="${esc(catOf(c))}">${groups[c].map(t =>
+        `<option value="${esc(t.t)}">${esc(titleOf(t))}</option>`).join('')}</optgroup>`).join('');
 
     if (this.topic) sel.value = this.topic.t;
   },
@@ -5186,9 +5326,9 @@ async function renderGallery(){
     return `<div class="clip">
       <video src="${url}" controls preload="metadata" playsinline></video>
       <div class="body">
-        <h3>${esc(c.topic || 'Untitled')}</h3>
+        <h3>${esc((TITLES && TITLES.t[c.topic]) || c.topic || 'Untitled')}</h3>
         <div class="sub">
-          ${c.cat ? `<span class="chip cat">${esc(c.cat)}</span>` : ''}
+          ${c.cat ? `<span class="chip cat">${esc(catOf(c.cat))}</span>` : ''}
           <span>${when(c.at)}</span>${c.dur ? `<span>· ${clock(c.dur)}</span>` : ''}
           <span>· ${weight(c.size || 0)}</span>
         </div>

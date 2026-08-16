@@ -1,0 +1,4461 @@
+<title>Glowpulse — Playable Combat Demo</title>
+<style>
+  :root{
+    --ink:#0B0C0E; --panel:#14161A; --panel-2:#1C1F25;
+    --haze:#A69382; --sun:#FFD2A1;
+    --cyan:#46C2C8; --thug:#D8563F; --bruiser:#E0913A; --runner:#7FD858;
+    --bone:#EDE6DA; --dim:#8A8479; --line:rgba(237,230,218,.14);
+    --hp:#D8563F; --sp:#46C2C8;
+    --ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--ink); color:var(--bone);
+    font-family:var(--ui); overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  #stage{position:fixed; inset:0; background:var(--ink)}
+  canvas{display:block; width:100%; height:100%; cursor:crosshair}
+
+  .hud{position:fixed; inset:0; pointer-events:none; user-select:none}
+  .slab{
+    background:linear-gradient(180deg, rgba(20,22,26,.82), rgba(11,12,14,.9));
+    border:1px solid var(--line); backdrop-filter:blur(6px);
+    transform:skewX(-9deg);
+  }
+  .slab > *{transform:skewX(9deg)}
+
+  .label{
+    font-size:10px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--dim); font-weight:700;
+  }
+  .num{font-variant-numeric:tabular-nums; font-family:var(--mono)}
+
+  /* vitals -------------------------------------------------- */
+  #vitals{position:absolute; left:26px; bottom:26px; width:340px; padding:14px 18px 15px}
+  #vitals .who{display:flex; align-items:baseline; justify-content:space-between; gap:12px}
+  #vitals .name{font-size:15px; font-weight:900; letter-spacing:.06em; text-transform:uppercase}
+  #vitals .lvl{font-size:11px; color:var(--cyan); letter-spacing:.16em; font-weight:800}
+  .bar{height:11px; margin-top:9px; background:rgba(0,0,0,.55); border:1px solid var(--line); position:relative; overflow:hidden}
+  .bar > i{display:block; height:100%; width:100%; transform-origin:left center; transition:transform .09s linear}
+  .bar.stam{height:6px}
+  .bar .ghost{position:absolute; inset:0; transform-origin:left center; background:rgba(216,86,63,.35); transition:transform .5s ease .18s}
+  #hpFill{background:linear-gradient(90deg,#F2765C,#D8563F)}
+  #spFill{background:linear-gradient(90deg,#6FE0E5,#46C2C8)}
+  #vitals.exhausted #spFill{background:linear-gradient(90deg,#8A8479,#5C5850)}
+
+  /* enemy --------------------------------------------------- */
+  #foe{position:absolute; left:50%; top:26px; width:380px; margin-left:-190px; padding:10px 16px 12px; opacity:0; transition:opacity .18s}
+  #foe.on{opacity:1}
+  #foe .row{display:flex; align-items:baseline; justify-content:space-between}
+  #foe .fname{font-size:13px; font-weight:900; letter-spacing:.1em; text-transform:uppercase}
+  #foe .poise{font-size:10px; letter-spacing:.18em; color:var(--dim); font-weight:800}
+  #foeFill{background:linear-gradient(90deg,#F2765C,#B8402C)}
+  #foePoise{height:4px; margin-top:5px}
+  #foePoiseFill{background:linear-gradient(90deg,#FFE1B0,#E0913A)}
+
+  /* combo --------------------------------------------------- */
+  #combo{position:absolute; right:34px; top:70px; text-align:right; opacity:0; transform:translateY(6px); transition:opacity .12s, transform .12s}
+  #combo.on{opacity:1; transform:none}
+  #comboN{font-size:64px; font-weight:900; line-height:.82; letter-spacing:-.04em; font-variant-numeric:tabular-nums;
+          color:var(--sun); text-shadow:0 0 26px rgba(255,210,161,.4)}
+  #comboT{font-size:10px; letter-spacing:.3em; color:var(--dim); font-weight:800; text-transform:uppercase}
+
+  /* objective ----------------------------------------------- */
+  #obj{position:absolute; left:26px; top:26px; padding:11px 18px 12px; min-width:250px}
+  #obj .t{font-size:13px; font-weight:900; letter-spacing:.05em; margin-top:3px}
+  #obj .c{font-size:12px; color:var(--cyan); font-weight:800; letter-spacing:.06em; margin-top:4px}
+
+  /* prompts ------------------------------------------------- */
+  #keys{position:absolute; right:26px; bottom:26px; padding:11px 16px; display:grid; grid-template-columns:auto auto; gap:3px 14px}
+  #keys b{font-family:var(--mono); font-size:11px; color:var(--bone); font-weight:600}
+  #keys span{font-size:11px; color:var(--dim); text-align:right}
+
+  #banner{position:absolute; left:50%; top:38%; transform:translate(-50%,-50%) skewX(-9deg); padding:14px 34px;
+          opacity:0; transition:opacity .25s}
+  #banner.on{opacity:1}
+  #banner div{transform:skewX(9deg); font-size:26px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; color:var(--sun)}
+
+  /* overlays ------------------------------------------------ */
+  .veil{position:fixed; inset:0; display:grid; place-items:center; padding:28px;
+        background:radial-gradient(120% 90% at 50% 20%, rgba(28,26,24,.86), rgba(6,7,8,.96)); z-index:20}
+  .veil.hide{display:none}
+  .card{width:min(760px,100%); border:1px solid var(--line); background:rgba(14,16,19,.72); padding:36px 38px 32px}
+  .brand{display:flex; align-items:flex-end; gap:14px}
+  .brand h1{
+    margin:0; font-size:clamp(46px,9vw,86px); font-weight:900; letter-spacing:-.045em; line-height:.86;
+    transform:skewX(-9deg); background:linear-gradient(96deg,var(--sun),var(--cyan) 78%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .brand em{font-style:normal; font-size:11px; letter-spacing:.34em; color:var(--dim); font-weight:800; padding-bottom:10px}
+  .lede{margin:16px 0 0; max-width:60ch; color:#C9C2B6; font-size:14.5px; line-height:1.62}
+  .lede b{color:var(--bone); font-weight:700}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(196px,1fr)); gap:8px 26px; margin-top:24px;
+        border-top:1px solid var(--line); padding-top:20px}
+  .grid dl{display:contents}
+  .grid dt{font-family:var(--mono); font-size:11.5px; color:var(--bone)}
+  .grid dd{margin:0 0 0 auto; font-size:11.5px; color:var(--dim)}
+  .kv{display:flex; justify-content:space-between; gap:16px; padding:2px 0}
+  .go{margin-top:26px; display:flex; align-items:center; gap:16px; flex-wrap:wrap}
+  button{
+    font:inherit; font-weight:900; letter-spacing:.14em; text-transform:uppercase; font-size:13px;
+    color:var(--ink); background:var(--sun); border:0; padding:13px 30px; cursor:pointer;
+    transform:skewX(-9deg); transition:background .15s, transform .15s;
+  }
+  button span{display:block; transform:skewX(9deg)}
+  button:hover{background:#fff0d8; transform:skewX(-9deg) translateY(-1px)}
+  button:focus-visible{outline:2px solid var(--cyan); outline-offset:3px}
+  .hint{font-size:11.5px; color:var(--dim)}
+  .tip{margin-top:18px; font-size:12px; color:var(--dim); line-height:1.6; border-left:2px solid var(--cyan); padding-left:12px}
+
+  /* ---- touch controls ---------------------------------------------- */
+  html,body{ touch-action:none; overscroll-behavior:none; -webkit-user-select:none; user-select:none;
+             -webkit-tap-highlight-color:transparent; }
+  #touch{ position:fixed; inset:0; display:none; pointer-events:none; z-index:10 }
+  body.touch #touch{ display:block }
+
+  #stick{ position:absolute; width:118px; height:118px; margin:-59px 0 0 -59px; border-radius:50%;
+          border:2px solid rgba(237,230,218,.3); background:rgba(11,12,14,.3);
+          opacity:0; transition:opacity .12s }
+  #stick.on{ opacity:1 }
+  #stick i{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px;
+            border-radius:50%; background:rgba(70,194,200,.5); border:1px solid rgba(237,230,218,.5) }
+  #stick.sprint{ border-color:var(--sun) }
+  #stick.sprint i{ background:rgba(255,210,161,.6) }
+
+  .pad{ position:absolute; right:calc(14px + env(safe-area-inset-right,0px)); bottom:calc(14px + env(safe-area-inset-bottom,0px));
+        display:grid; grid-template-columns:repeat(3,auto); gap:9px; align-items:end; justify-items:center;
+        pointer-events:auto }
+  .btn{ transform:none; border-radius:50%; display:grid; place-items:center; font-weight:900; letter-spacing:.02em;
+        color:var(--bone); background:rgba(20,22,26,.55); border:1.5px solid rgba(237,230,218,.28);
+        backdrop-filter:blur(4px); font-size:11px; text-transform:uppercase; line-height:1;
+        width:54px; height:54px; touch-action:none; transition:transform .07s, background .07s }
+  .btn.big{ width:78px; height:78px; font-size:13px; background:rgba(255,210,161,.16); border-color:rgba(255,210,161,.7) }
+  .btn.mid{ width:64px; height:64px; font-size:12px }
+  .btn.held,.btn:active{ transform:scale(.92); background:rgba(70,194,200,.35); border-color:var(--cyan) }
+  .btn.light{ border-color:rgba(255,210,161,.5) }
+  .btn.heavy{ border-color:rgba(216,86,63,.55) }
+  .btn.block{ border-color:rgba(70,194,200,.5) }
+
+  #pauseBtn{ position:absolute; right:calc(14px + env(safe-area-inset-right,0px)); top:calc(14px + env(safe-area-inset-top,0px));
+             width:42px; height:42px; font-size:14px; pointer-events:auto }
+
+  #rotate{ position:fixed; inset:0; z-index:40; display:none; place-items:center; text-align:center;
+           background:rgba(8,9,11,.96); padding:30px }
+  #rotate div{ max-width:26ch }
+  #rotate b{ display:block; font-size:20px; font-weight:900; letter-spacing:.02em; margin-bottom:8px }
+  #rotate span{ font-size:13px; color:var(--dim); line-height:1.6 }
+  body.portrait.touch #rotate{ display:grid }
+
+  /* ---- compact layout for phones ------------------------------------ */
+  body.touch #keys{ display:none }
+  @media (max-width: 960px), (pointer: coarse){
+    #obj{ left:12px; top:12px; padding:8px 14px 9px; min-width:0 }
+    #obj .t{ font-size:11.5px } #obj .c{ font-size:10.5px }
+    #vitals{ left:12px; top:74px; bottom:auto; width:210px; padding:9px 13px 10px }
+    #vitals .name{ font-size:12px } #vitals .lvl{ font-size:9.5px }
+    #vitals .bar{ height:9px } #vitals .bar.stam{ height:5px }
+    #foe{ width:min(300px,60vw); margin-left:calc(min(300px,60vw) / -2); top:12px; padding:7px 13px 9px }
+    #foe .fname{ font-size:11px } #foe .poise{ font-size:9px }
+    #combo{ right:16px; top:120px }
+    #comboN{ font-size:40px } #comboT{ font-size:9px; letter-spacing:.22em }
+    #banner{ top:32% } #banner div{ font-size:17px }
+    .card{ padding:22px 20px 20px } .brand h1{ font-size:clamp(34px,11vw,56px) }
+    .lede{ font-size:13px } .grid{ gap:5px 18px; margin-top:16px; padding-top:14px }
+    .grid dt,.grid dd{ font-size:10.5px }
+    .tip{ font-size:11px; margin-top:12px }
+    .veil{ padding:14px } button{ padding:12px 24px }
+  }
+  /* The whole page blocks touch scrolling so the game never pans, but the
+     start card still has to be readable and its button always reachable. */
+  .veil{ touch-action:pan-y }
+  .card{ display:flex; flex-direction:column; touch-action:pan-y; -webkit-overflow-scrolling:touch }
+  @media (max-height: 520px){
+    #vitals{ top:64px; width:186px }
+    .card{ max-height:94vh; overflow-y:auto; padding:16px 18px 0 }
+    .brand h1{ font-size:clamp(30px,8vw,44px) }
+    .lede{ font-size:12px; line-height:1.5; max-width:76ch }
+    .grid{ grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:3px 16px; margin-top:12px; padding-top:11px }
+    .grid dt,.grid dd{ font-size:10px }
+    .tip{ font-size:10.5px; margin-top:10px; line-height:1.5 }
+    /* Pinned so "Start fighting" is never scrolled out of reach. */
+    .go{ position:sticky; bottom:0; margin-top:12px; padding:12px 0 14px;
+         background:linear-gradient(180deg, rgba(14,16,19,0), rgba(14,16,19,.96) 28%) }
+    .go button{ padding:11px 24px; font-size:12px }
+    .hint{ font-size:10.5px }
+  }
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+/* ---- campaign: title card, boss bar, end and select screens ---------- */
+#titleCard{ position:fixed; left:0; right:0; top:38%; height:26%; display:flex;
+  align-items:center; justify-content:center; flex-direction:column;
+  background:rgba(6,7,8,.72); opacity:0; pointer-events:none; z-index:30;
+  transition:opacity .55s ease }
+#titleCard.on{ opacity:1; animation:cardBeat 2.9s ease forwards }
+@keyframes cardBeat{ 0%{opacity:0} 19%{opacity:1} 62%{opacity:1} 100%{opacity:0} }
+#cardNum{ font:700 22px/1 ui-monospace,monospace; letter-spacing:.28em; color:var(--sun) }
+#cardName{ font:700 46px/1.1 system-ui,sans-serif; letter-spacing:.04em; margin:10px 0 8px }
+#cardRule{ width:300px; height:2px; background:rgba(237,230,218,.28); margin-bottom:10px }
+#cardTag{ font:400 15px/1.4 system-ui,sans-serif; color:rgba(237,230,218,.55) }
+
+#bossBar{ position:fixed; left:50%; transform:translateX(-50%); bottom:118px;
+  width:min(680px,86vw); display:none; z-index:12 }
+#bossBar.on{ display:block }
+#bossName{ font:700 13px/1 ui-monospace,monospace; letter-spacing:.24em;
+  color:var(--sun); text-align:center; margin-bottom:6px }
+#bossTrack{ height:12px; background:rgba(0,0,0,.6); border:1px solid var(--line) }
+#bossFill{ display:block; height:100%; width:100%; transform-origin:left center;
+  background:linear-gradient(90deg,#F2765C,#B8402C); transition:transform .18s linear }
+#bossPhase{ position:fixed; left:50%; top:24%; transform:translateX(-50%);
+  font:700 34px/1 system-ui,sans-serif; letter-spacing:.2em; color:#FF7A3D;
+  opacity:0; pointer-events:none; z-index:30 }
+#bossPhase.on{ animation:phaseFlash 1.5s ease forwards }
+@keyframes phaseFlash{ 0%{opacity:0;transform:translateX(-50%) scale(.8)}
+  18%{opacity:1;transform:translateX(-50%) scale(1)} 70%{opacity:1} 100%{opacity:0} }
+
+.overlay{ position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+  background:radial-gradient(120% 90% at 50% 20%, rgba(28,26,24,.9), rgba(6,7,8,.97)); z-index:40 }
+#settingsScreen{ z-index:60 }
+.overlay.on{ display:flex }
+.panel{ width:min(640px,92vw); border:1px solid var(--line); background:rgba(14,16,19,.9);
+  padding:32px 34px; text-align:center }
+.panel h2{ font:700 38px/1.1 system-ui,sans-serif; margin:0 0 8px }
+.panel .sub{ font:400 20px/1.3 system-ui,sans-serif; color:var(--bone); margin-bottom:16px }
+.panel .rewards{ font:700 18px/1.7 ui-monospace,monospace; color:var(--cyan); margin:14px 0 }
+.panel .note{ font:400 14px/1.5 system-ui,sans-serif; color:rgba(237,230,218,.55); margin-bottom:20px }
+.panel button{ display:block; width:100%; margin:8px 0; transform:none }
+.panel button span{ transform:none }
+.panel button:hover{ transform:none }
+
+#selectList{ text-align:left; margin:14px 0 18px }
+.srow{ display:flex; gap:14px; align-items:center; padding:12px 14px; margin-bottom:6px;
+  background:rgba(255,255,255,.05); border:1px solid transparent; cursor:pointer }
+.srow:hover{ border-color:var(--line) }
+.srow.locked{ background:rgba(255,255,255,.02); cursor:default; opacity:.55 }
+.srow.locked:hover{ border-color:transparent }
+.srow.current{ background:rgba(255,210,161,.12); border-color:rgba(255,210,161,.4) }
+.smark{ width:30px; text-align:center; font:700 20px/1 system-ui,sans-serif }
+.srow.done .smark{ color:var(--cyan) }
+.srow.current .smark{ color:var(--sun) }
+.srow.locked .smark{ color:rgba(237,230,218,.4) }
+.stitle{ font:700 16px/1.3 system-ui,sans-serif }
+.srow.current .stitle{ color:var(--sun) }
+.sdetail{ font:400 13px/1.4 system-ui,sans-serif; color:rgba(237,230,218,.5) }
+/* ---- settings ------------------------------------------------------- */
+#settingsPanel{ width:min(720px,94vw); max-height:92vh; overflow-y:auto; text-align:left }
+#settingsPanel h2{ text-align:center }
+.sechead{ font:700 13px/1 ui-monospace,monospace; letter-spacing:.24em; color:var(--sun);
+  margin:20px 0 10px; display:flex; align-items:center; justify-content:space-between }
+.diffrow{ display:flex; gap:8px }
+.diffrow button{ flex:1; margin:0; transform:none }
+.diffrow button:hover{ transform:none }
+button.diff{ background:rgba(255,255,255,.07); color:var(--bone) }
+button.diff:hover{ background:rgba(255,255,255,.14) }
+button.diff.on{ background:var(--sun); color:var(--ink) }
+button.diff.on span{ color:var(--ink) }
+button.mini{ background:rgba(255,255,255,.07); color:var(--bone) }
+.bindrow button{ background:rgba(255,255,255,.07); color:var(--bone) }
+button.mini{ padding:5px 12px; font-size:10px; margin:0; transform:none }
+button.mini:hover{ transform:none }
+.sliderrow{ display:flex; align-items:center; gap:12px }
+.sliderrow label{ width:120px; font:400 14px/1 system-ui,sans-serif }
+.sliderrow input{ flex:1; accent-color:var(--cyan) }
+.pauserow{ display:flex; gap:8px; margin-top:18px }
+.pauserow button{ flex:1; margin:0 }
+.sliderrow span{ width:48px; text-align:right; font:400 13px/1 ui-monospace,monospace;
+  color:rgba(237,230,218,.6) }
+.bindrow{ display:flex; align-items:center; gap:10px; padding:5px 0 }
+.bindrow .bname{ width:150px; font:400 14px/1 system-ui,sans-serif }
+.bindrow .bkeys{ flex:1; font:400 13px/1 ui-monospace,monospace; color:var(--cyan) }
+.bindrow.unbound .bkeys{ color:var(--thug) }
+.bindrow.listening .bkeys{ color:var(--sun) }
+.bindrow button{ width:auto; padding:5px 12px; font-size:10px; margin:0; transform:none }
+.bindrow button:hover{ transform:none }
+</style>
+
+<div id="titleCard">
+  <div id="cardNum">STAGE 1</div>
+  <div id="cardName">THE STREETS</div>
+  <div id="cardRule"></div>
+  <div id="cardTag"></div>
+</div>
+
+<div id="bossBar">
+  <div id="bossName">BULLDOZER</div>
+  <div id="bossTrack"><i id="bossFill"></i></div>
+</div>
+<div id="bossPhase"></div>
+
+<div class="overlay" id="endScreen"><div class="panel">
+  <h2 id="endTitle">STAGE COMPLETE</h2>
+  <div class="sub" id="endStage"></div>
+  <div class="rewards" id="endRewards"></div>
+  <div class="note" id="endNote"></div>
+  <button id="endNext"><span>NEXT STAGE</span></button>
+  <button id="endSelect"><span>STAGE SELECT</span></button>
+  <button id="endSettings"><span>SETTINGS</span></button>
+</div></div>
+
+<div class="overlay" id="selectScreen"><div class="panel">
+  <h2>STAGE SELECT</h2>
+  <div id="selectList"></div>
+  <button id="selectSettings"><span>SETTINGS</span></button>
+  <button id="selectBack"><span>BACK</span></button>
+</div></div>
+
+<div class="overlay" id="settingsScreen"><div class="panel" id="settingsPanel">
+  <h2 id="settingsTitle">PAUSED</h2>
+
+  <div class="sechead">DIFFICULTY</div>
+  <div class="diffrow">
+    <button class="diff" data-diff="easy"><span>EASY</span></button>
+    <button class="diff" data-diff="normal"><span>NORMAL</span></button>
+    <button class="diff" data-diff="hard"><span>HARD</span></button>
+  </div>
+  <div class="note" id="diffNote"></div>
+
+  <div class="sechead">MOUSE</div>
+  <div class="sliderrow">
+    <label>Sensitivity</label>
+    <input id="sensSlider" type="range" min="0.25" max="3" step="0.05">
+    <span id="sensValue">1.00</span>
+  </div>
+
+  <div class="sechead">CONTROLS <button id="bindReset" class="mini"><span>RESET TO DEFAULTS</span></button></div>
+  <div id="bindList"></div>
+  <div class="note" id="bindNote">Click a key to change it. Escape cancels.</div>
+
+  <div class="pauserow">
+    <button id="settingsBack"><span>RESUME</span></button>
+    <button id="pauseRestart"><span>RESTART STAGE</span></button>
+    <button id="pauseSelect"><span>STAGE SELECT</span></button>
+  </div>
+</div></div>
+
+<div id="stage"><canvas id="c"></canvas></div>
+
+<div class="hud">
+  <div id="obj" class="slab"><div>
+    <div class="label" id="objLabel">STAGE 1</div>
+    <div class="t" id="objTitle">The streets</div>
+    <div class="c num" id="objCount">5 hostiles remaining</div>
+  </div></div>
+
+  <div id="foe" class="slab"><div>
+    <div class="row"><div class="fname" id="foeName">Thug</div><div class="poise" id="foeState">Idle</div></div>
+    <div class="bar"><i id="foeFill"></i></div>
+    <div class="bar" id="foePoise"><i id="foePoiseFill"></i></div>
+  </div></div>
+
+  <div id="combo">
+    <div id="comboN">0</div>
+    <div id="comboT">Hit combo</div>
+  </div>
+
+  <div id="banner" class="slab"><div id="bannerText">Street cleared</div></div>
+
+  <div id="vitals" class="slab"><div>
+    <div class="who"><div class="name">Player</div><div class="lvl" id="stateTag">Ready</div></div>
+    <div class="bar"><span class="ghost" id="hpGhost"></span><i id="hpFill"></i></div>
+    <div class="bar stam"><i id="spFill"></i></div>
+  </div></div>
+
+  <div id="keys" class="slab"><div style="display:contents">
+    <b>LMB</b><span>Light</span>
+    <b>F</b><span>Heavy</span>
+    <b>RMB</b><span>Block / Parry</span>
+    <b>Ctrl</b><span>Dodge</span>
+    <b>G</b><span>Grab</span>
+    <b>Tab</b><span>Lock on</span>
+  </div></div>
+</div>
+
+
+<div id="touch">
+  <div id="stick"><i></i></div>
+  <div class="pad">
+    <button class="btn" data-act="grab">Grab</button>
+    <button class="btn" data-act="jump">Jump</button>
+    <button class="btn" data-act="dodge">Dodge</button>
+    <button class="btn block" data-act="block">Block</button>
+    <button class="btn mid heavy" data-act="heavy">Heavy</button>
+    <button class="btn big light" data-act="light">Hit</button>
+  </div>
+  <button class="btn" id="pauseBtn" data-act="pause">II</button>
+</div>
+
+<div id="rotate"><div>
+  <b>Turn your phone sideways</b>
+  <span>Glowpulse needs landscape — there is a street to see and a fight to read.</span>
+</div></div>
+
+<div class="veil" id="veil">
+  <div class="card">
+    <div class="brand"><h1>Glowpulse</h1><em>Combat Demo</em></div>
+    <p class="lede">The melee system from the Unity project, ported to the browser so you can feel it.
+      Same move data, same combo chains, same <b>poise</b> and <b>hit-stop</b>, and the same
+      <b>combat director</b> that lets only one or two enemies swing at a time while the rest circle you.</p>
+
+    <div class="grid" id="ctrlGrid">
+      <div class="kv"><dt>W A S D</dt><dd>Move</dd></div>
+      <div class="kv"><dt>Mouse</dt><dd>Look</dd></div>
+      <div class="kv"><dt>Shift</dt><dd>Sprint</dd></div>
+      <div class="kv"><dt>Space</dt><dd>Jump</dd></div>
+      <div class="kv"><dt>Ctrl / C</dt><dd>Dodge</dd></div>
+      <div class="kv"><dt>Left mouse</dt><dd>Light attack</dd></div>
+      <div class="kv"><dt>F</dt><dd>Heavy attack</dd></div>
+      <div class="kv"><dt>Right mouse / Q</dt><dd>Block</dd></div>
+      <div class="kv"><dt>G</dt><dd>Grab, then F to throw</dd></div>
+      <div class="kv"><dt>Tab</dt><dd>Lock on</dd></div>
+      <div class="kv"><dt>Esc</dt><dd>Pause</dd></div>
+      <div class="kv"><dt>R</dt><dd>Restart</dd></div>
+    </div>
+
+    <div class="tip">
+      Try <b>light, light, heavy</b> and <b>light, light, light, heavy</b> — they end differently.
+      Block the instant a blow lands to <b>parry</b> it, then attack for a counter. A clean dodge does the same.
+      The bruiser shrugs off jabs; you have to go heavy or get out of the way.
+    </div>
+
+    <div class="go">
+      <button id="play"><span>Start fighting</span></button>
+      <button id="titleSettings"><span>Settings</span></button>
+      <span class="hint" id="startHint">Click locks the mouse. Esc is the pause menu — difficulty, controls, stage select.</span>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =========================================================================
+   Glowpulse — browser port of the Unity project's combat systems.
+   Rendering is a small software 3D pipeline over Canvas 2D: characters are
+   real bone hierarchies, projected and depth-sorted, so the procedural
+   animation from the Unity build reads the same way here.
+   ========================================================================= */
+
+// ---- math ---------------------------------------------------------------
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+const clamp01 = v=> v<0?0:(v>1?1:v);
+const lerp = (a,b,t)=> a+(b-a)*t;
+const damp = (a,b,sharp,dt)=> lerp(a,b,1-Math.exp(-sharp*dt));
+const rand = (a,b)=> a+Math.random()*(b-a);
+const TAU = Math.PI*2;
+const DEG = Math.PI/180;
+
+function wrapAngle(a){ a=(a+Math.PI)%TAU; if(a<0)a+=TAU; return a-Math.PI; }
+function moveTowardAngle(cur,tgt,maxDelta){
+  const d = wrapAngle(tgt-cur);
+  if(Math.abs(d)<=maxDelta) return tgt;
+  return cur + Math.sign(d)*maxDelta;
+}
+function dampAngle(cur,tgt,sharp,dt){ return cur + wrapAngle(tgt-cur)*(1-Math.exp(-sharp*dt)); }
+
+const v3 = (x=0,y=0,z=0)=>({x,y,z});
+const vadd=(a,b)=>({x:a.x+b.x,y:a.y+b.y,z:a.z+b.z});
+const vsub=(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
+const vmul=(a,s)=>({x:a.x*s,y:a.y*s,z:a.z*s});
+const vlen=a=>Math.hypot(a.x,a.y,a.z);
+const flatLen=a=>Math.hypot(a.x,a.z);
+const flatDist=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
+// Ported from FactionRules.IsHostileTo: nobody is hostile to a bystander, so
+// civilians can neither be hit nor be locked on to.
+const hostileTo=(a,b)=> a!==b && a!=='neutral' && b!=='neutral' && a!=='civilian' && b!=='civilian';
+function flatDir(a){ const m=Math.hypot(a.x,a.z); return m>1e-5?{x:a.x/m,y:0,z:a.z/m}:{x:0,y:0,z:0}; }
+
+/* 3x3 rotation + translation. Euler order matches Unity's ZXY so the pose
+   data ported from the project produces the same limb angles. */
+function matIdent(){ return {m:[1,0,0, 0,1,0, 0,0,1], p:{x:0,y:0,z:0}}; }
+function eulerZXY(x,y,z){
+  const cx=Math.cos(x),sx=Math.sin(x),cy=Math.cos(y),sy=Math.sin(y),cz=Math.cos(z),sz=Math.sin(z);
+  // R = Ry * Rx * Rz
+  const m=[];
+  m[0]= cy*cz + sy*sx*sz;  m[1]= -cy*sz + sy*sx*cz;  m[2]= sy*cx;
+  m[3]= cx*sz;             m[4]= cx*cz;              m[5]= -sx;
+  m[6]= -sy*cz + cy*sx*sz; m[7]= sy*sz + cy*sx*cz;   m[8]= cy*cx;
+  return m;
+}
+function matMulM(a,b){
+  const r=new Array(9);
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++){
+    r[i*3+j]=a[i*3]*b[j]+a[i*3+1]*b[3+j]+a[i*3+2]*b[6+j];
+  }
+  return r;
+}
+/* A transform offset inside a parent bone, optionally rolled about Z. Used for
+   detail parts that hang off a bone without deserving a bone of their own. */
+function childXform(t, offset, rollRad){
+  return {
+    m: rollRad ? matMulM(t.m, eulerZXY(0,0,rollRad)) : t.m,
+    p: matXform(t, offset)
+  };
+}
+function matXform(t,v){
+  const m=t.m;
+  return {
+    x: m[0]*v.x+m[1]*v.y+m[2]*v.z + t.p.x,
+    y: m[3]*v.x+m[4]*v.y+m[5]*v.z + t.p.y,
+    z: m[6]*v.x+m[7]*v.y+m[8]*v.z + t.p.z
+  };
+}
+function matRot(m,v){
+  return { x:m[0]*v.x+m[1]*v.y+m[2]*v.z, y:m[3]*v.x+m[4]*v.y+m[5]*v.z, z:m[6]*v.x+m[7]*v.y+m[8]*v.z };
+}
+function compose(parent, localPos, localRotM){
+  return { m: matMulM(parent.m, localRotM), p: matXform(parent, localPos) };
+}
+
+// ---- colour utilities ---------------------------------------------------
+function hexRGB(hex){
+  const n=parseInt(hex.slice(1),16);
+  return [(n>>16)&255,(n>>8)&255,n&255];
+}
+function shade(rgb,k){ return [clamp(rgb[0]*k,0,255)|0, clamp(rgb[1]*k,0,255)|0, clamp(rgb[2]*k,0,255)|0]; }
+function mixRGB(a,b,t){ return [a[0]+(b[0]-a[0])*t|0, a[1]+(b[1]-a[1])*t|0, a[2]+(b[2]-a[2])*t|0]; }
+function css(rgb,a=1){ return a>=1?`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`:`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`; }
+
+// ---- renderer -----------------------------------------------------------
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let VW=1, VH=1, DPR=1;
+
+const FOG = hexRGB('#A69382');
+const SKY_HI = hexRGB('#5C6E92');
+const SKY_LO = hexRGB('#C9A882');
+const GROUND_FAR = hexRGB('#55524B');
+
+const cam = {
+  pos:v3(0,3,-6), yaw:0, pitch:14*DEG, dist:5.0, targetDist:5.0,
+  fov:58*DEG, focal:1, shakeX:0, shakeY:0, roll:0,
+  right:v3(1,0,0), up:v3(0,1,0), fwd:v3(0,0,1)
+};
+
+/* Quality drops the internal resolution rather than the visual design, which
+   is what keeps a phone at a playable frame rate without the game looking
+   like a different game. */
+const Quality={ scale:1, cap:2, windowDist:52, boxDist:96, propDist:62, fx:1 };
+
+function resize(){
+  DPR = Math.min(devicePixelRatio||1, Quality.cap) * Quality.scale;
+  VW = canvas.clientWidth; VH = canvas.clientHeight;
+  canvas.width = Math.max(1,(VW*DPR)|0); canvas.height = Math.max(1,(VH*DPR)|0);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  cam.focal = (VH*0.5)/Math.tan(cam.fov*0.5);
+}
+addEventListener('resize', resize);
+
+function updateCameraBasis(){
+  const cy=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
+  const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  cam.fwd  = {x: sy*cp, y:-sp, z: cy*cp};
+  cam.right= {x: cy,    y: 0,  z:-sy};
+  cam.up   = {x: sy*sp, y: cp, z: cy*sp};
+}
+
+const NEAR = 0.22;
+/* Camera-space transform: x right, y up, z forward (depth). */
+function toCam(p){
+  const dx=p.x-cam.pos.x, dy=p.y-cam.pos.y, dz=p.z-cam.pos.z;
+  return {
+    x: dx*cam.right.x + dy*cam.right.y + dz*cam.right.z,
+    y: dx*cam.up.x    + dy*cam.up.y    + dz*cam.up.z,
+    z: dx*cam.fwd.x   + dy*cam.fwd.y   + dz*cam.fwd.z
+  };
+}
+function projectCam(c){
+  const s = cam.focal / c.z;
+  return { x: VW*0.5 + c.x*s + cam.shakeX, y: VH*0.5 - c.y*s + cam.shakeY, s };
+}
+function project(p){ const c=toCam(p); return c.z<=NEAR?null:projectCam(c); }
+
+/* Clip a camera-space segment to the near plane so geometry behind the
+   camera never wraps around to the far side of the screen. */
+function clipNear(a,b){
+  if(a.z>NEAR && b.z>NEAR) return [a,b];
+  if(a.z<=NEAR && b.z<=NEAR) return null;
+  const t=(NEAR-a.z)/(b.z-a.z);
+  const m={x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t, z:NEAR};
+  return a.z>NEAR?[a,m]:[m,b];
+}
+
+function fogAmount(z){ return clamp01((z-26)/78); }
+function fogged(rgb,z){ const f=fogAmount(z); return f<=0?rgb:mixRGB(rgb,FOG,f*0.86); }
+
+// Draw list: everything is queued with a depth then painted far-to-near.
+let draws=[];
+function push(depth, fn){ draws.push({d:depth, fn}); }
+
+function drawLimb(a,b,radius,rgb){
+  const ca=toCam(a), cb=toCam(b);
+  const seg=clipNear(ca,cb); if(!seg) return;
+  const pa=projectCam(seg[0]), pb=projectCam(seg[1]);
+  const z=(seg[0].z+seg[1].z)*0.5;
+  const w=Math.max(1, radius*2*cam.focal/z);
+  const col=css(fogged(rgb,z));
+  push(z, ()=>{
+    ctx.strokeStyle=col; ctx.lineWidth=w; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y); ctx.stroke();
+  });
+}
+function drawBlob(p,radius,rgb,squash=1){
+  const c=toCam(p); if(c.z<=NEAR) return;
+  const s=projectCam(c);
+  const r=radius*cam.focal/c.z;
+  const col=css(fogged(rgb,c.z));
+  push(c.z, ()=>{
+    ctx.fillStyle=col; ctx.beginPath();
+    ctx.ellipse(s.x,s.y,r,r*squash,0,0,TAU); ctx.fill();
+  });
+}
+/* Oriented box: project all eight corners, paint the three faces whose
+   outward normal points at the camera. Cheap, and it reads as solid. */
+const BOX_FACES=[[0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]];
+const BOX_NORMS=[{x:0,y:0,z:-1},{x:0,y:0,z:1},{x:0,y:-1,z:0},{x:0,y:1,z:0},{x:-1,y:0,z:0},{x:1,y:0,z:0}];
+function drawBox(xform, half, rgb, opts){
+  const pts=[], cs=[], ok=[];
+  let anyVisible=false, depth=0, seen=0;
+  for(let i=0;i<8;i++){
+    const lp={x:(i&4?half.x:-half.x), y:(i&2?half.y:-half.y), z:(i&1?half.z:-half.z)};
+    const c=toCam(matXform(xform,lp));
+    cs.push(c);
+    const valid=c.z>NEAR;
+    ok.push(valid);
+    pts.push(valid?projectCam(c):null);
+    if(valid){ anyVisible=true; depth+=c.z; seen++; }
+  }
+  if(!anyVisible) return;
+  depth/=seen;
+
+  const toCamV={x:cam.pos.x-xform.p.x, y:cam.pos.y-xform.p.y, z:cam.pos.z-xform.p.z};
+  for(let f=0; f<6; f++){
+    const n=matRot(xform.m,BOX_NORMS[f]);
+    const facing = n.x*toCamV.x + n.y*toCamV.y + n.z*toCamV.z;
+    if(facing<=0) continue;
+    const q=BOX_FACES[f];
+    // A face is drawn only when all four of its corners are in front of the
+    // camera; the rest of the box still renders.
+    if(!ok[q[0]]||!ok[q[1]]||!ok[q[2]]||!ok[q[3]]) continue;
+    // Fake a key light from above and the side.
+    const k = 0.62 + 0.38*clamp01(n.y*0.75 + n.x*0.22 + 0.35);
+    const col=css(fogged(shade(rgb,k), depth));
+    const win = opts && opts.windows && Math.abs(n.y)<0.3 ? opts : null;
+    push(depth+f*1e-4, ()=>{
+      ctx.fillStyle=col; ctx.beginPath();
+      ctx.moveTo(pts[q[0]].x,pts[q[0]].y);
+      for(let i=1;i<4;i++) ctx.lineTo(pts[q[i]].x,pts[q[i]].y);
+      ctx.closePath(); ctx.fill();
+      if(win) paintWindows(pts[q[0]],pts[q[1]],pts[q[2]],pts[q[3]],win,depth);
+    });
+  }
+}
+/* Window grid drawn by bilinear interpolation across a face's corners. */
+function paintWindows(a,b,c,d,opt,depth){
+  const cols=opt.cols||4, rows=opt.rows||5;
+  const lit=opt.lit||[]; let idx=0;
+  const f=fogAmount(depth);
+  for(let r=0;r<rows;r++){
+    for(let cc=0;cc<cols;cc++){
+      const on=lit[(idx++)%lit.length];
+      if(!on) continue;
+      const u0=(cc+0.26)/cols, u1=(cc+0.74)/cols;
+      const v0=(r+0.22)/rows, v1=(r+0.7)/rows;
+      const p=(u,v)=>({
+        x: a.x+(b.x-a.x)*u+(d.x-a.x)*v+(c.x-b.x-d.x+a.x)*u*v,
+        y: a.y+(b.y-a.y)*u+(d.y-a.y)*v+(c.y-b.y-d.y+a.y)*u*v
+      });
+      const p0=p(u0,v0), p1=p(u1,v0), p2=p(u1,v1), p3=p(u0,v1);
+      ctx.fillStyle=css(mixRGB([255,214,150],FOG,f*0.9), 0.72*(1-f*0.7));
+      ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y);
+      ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.closePath(); ctx.fill();
+    }
+  }
+}
+function drawShadow(p, radius, strength=0.34){
+  const c=toCam({x:p.x,y:0.02,z:p.z}); if(c.z<=NEAR) return;
+  const s=projectCam(c);
+  const r=radius*cam.focal/c.z;
+  const a=strength*(1-fogAmount(c.z));
+  push(c.z-0.05, ()=>{
+    ctx.fillStyle=`rgba(8,9,11,${a})`;
+    ctx.beginPath(); ctx.ellipse(s.x,s.y,r,r*0.42,0,0,TAU); ctx.fill();
+  });
+}
+function groundSeg(a,b,rgbA,width){
+  const seg=clipNear(toCam(a),toCam(b)); if(!seg) return;
+  const pa=projectCam(seg[0]), pb=projectCam(seg[1]);
+  const z=(seg[0].z+seg[1].z)*0.5;
+  const f=fogAmount(z); if(f>0.99) return;
+  ctx.strokeStyle=css(mixRGB(rgbA,FOG,f*0.9), 1-f);
+  ctx.lineWidth=clamp(width*cam.focal/z, 0.6, 42);
+  ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y); ctx.stroke();
+}
+function paintBackdrop(){
+  // Horizon sits where the ground plane vanishes; with no roll it is level.
+  const far = { x: cam.pos.x + cam.fwd.x*4000, y: 0, z: cam.pos.z + cam.fwd.z*4000 };
+  const c = toCam(far);
+  let hy = c.z>NEAR ? projectCam(c).y : (cam.pitch>0 ? -VH : VH*2);
+  hy = clamp(hy, -VH, VH*2);
+
+  const sky=ctx.createLinearGradient(0,Math.max(0,hy-VH*0.95),0,hy);
+  sky.addColorStop(0, css(SKY_HI)); sky.addColorStop(0.72, css(mixRGB(SKY_HI,SKY_LO,.55)));
+  sky.addColorStop(1, css(FOG));
+  ctx.fillStyle=sky; ctx.fillRect(0,0,VW,Math.max(0,hy));
+
+  const gr=ctx.createLinearGradient(0,hy,0,VH);
+  gr.addColorStop(0, css(FOG)); gr.addColorStop(0.22, css(GROUND_FAR));
+  gr.addColorStop(1, css(hexRGB('#1E2126')));
+  ctx.fillStyle=gr; ctx.fillRect(0,Math.max(0,hy),VW,VH-Math.max(0,hy));
+
+  // Sun bloom, positioned from the light direction used in the Unity scene.
+  const sunDir={x:Math.sin(155*DEG)*Math.cos(22*DEG), y:Math.sin(22*DEG), z:Math.cos(155*DEG)*Math.cos(22*DEG)};
+  const sc=toCam({x:cam.pos.x+sunDir.x*900, y:cam.pos.y+sunDir.y*900, z:cam.pos.z+sunDir.z*900});
+  if(sc.z>NEAR){
+    const sp=projectCam(sc);
+    const g=ctx.createRadialGradient(sp.x,sp.y,0,sp.x,sp.y,VH*0.55);
+    g.addColorStop(0,'rgba(255,224,178,.5)'); g.addColorStop(.35,'rgba(255,205,150,.16)');
+    g.addColorStop(1,'rgba(255,205,150,0)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,VW,VH);
+  }
+}
+function flushDraws(){
+  draws.sort((a,b)=>b.d-a.d);
+  for(const d of draws) d.fn();
+  draws.length=0;
+}
+</script>
+
+<script>
+"use strict";
+/* ---- rig ---------------------------------------------------------------
+   The same joint hierarchy as CharacterRigFactory in the Unity project:
+   limbs hang along local -Y, so rotating a shoulder about X by -90 degrees
+   points that arm straight forward. All the pose data below relies on it. */
+const B = {
+  Root:0, Hips:1, Spine:2, Chest:3, Neck:4, Head:5,
+  ShoulderL:6, UpperArmL:7, LowerArmL:8, HandL:9,
+  ShoulderR:10, UpperArmR:11, LowerArmR:12, HandR:13,
+  ThighL:14, ShinL:15, FootL:16, ThighR:17, ShinR:18, FootR:19, Count:20
+};
+const BONE_PARENT = [-1,0,1,2,3,4, 3,6,7,8, 3,10,11,12, 1,14,15, 1,17,18];
+
+function buildRig(style){
+  const h = style.height, build = style.build;
+  const hipY=0.525*h, thigh=0.245*h, shin=0.235*h, ankle=0.045*h;
+  const hipW=0.085*h*lerp(1,1.1,build-1), shW=0.105*h*build;
+  const upper=0.175*h, lower=0.16*h, r=0.052*h*build;
+
+  const off=new Array(B.Count);
+  off[B.Root]=v3(0,0,0);
+  off[B.Hips]=v3(0,hipY,0);
+  off[B.Spine]=v3(0,0.075*h,0);
+  off[B.Chest]=v3(0,0.105*h,0);
+  off[B.Neck]=v3(0,0.105*h,0);
+  off[B.Head]=v3(0,0.055*h,0);
+  off[B.ShoulderL]=v3( shW,0.085*h,0); off[B.UpperArmL]=v3(0,0,0);
+  off[B.LowerArmL]=v3(0,-upper,0);     off[B.HandL]=v3(0,-lower,0);
+  off[B.ShoulderR]=v3(-shW,0.085*h,0); off[B.UpperArmR]=v3(0,0,0);
+  off[B.LowerArmR]=v3(0,-upper,0);     off[B.HandR]=v3(0,-lower,0);
+  off[B.ThighL]=v3( hipW,-0.02*h,0); off[B.ShinL]=v3(0,-thigh,0); off[B.FootL]=v3(0,-shin,0);
+  off[B.ThighR]=v3(-hipW,-0.02*h,0); off[B.ShinR]=v3(0,-thigh,0); off[B.FootR]=v3(0,-shin,0);
+
+  // Neutral A-pose: reads better than a T-pose and becomes the rest pose
+  // every animation layer is expressed as an offset from.
+  const rest=new Array(B.Count).fill(null).map(()=>v3(0,0,0));
+  rest[B.UpperArmL]=v3(-6,0,-7); rest[B.UpperArmR]=v3(-6,0,7);
+  rest[B.LowerArmL]=v3(-14,0,-3); rest[B.LowerArmR]=v3(-14,0,3);
+  rest[B.ThighL]=v3(-1.5,0,1.5); rest[B.ThighR]=v3(-1.5,0,-1.5);
+  rest[B.ShinL]=v3(3,0,0); rest[B.ShinR]=v3(3,0,0);
+
+  const restM=rest.map(e=>eulerZXY(e.x*DEG,e.y*DEG,e.z*DEG));
+  return { h, build, r, upper, lower, thigh, shin, ankle, hipW, shW, off, restM,
+           world:new Array(B.Count).fill(null).map(matIdent), style,
+           aim: 0.72*h };
+}
+
+function solveRig(rig, rootXform, delta, hipsOffset, rootPivot){
+  // Root rotation pivots around a point up the body when a clip asks for it,
+  // so a roll tumbles in place instead of swinging around the ankles.
+  for(let i=0;i<B.Count;i++){
+    const d=delta[i];
+    const rot = d ? matMulM(rig.restM[i], eulerZXY(d.x*DEG,d.y*DEG,d.z*DEG)) : rig.restM[i];
+    let pos = rig.off[i];
+    if(i===B.Hips && hipsOffset) pos={x:pos.x+hipsOffset.x, y:pos.y+hipsOffset.y, z:pos.z+hipsOffset.z};
+    if(i===B.Root && rootPivot>0.0001 && d){
+      const pv=v3(0,rig.h*rootPivot,0);
+      const rotated=matRot(eulerZXY(d.x*DEG,d.y*DEG,d.z*DEG),pv);
+      pos={x:pos.x+pv.x-rotated.x, y:pos.y+pv.y-rotated.y, z:pos.z+pv.z-rotated.z};
+    }
+    const parent = BONE_PARENT[i]<0 ? rootXform : rig.world[BONE_PARENT[i]];
+    rig.world[i]=compose(parent,pos,rot);
+  }
+}
+
+function drawCharacter(rig, alive){
+  const s=rig.style, W=rig.world, h=rig.h, build=rig.build, r=rig.r;
+  const skin=s.skin, torso=s.torso, legs=s.legs, shoes=s.shoes, hair=s.hair, accent=s.accent;
+
+  const jointPos=i=>W[i].p;
+  const boneEnd=(i,len)=> matXform(W[i], v3(0,-len,0));
+
+  // torso + pelvis
+  drawBox(W[B.Hips], {x:hipW2(rig), y:0.05*h, z:0.065*h*build}, legs);
+  drawBox(W[B.Chest], {x:rig.shW*0.98, y:0.118*h, z:0.068*h*build}, torso);
+  drawBlob(matXform(W[B.Chest], v3( rig.shW,0.085*h,0)), r*1.05, torso);
+  drawBlob(matXform(W[B.Chest], v3(-rig.shW,0.085*h,0)), r*1.05, torso);
+  if(s.shirtless){
+    drawBareTorso(rig, W, h, build, r, skin);
+    drawBackTattoo(rig, W, h, build, s.tattoo);
+  } else {
+    // accent stripe — also the enemy-type colour tell
+    drawBox(W[B.Chest], {x:0.027*h, y:0.085*h, z:0.008*h}, accent);
+  }
+  drawBox(W[B.Hips], {x:hipW2(rig)*1.02, y:0.011*h, z:0.07*h*build}, accent);
+
+  // head
+  drawLimb(jointPos(B.Neck), jointPos(B.Head), r*0.6, skin);
+  const skull=matXform(W[B.Head], v3(0,0.055*h,0));
+  drawBlob(skull, 0.062*h, skin, 1.12);
+  drawBlob(matXform(W[B.Head], v3(0,0.072*h,-0.008*h)), 0.062*h, hair, 0.86);
+  if(alive){
+    // a suggestion of a face keeps the silhouette from reading as a mannequin
+    drawBlob(matXform(W[B.Head], v3( 0.022*h,0.058*h,0.052*h)), 0.008*h, [22,20,18]);
+    drawBlob(matXform(W[B.Head], v3(-0.022*h,0.058*h,0.052*h)), 0.008*h, [22,20,18]);
+  }
+
+  // arms — a bare chest means bare arms, and a heavier build thickens them
+  const upper = s.shirtless ? skin : torso;
+  const upperR = s.shirtless ? r*0.95 : r*0.85;
+  drawLimb(jointPos(B.UpperArmL), jointPos(B.LowerArmL), upperR, upper);
+  drawLimb(jointPos(B.LowerArmL), jointPos(B.HandL), r*0.72, skin);
+  drawBlob(matXform(W[B.HandL], v3(0,-r*0.8,0)), r*0.78, skin);
+  drawLimb(jointPos(B.UpperArmR), jointPos(B.LowerArmR), upperR, upper);
+  drawLimb(jointPos(B.LowerArmR), jointPos(B.HandR), r*0.72, skin);
+  drawBlob(matXform(W[B.HandR], v3(0,-r*0.8,0)), r*0.78, skin);
+
+  // legs
+  drawLimb(jointPos(B.ThighL), jointPos(B.ShinL), r*1.02, legs);
+  drawLimb(jointPos(B.ShinL), jointPos(B.FootL), r*0.88, legs);
+  drawBox(W[B.FootL], {x:r*1.05, y:rig.ankle*0.5, z:0.067*h}, shoes, null);
+  drawLimb(jointPos(B.ThighR), jointPos(B.ShinR), r*1.02, legs);
+  drawLimb(jointPos(B.ShinR), jointPos(B.FootR), r*0.88, legs);
+  drawBox(W[B.FootR], {x:r*1.05, y:rig.ankle*0.5, z:0.067*h}, shoes, null);
+}
+// Each arena gets a floor of its own: the ring that bounds the fight plus the
+// geometry standing on it.
+function drawProps(){
+  const metal=hexRGB('#3A3D42'), glow=hexRGB('#FFD9A0');
+  for(const p of World.props){
+    if(flatDist(p,cam.pos)>Quality.propDist) continue;
+    if(p.type==='lamp'){
+      const base={x:p.x,y:0,z:p.z};
+      drawLimb(base,{x:p.x,y:4.4,z:p.z},.07,metal);
+      drawLimb({x:p.x,y:4.4,z:p.z},{x:p.x+p.s*1.1,y:4.55,z:p.z},.06,metal);
+      drawBlob({x:p.x+p.s*1.1,y:4.45,z:p.z},.19,glow);
+      drawShadow(base,.28,.22);
+    } else if(p.type==='bin'){
+      const x={m:[1,0,0,0,1,0,0,0,1], p:{x:p.x,y:.42,z:p.z}};
+      drawBox(x,{x:.28,y:.42,z:.28}, hexRGB('#3D4A44'));
+      drawShadow({x:p.x,z:p.z},.34,.28);
+    } else if(p.type==='car'){
+      const m=eulerZXY(0,p.yaw,0);
+      drawBox({m,p:{x:p.x,y:.52,z:p.z}},{x:.92,y:.34,z:2.1}, p.col);
+      drawBox({m,p:{x:p.x,y:1.06,z:p.z-.12}},{x:.82,y:.3,z:1.15}, shade(p.col,.72));
+      drawShadow({x:p.x,z:p.z},1.6,.3);
+    }
+  }
+}
+
+function drawArenaFloor(){
+  const st=(typeof Stage!=='undefined'&&Stage.def)?Stage.def:null;
+  const r=st?st.radius:16;
+  const tone={ warehouse:'#4A4741', docks:'#3C4247', underground:'#43413C', rooftop:'#4E4B46' };
+  const floor=hexRGB(tone[World.arena]||'#4C4A45');
+
+  // Concentric rings read as a surface without a real ground mesh, and they
+  // fade with distance so the edge of the deck is visible.
+  for(let i=0;i<9;i++){
+    const rad=r*(i+1)/9;
+    const seg=Math.max(12,(rad*2)|0);
+    for(let k=0;k<seg;k++){
+      const a0=k/seg*TAU, a1=(k+1)/seg*TAU;
+      groundSeg({x:Math.sin(a0)*rad,y:.02,z:Math.cos(a0)*rad},
+                {x:Math.sin(a1)*rad,y:.02,z:Math.cos(a1)*rad}, floor, r/9*.9);
+    }
+  }
+  for(const b of World.boxes){
+    if(b.noDraw) continue;
+    const d=flatDist(b,cam.pos);
+    if(d>Quality.boxDist) continue;
+    const y=b.sunk?-b.sunk+b.h/2:b.h/2;
+    const m=b.yaw?eulerZXY(0,b.yaw,0):[1,0,0,0,1,0,0,0,1];
+    drawBox({m, p:{x:b.x,y,z:b.z}}, {x:b.hw,y:b.h/2,z:b.hd}, b.rgb,
+      d<Quality.windowDist?b.windows:null);
+  }
+  drawProps();
+}
+function hipW2(rig){ return rig.hipW*1.05; }
+
+/* Muscle masses over a bare chest. Without them a shirtless character is a
+   flesh-coloured box, because the shirt was doing the work of breaking up the
+   torso. Ported from CharacterRigFactory.BuildBareTorso. */
+function drawBareTorso(rig, W, h, build, r, skin){
+  const front = 0.068*h*build;
+  for(let side=-1; side<=1; side+=2)
+    drawBlob(matXform(W[B.Chest], v3(side*rig.shW*0.52, 0.062*h, front*0.62)), 0.05*h*build, skin, 0.72);
+
+  for(let i=0;i<3;i++){
+    const t=i/2, width=lerp(0.078,0.058,t)*h*build;
+    drawBox(childXform(W[B.Chest], v3(0, -0.012*h - i*0.042*h, front*0.72)),
+      {x:width, y:0.017*h, z:0.015*h}, skin);
+  }
+  for(let side=-1; side<=1; side+=2)
+    drawBlob(matXform(W[B.Chest], v3(side*rig.shW*0.86, -0.01*h, 0)), 0.05*h*build, skin, 1.5);
+
+  // traps: most of what makes a heavy build read from behind
+  drawBlob(matXform(W[B.Chest], v3(0, 0.105*h, -0.012*h)), rig.shW*0.62, skin, 0.42);
+}
+
+/* A back piece: a spine bar with wings fanning across the shoulder blades.
+   Geometry rather than a texture, because the project has no authored art. */
+function drawBackTattoo(rig, W, h, build, ink){
+  if(!ink) return;
+  const back = -0.068*h*build - 0.004*h;
+  const th = 0.005*h;
+
+  drawBox(childXform(W[B.Chest], v3(0, 0.012*h, back)), {x:0.017*h, y:0.107*h, z:th}, ink);
+
+  // Widths are fractions of the shoulder half-width, not of height, so the ink
+  // stays on the skin instead of overhanging the silhouette on a heavy build.
+  const inner = rig.shW*0.1;
+  for(let side=-1; side<=1; side+=2){
+    for(let i=0;i<5;i++){
+      const t=i/4;
+      const half=lerp(0.41,0.22,t)*rig.shW;   // drawBox takes half extents
+      const rise=lerp(-0.022,0.088,t)*h;
+      const tilt=lerp(6,46,t)*side*DEG;
+      // centre sits a full half-width out from the spine, or the fan bunches
+      drawBox(childXform(W[B.Chest], v3(side*(inner+half), rise, back), tilt),
+        {x:half, y:0.0095*h, z:th}, ink);
+    }
+  }
+  drawBox(childXform(W[B.Chest], v3(0, -0.098*h, back)), {x:rig.shW*0.65, y:0.008*h, z:th}, ink);
+}
+
+/* ---- pose clips --------------------------------------------------------
+   Ported from PoseLibrary/CombatPoses. Each track is [time, x,y,z] rotation
+   offsets in degrees from the rest pose, so one clip fits any proportions. */
+function clip(id,dur,opt){ return Object.assign({id,dur,tracks:[],hips:null,pivot:0,loop:false,hold:false},opt||{}); }
+function tr(c,bone,...keys){ c.tracks.push({b:bone,k:keys}); return c; }
+function mirror(c,src,dst){
+  const t=c.tracks.find(t=>t.b===src); if(!t) return c;
+  c.tracks.push({b:dst, k:t.k.map(k=>[k[0],k[1],-k[2],-k[3]])});
+  return c;
+}
+function hips(c,...keys){ c.hips=keys; return c; }
+
+function evalTrack(keys,t){
+  const n=keys.length;
+  if(n===1||t<=keys[0][0]) return keys[0];
+  if(t>=keys[n-1][0]) return keys[n-1];
+  for(let i=1;i<n;i++){
+    if(t>keys[i][0]) continue;
+    const a=keys[i-1], b=keys[i];
+    const span=b[0]-a[0];
+    let u=span<=1e-5?1:(t-a[0])/span;
+    u=u*u*(3-2*u);
+    return [t, a[1]+(b[1]-a[1])*u, a[2]+(b[2]-a[2])*u, a[3]+(b[3]-a[3])*u];
+  }
+  return keys[n-1];
+}
+function sampleClip(c,time,weight,out,touched,hipsAcc){
+  if(weight<=0.001) return 0;
+  const t = c.loop ? (time%c.dur+c.dur)%c.dur : clamp(time,0,c.dur);
+  for(const track of c.tracks){
+    const k=evalTrack(track.k,t);
+    const cur=out[track.b];
+    if(weight>=0.999){ cur.x=k[1]; cur.y=k[2]; cur.z=k[3]; }
+    else { cur.x=lerp(cur.x,k[1],weight); cur.y=lerp(cur.y,k[2],weight); cur.z=lerp(cur.z,k[3],weight); }
+    touched[track.b]=true;
+  }
+  if(c.hips){ const k=evalTrack(c.hips,t); hipsAcc.y+=k[2]*weight; hipsAcc.x+=k[1]*weight; }
+  return c.pivot*weight;
+}
+
+const CLIPS={};
+function reg(c){ CLIPS[c.id]=c; return c; }
+const K=(t,x,y,z)=>[t,x,y,z];
+</script>
+
+<script>
+"use strict";
+// ---- clip library (ported from PoseLibrary + CombatPoses) ---------------
+(function(){
+  let c;
+
+  c=reg(clip('dodge_roll',0.62,{pivot:0.55}));
+  tr(c,B.Root,K(0,0,0,0),K(.12,60,0,0),K(.34,300,0,0),K(.46,360,0,0),K(.62,360,0,0));
+  tr(c,B.Spine,K(0,8,0,0),K(.2,42,0,0),K(.42,30,0,0),K(.62,0,0,0));
+  tr(c,B.Chest,K(0,10,0,0),K(.2,34,0,0),K(.62,0,0,0));
+  tr(c,B.Head,K(0,-6,0,0),K(.2,-34,0,0),K(.62,0,0,0));
+  tr(c,B.ThighL,K(0,-20,0,0),K(.18,-95,0,0),K(.4,-70,0,0),K(.62,0,0,0));
+  tr(c,B.ShinL,K(0,25,0,0),K(.18,110,0,0),K(.4,60,0,0),K(.62,0,0,0));
+  tr(c,B.UpperArmL,K(0,-20,0,10),K(.2,-80,0,24),K(.62,0,0,0));
+  tr(c,B.LowerArmL,K(0,-30,0,0),K(.2,-95,0,0),K(.62,0,0,0));
+  mirror(c,B.ThighL,B.ThighR); mirror(c,B.ShinL,B.ShinR);
+  mirror(c,B.UpperArmL,B.UpperArmR); mirror(c,B.LowerArmL,B.LowerArmR);
+  hips(c,K(0,0,0,0),K(.2,0,-.22,0),K(.44,0,-.12,0),K(.62,0,0,0));
+
+  c=reg(clip('dodge_step',0.36));
+  tr(c,B.Spine,K(0,0,0,0),K(.1,16,0,0),K(.36,0,0,0));
+  tr(c,B.ThighL,K(0,0,0,0),K(.12,-46,0,0),K(.36,0,0,0));
+  tr(c,B.ShinL,K(0,0,0,0),K(.12,60,0,0),K(.36,0,0,0));
+  tr(c,B.ThighR,K(0,0,0,0),K(.14,26,0,0),K(.36,0,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.12,-34,0,18),K(.36,0,0,0));
+  tr(c,B.UpperArmR,K(0,0,0,0),K(.12,-34,0,-18),K(.36,0,0,0));
+  hips(c,K(0,0,0,0),K(.12,0,-.14,0),K(.36,0,0,0));
+
+  c=reg(clip('jump_takeoff',0.34));
+  tr(c,B.Spine,K(0,14,0,0),K(.1,-6,0,0),K(.34,2,0,0));
+  tr(c,B.ThighL,K(0,-42,0,0),K(.12,8,0,0),K(.34,-18,0,0));
+  tr(c,B.ShinL,K(0,55,0,0),K(.12,4,0,0),K(.34,34,0,0));
+  tr(c,B.ThighR,K(0,-42,0,0),K(.12,8,0,0),K(.34,14,0,0));
+  tr(c,B.ShinR,K(0,55,0,0),K(.12,4,0,0),K(.34,12,0,0));
+  tr(c,B.UpperArmL,K(0,30,0,0),K(.12,-70,0,12),K(.34,-40,0,8));
+  mirror(c,B.UpperArmL,B.UpperArmR);
+  hips(c,K(0,0,-.16,0),K(.12,0,.03,0),K(.34,0,0,0));
+
+  c=reg(clip('jump_land',0.32));
+  tr(c,B.Spine,K(0,20,0,0),K(.32,0,0,0));
+  tr(c,B.ThighL,K(0,-48,0,0),K(.32,0,0,0)); tr(c,B.ShinL,K(0,62,0,0),K(.32,0,0,0));
+  tr(c,B.ThighR,K(0,-48,0,0),K(.32,0,0,0)); tr(c,B.ShinR,K(0,62,0,0),K(.32,0,0,0));
+  tr(c,B.UpperArmL,K(0,-50,0,20),K(.32,0,0,0)); mirror(c,B.UpperArmL,B.UpperArmR);
+  hips(c,K(0,0,-.22,0),K(.32,0,0,0));
+
+  c=reg(clip('hit_light',0.26));
+  tr(c,B.Spine,K(0,0,0,0),K(.07,-16,8,6),K(.26,0,0,0));
+  tr(c,B.Chest,K(0,0,0,0),K(.07,-12,12,8),K(.26,0,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.06,-18,14,10),K(.26,0,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.08,-18,0,22),K(.26,0,0,0));
+  tr(c,B.UpperArmR,K(0,0,0,0),K(.08,-10,0,-14),K(.26,0,0,0));
+
+  c=reg(clip('hit_heavy',0.52));
+  tr(c,B.Spine,K(0,0,0,0),K(.1,-34,14,10),K(.3,-14,6,4),K(.52,0,0,0));
+  tr(c,B.Chest,K(0,0,0,0),K(.1,-22,20,12),K(.52,0,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.08,-34,26,16),K(.52,0,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.1,-44,0,34),K(.52,0,0,0));
+  tr(c,B.UpperArmR,K(0,0,0,0),K(.1,-30,0,-24),K(.52,0,0,0));
+  tr(c,B.ThighL,K(0,0,0,0),K(.14,22,0,0),K(.52,0,0,0));
+  tr(c,B.ThighR,K(0,0,0,0),K(.14,-26,0,0),K(.52,0,0,0));
+  hips(c,K(0,0,0,0),K(.12,0,-.1,0),K(.52,0,0,0));
+
+  c=reg(clip('knockdown',0.85,{pivot:0,hold:true}));
+  tr(c,B.Root,K(0,0,0,0),K(.3,-46,0,0),K(.55,-84,0,0),K(.85,-88,0,0));
+  tr(c,B.Spine,K(0,0,0,0),K(.25,-28,0,0),K(.85,8,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.3,-22,0,0),K(.85,16,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.25,-70,0,40),K(.85,-20,0,62)); mirror(c,B.UpperArmL,B.UpperArmR);
+  tr(c,B.ThighL,K(0,0,0,0),K(.3,40,0,0),K(.85,12,0,0));
+  tr(c,B.ThighR,K(0,0,0,0),K(.3,30,0,0),K(.85,20,0,0));
+
+  c=reg(clip('get_up',0.95));
+  tr(c,B.Root,K(0,-88,0,0),K(.45,-54,0,0),K(.8,-12,0,0),K(.95,0,0,0));
+  tr(c,B.Spine,K(0,8,0,0),K(.5,30,0,0),K(.95,0,0,0));
+  tr(c,B.ThighL,K(0,12,0,0),K(.45,-80,0,0),K(.95,0,0,0));
+  tr(c,B.ShinL,K(0,0,0,0),K(.45,90,0,0),K(.95,0,0,0));
+  tr(c,B.UpperArmL,K(0,-20,0,62),K(.5,-50,0,20),K(.95,0,0,0)); mirror(c,B.UpperArmL,B.UpperArmR);
+
+  c=reg(clip('death',1.1,{pivot:0,hold:true}));
+  tr(c,B.Root,K(0,0,0,0),K(.35,-40,0,12),K(.75,-86,0,16),K(1.1,-90,0,16));
+  tr(c,B.Spine,K(0,0,0,0),K(.3,-20,10,0),K(1.1,6,4,0));
+  tr(c,B.Head,K(0,0,0,0),K(.3,-26,14,0),K(1.1,22,8,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.4,-40,0,46),K(1.1,-8,0,68)); mirror(c,B.UpperArmL,B.UpperArmR);
+  tr(c,B.ThighL,K(0,0,0,0),K(.5,34,0,0),K(1.1,16,0,6));
+  tr(c,B.ThighR,K(0,0,0,0),K(.5,20,0,0),K(1.1,8,0,-4));
+
+  // ---- attacks ----------------------------------------------------------
+  c=reg(clip('atk_light_jab',0.34));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.06,-30,-6,6),K(.14,-86,-14,8),K(.34,0,0,0));
+  tr(c,B.LowerArmL,K(0,0,0,0),K(.06,-46,0,0),K(.14,12,0,0),K(.34,0,0,0));
+  tr(c,B.UpperArmR,K(0,0,0,0),K(.14,-18,0,-10),K(.34,0,0,0));
+  tr(c,B.Chest,K(0,0,0,0),K(.14,3,-20,0),K(.34,0,0,0));
+  tr(c,B.Hips,K(0,0,0,0),K(.14,0,-9,0),K(.34,0,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.14,2,-6,0),K(.34,0,0,0));
+
+  c=reg(clip('atk_light_cross',0.38));
+  tr(c,B.UpperArmR,K(0,0,0,0),K(.07,-24,14,-6),K(.16,-90,16,-8),K(.38,0,0,0));
+  tr(c,B.LowerArmR,K(0,0,0,0),K(.07,-50,0,0),K(.16,10,0,0),K(.38,0,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.16,-26,0,14),K(.38,0,0,0));
+  tr(c,B.Chest,K(0,0,0,0),K(.06,0,-12,0),K(.16,4,30,0),K(.38,0,0,0));
+  tr(c,B.Hips,K(0,0,0,0),K(.06,0,-6,0),K(.16,0,22,0),K(.38,0,0,0));
+  tr(c,B.ThighR,K(0,0,0,0),K(.16,0,14,0),K(.38,0,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.16,3,10,0),K(.38,0,0,0));
+
+  c=reg(clip('atk_light_kick',0.44));
+  tr(c,B.ThighR,K(0,0,0,0),K(.12,-62,0,0),K(.2,-92,0,0),K(.3,-70,0,0),K(.44,0,0,0));
+  tr(c,B.ShinR,K(0,0,0,0),K(.12,84,0,0),K(.2,6,0,0),K(.3,46,0,0),K(.44,0,0,0));
+  tr(c,B.FootR,K(0,0,0,0),K(.2,-26,0,0),K(.44,0,0,0));
+  tr(c,B.ThighL,K(0,0,0,0),K(.2,12,0,0),K(.44,0,0,0));
+  tr(c,B.Root,K(0,0,0,0),K(.2,-13,0,0),K(.44,0,0,0));
+  tr(c,B.Spine,K(0,0,0,0),K(.2,-14,0,0),K(.44,0,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.2,-20,0,40),K(.44,0,0,0));
+  tr(c,B.UpperArmR,K(0,0,0,0),K(.2,20,0,-34),K(.44,0,0,0));
+  hips(c,K(0,0,0,0),K(.2,0,-.06,0),K(.44,0,0,0));
+
+  c=reg(clip('atk_heavy_hook',0.76));
+  tr(c,B.UpperArmR,K(0,0,0,0),K(.26,16,-46,-18),K(.42,-74,58,-34),K(.76,0,0,0));
+  tr(c,B.LowerArmR,K(0,0,0,0),K(.26,-70,0,0),K(.42,-34,0,0),K(.76,0,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.26,-50,0,26),K(.42,-30,0,18),K(.76,0,0,0));
+  tr(c,B.Chest,K(0,0,0,0),K(.26,-6,-34,0),K(.42,6,44,0),K(.76,0,0,0));
+  tr(c,B.Spine,K(0,0,0,0),K(.26,-4,-18,0),K(.42,8,22,0),K(.76,0,0,0));
+  tr(c,B.Hips,K(0,0,0,0),K(.26,0,-22,0),K(.42,0,34,0),K(.76,0,0,0));
+  tr(c,B.ThighR,K(0,0,0,0),K(.26,-14,-10,0),K(.42,8,20,0),K(.76,0,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.26,4,-14,0),K(.42,6,20,0),K(.76,0,0,0));
+  hips(c,K(0,0,0,0),K(.26,0,-.07,0),K(.42,0,-.03,0),K(.76,0,0,0));
+
+  c=reg(clip('atk_heavy_overhead',0.94));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.34,-158,0,14),K(.52,-34,0,8),K(.94,0,0,0));
+  tr(c,B.LowerArmL,K(0,0,0,0),K(.34,-54,0,0),K(.52,-8,0,0),K(.94,0,0,0));
+  mirror(c,B.UpperArmL,B.UpperArmR); mirror(c,B.LowerArmL,B.LowerArmR);
+  tr(c,B.Spine,K(0,0,0,0),K(.34,-22,0,0),K(.52,30,0,0),K(.94,0,0,0));
+  tr(c,B.Chest,K(0,0,0,0),K(.34,-16,0,0),K(.52,24,0,0),K(.94,0,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.34,-18,0,0),K(.52,20,0,0),K(.94,0,0,0));
+  tr(c,B.ThighL,K(0,0,0,0),K(.34,-20,0,0),K(.52,26,0,0),K(.94,0,0,0));
+  tr(c,B.ShinL,K(0,0,0,0),K(.52,34,0,0),K(.94,0,0,0));
+  hips(c,K(0,0,0,0),K(.34,0,.04,0),K(.56,0,-.16,0),K(.94,0,0,0));
+
+  c=reg(clip('atk_heavy_uppercut',0.8));
+  tr(c,B.UpperArmR,K(0,0,0,0),K(.24,34,10,-12),K(.4,-118,18,-22),K(.8,0,0,0));
+  tr(c,B.LowerArmR,K(0,0,0,0),K(.24,-40,0,0),K(.4,-74,0,0),K(.8,0,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.24,-40,0,22),K(.4,-58,0,26),K(.8,0,0,0));
+  tr(c,B.Spine,K(0,0,0,0),K(.24,24,-14,0),K(.4,-16,20,0),K(.8,0,0,0));
+  tr(c,B.Chest,K(0,0,0,0),K(.24,16,-20,0),K(.4,-14,26,0),K(.8,0,0,0));
+  tr(c,B.Hips,K(0,0,0,0),K(.24,0,-16,0),K(.4,0,22,0),K(.8,0,0,0));
+  tr(c,B.ThighL,K(0,0,0,0),K(.24,-34,0,0),K(.4,-6,0,0),K(.8,0,0,0));
+  tr(c,B.ShinL,K(0,0,0,0),K(.24,48,0,0),K(.4,8,0,0),K(.8,0,0,0));
+  tr(c,B.ThighR,K(0,0,0,0),K(.24,-30,0,0),K(.4,10,0,0),K(.8,0,0,0));
+  hips(c,K(0,0,0,0),K(.24,0,-.22,0),K(.42,0,.06,0),K(.8,0,0,0));
+
+  c=reg(clip('atk_counter',0.46));
+  tr(c,B.UpperArmR,K(0,-30,20,-20),K(.1,-96,44,-26),K(.2,-80,10,-14),K(.46,0,0,0));
+  tr(c,B.LowerArmR,K(0,-80,0,0),K(.1,-104,0,0),K(.46,0,0,0));
+  tr(c,B.UpperArmL,K(0,-40,0,20),K(.1,-20,0,30),K(.46,0,0,0));
+  tr(c,B.Chest,K(0,0,-24,0),K(.1,6,40,0),K(.46,0,0,0));
+  tr(c,B.Hips,K(0,0,-14,0),K(.1,0,28,0),K(.46,0,0,0));
+  tr(c,B.Root,K(0,0,0,0),K(.1,6,0,0),K(.46,0,0,0));
+
+  c=reg(clip('atk_finisher',0.96));
+  tr(c,B.ThighR,K(0,0,0,0),K(.3,-118,0,0),K(.46,-30,0,0),K(.96,0,0,0));
+  tr(c,B.ShinR,K(0,0,0,0),K(.3,24,0,0),K(.46,4,0,0),K(.96,0,0,0));
+  tr(c,B.FootR,K(0,0,0,0),K(.3,20,0,0),K(.46,-30,0,0),K(.96,0,0,0));
+  tr(c,B.Spine,K(0,0,0,0),K(.3,16,0,0),K(.46,-26,0,0),K(.96,0,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.3,-70,0,30),K(.46,20,0,34),K(.96,0,0,0));
+  mirror(c,B.UpperArmL,B.UpperArmR);
+  tr(c,B.ThighL,K(0,0,0,0),K(.3,10,0,0),K(.46,-14,0,0),K(.96,0,0,0));
+  hips(c,K(0,0,0,0),K(.3,0,.05,0),K(.5,0,-.14,0),K(.96,0,0,0));
+
+  c=reg(clip('atk_grab',0.58));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.16,-74,-12,16),K(.3,-66,-20,12),K(.58,0,0,0));
+  tr(c,B.LowerArmL,K(0,0,0,0),K(.16,-30,0,0),K(.3,-14,0,0),K(.58,0,0,0));
+  mirror(c,B.UpperArmL,B.UpperArmR); mirror(c,B.LowerArmL,B.LowerArmR);
+  tr(c,B.Spine,K(0,0,0,0),K(.16,12,0,0),K(.58,0,0,0));
+
+  c=reg(clip('atk_grab_hold',0.9,{loop:true}));
+  tr(c,B.UpperArmL,K(0,-64,-18,14),K(.45,-60,-20,12),K(.9,-64,-18,14));
+  tr(c,B.LowerArmL,K(0,-20,0,0),K(.9,-20,0,0));
+  mirror(c,B.UpperArmL,B.UpperArmR); mirror(c,B.LowerArmL,B.LowerArmR);
+  tr(c,B.Spine,K(0,10,0,0),K(.45,13,0,0),K(.9,10,0,0));
+
+  c=reg(clip('atk_throw',0.78));
+  tr(c,B.UpperArmL,K(0,-62,-18,14),K(.22,-88,-52,22),K(.4,-54,60,30),K(.78,0,0,0));
+  mirror(c,B.UpperArmL,B.UpperArmR);
+  tr(c,B.Chest,K(0,8,0,0),K(.22,4,-44,0),K(.4,6,52,0),K(.78,0,0,0));
+  tr(c,B.Hips,K(0,0,0,0),K(.22,0,-30,0),K(.4,0,38,0),K(.78,0,0,0));
+  tr(c,B.Spine,K(0,6,0,0),K(.22,-10,-20,0),K(.4,14,24,0),K(.78,0,0,0));
+  hips(c,K(0,0,0,0),K(.22,0,-.1,0),K(.78,0,0,0));
+
+  c=reg(clip('guard_impact',0.24));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.06,16,0,12),K(.24,0,0,0));
+  tr(c,B.UpperArmR,K(0,0,0,0),K(.06,16,0,-12),K(.24,0,0,0));
+  tr(c,B.Spine,K(0,0,0,0),K(.06,-12,0,0),K(.24,0,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.06,-8,0,0),K(.24,0,0,0));
+  hips(c,K(0,0,0,0),K(.06,0,-.04,0),K(.24,0,0,0));
+
+  c=reg(clip('guard_parry',0.32));
+  tr(c,B.UpperArmR,K(0,0,0,0),K(.08,-46,34,-26),K(.18,-30,-20,-10),K(.32,0,0,0));
+  tr(c,B.LowerArmR,K(0,0,0,0),K(.08,-40,0,0),K(.32,0,0,0));
+  tr(c,B.Chest,K(0,0,0,0),K(.08,0,22,0),K(.18,0,-12,0),K(.32,0,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.08,0,14,0),K(.32,0,0,0));
+
+  c=reg(clip('guard_break',0.62));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.12,40,0,66),K(.34,20,0,48),K(.62,0,0,0));
+  mirror(c,B.UpperArmL,B.UpperArmR);
+  tr(c,B.Spine,K(0,0,0,0),K(.12,-30,0,0),K(.34,-18,0,0),K(.62,0,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.12,-26,0,0),K(.62,0,0,0));
+  tr(c,B.ThighL,K(0,0,0,0),K(.12,18,0,0),K(.62,0,0,0));
+  tr(c,B.ThighR,K(0,0,0,0),K(.12,-20,0,0),K(.62,0,0,0));
+  hips(c,K(0,0,0,0),K(.12,0,-.08,0),K(.62,0,0,0));
+})();
+</script>
+
+<script>
+"use strict";
+/* ---- procedural animator ----------------------------------------------
+   Three layers composited each frame, exactly as in the Unity build:
+   locomotion gait, stance (guard / combat idle), and a one-shot action.
+   A spring on top makes hits visibly rock the body. */
+const STANCE={Relaxed:0,Combat:1,Guard:2,Downed:3,Dead:4};
+
+function makeAnimator(rig){
+  const delta=new Array(B.Count).fill(null).map(()=>v3(0,0,0));
+  return {
+    rig, delta, touched:new Array(B.Count).fill(false),
+    phase:0, gait:0, airborne:0, speed:0, turnRate:0,
+    stance:STANCE.Relaxed, combatW:0, guardW:0,
+    action:null, actionT:0, actionSpeed:1, actionW:0, actionTarget:0, fade:12,
+    impulse:v3(), impVel:v3(), seed:Math.random()*100,
+    lookAt:null, lookW:0, hipsOffset:v3(), pivot:0
+  };
+}
+function playAction(a,id,speed=1,fadeIn=0.06){
+  const c=CLIPS[id]; if(!c) return false;
+  a.action=c; a.actionT=0; a.actionSpeed=Math.max(.01,speed);
+  a.actionTarget=1; a.fade=1/Math.max(.01,fadeIn);
+  a.actionW=Math.max(a.actionW,.35);
+  return true;
+}
+function stopAction(a,fadeOut=0.12){ a.actionTarget=0; a.fade=1/Math.max(.01,fadeOut); }
+function addImpulse(a,dir,strength){
+  const m=vlen(dir)||1;
+  a.impVel.x+=dir.x/m*strength; a.impVel.y+=dir.y/m*strength; a.impVel.z+=dir.z/m*strength;
+}
+function resetPose(a){ a.action=null; a.actionW=0; a.actionTarget=0; a.impulse=v3(); a.impVel=v3(); a.phase=0; a.gait=0; }
+
+function addD(a,b,x,y,z){ const d=a.delta[b]; d.x+=x; d.y+=y; d.z+=z; a.touched[b]=true; }
+function blendD(a,b,x,y,z,w){
+  if(w<=0.001) return;
+  const d=a.delta[b]; d.x=lerp(d.x,x,w); d.y=lerp(d.y,y,w); d.z=lerp(d.z,z,w); a.touched[b]=true;
+}
+
+function tickAnimator(a,dt){
+  for(let i=0;i<B.Count;i++){ const d=a.delta[i]; d.x=d.y=d.z=0; a.touched[i]=false; }
+  a.hipsOffset.x=a.hipsOffset.y=a.hipsOffset.z=0;
+
+  const combat=(a.stance===STANCE.Combat||a.stance===STANCE.Guard);
+  const upright=(a.stance!==STANCE.Dead&&a.stance!==STANCE.Downed);
+  a.combatW=damp(a.combatW,(combat&&upright)?1:0,9,dt);
+  a.guardW=damp(a.guardW,(a.stance===STANCE.Guard&&upright)?1:0,14,dt);
+
+  // -- locomotion
+  const runRef=6.0, scale=a.rig.h/1.8;
+  a.gait=damp(a.gait,clamp01(a.speed/runRef),12,dt);
+  const stride=Math.max(.2,.92*scale);
+  const ground=a.gait*(1-a.airborne);
+  if(a.speed>.05) a.phase+=Math.PI*(a.speed/stride)*dt;
+  else a.phase=moveTowardAngle(a.phase,0,8*dt);
+  const s=Math.sin(a.phase), co=Math.cos(a.phase);
+  const swing=42*ground;
+  addD(a,B.ThighL,-s*swing,0,0); addD(a,B.ThighR,s*swing,0,0);
+  addD(a,B.ShinL,Math.max(0,Math.sin(a.phase-.7))*swing*1.35,0,0);
+  addD(a,B.ShinR,Math.max(0,Math.sin(a.phase+Math.PI-.7))*swing*1.35,0,0);
+  addD(a,B.FootL,s*swing*.35,0,0); addD(a,B.FootR,-s*swing*.35,0,0);
+  const armGait=ground*(1-a.guardW*.85), arm=32*armGait;
+  addD(a,B.UpperArmL,s*arm,0,0); addD(a,B.UpperArmR,-s*arm,0,0);
+  addD(a,B.LowerArmL,-Math.abs(s)*arm*.45-armGait*10,0,0);
+  addD(a,B.LowerArmR,-Math.abs(s)*arm*.45-armGait*10,0,0);
+  addD(a,B.Hips,0,s*5.5*ground,co*2.5*ground);
+  addD(a,B.Chest,ground*5,-s*7*ground,0);
+  addD(a,B.Spine,ground*4,0,0);
+  a.hipsOffset.y+=-Math.abs(co)*.05*ground*scale;
+
+  const idle=(1-a.gait)*(1-a.airborne);
+  if(idle>.01){
+    const breath=Math.sin(now*1.25+a.seed);
+    addD(a,B.Chest,breath*1.4*idle,0,0);
+    addD(a,B.Head,breath*-.8*idle,Math.sin(now*.4+a.seed)*2.5*idle,0);
+    a.hipsOffset.y+=breath*.006*idle*scale;
+  }
+  const lean=clamp(-a.turnRate*.035,-11,11)*a.gait;
+  addD(a,B.Root,a.gait*5.5*(1-a.airborne),0,lean);
+
+  // -- stance
+  if(a.combatW>.01){
+    const w=a.combatW;
+    blendD(a,B.Hips,0,16,0,w*.8);
+    blendD(a,B.Chest,4,-12,0,w);
+    blendD(a,B.Head,3,10,0,w*.7);
+    blendD(a,B.UpperArmL,-40,0,24,w); blendD(a,B.LowerArmL,-78,0,-10,w);
+    blendD(a,B.UpperArmR,-30,0,-20,w); blendD(a,B.LowerArmR,-66,0,8,w);
+    a.hipsOffset.y-=.045*w*scale;
+  }
+  if(a.guardW>.01){
+    const w=a.guardW;
+    blendD(a,B.UpperArmL,-62,0,30,w); blendD(a,B.LowerArmL,-104,0,-18,w);
+    blendD(a,B.UpperArmR,-62,0,-30,w); blendD(a,B.LowerArmR,-104,0,18,w);
+    blendD(a,B.Chest,9,0,0,w); blendD(a,B.Head,7,0,0,w);
+    a.hipsOffset.y-=.035*w*scale;
+  }
+
+  // -- action layer
+  a.actionW += Math.sign(a.actionTarget-a.actionW)*Math.min(Math.abs(a.actionTarget-a.actionW), a.fade*dt);
+  a.pivot=0;
+  if(a.action){
+    a.actionT+=dt*a.actionSpeed;
+    if(!a.action.loop && a.actionT>=a.action.dur && !a.action.hold && a.actionTarget>0) stopAction(a);
+    if(a.actionW<=.001){ if(a.actionTarget<=0) a.action=null; }
+    else {
+      const acc={x:0,y:0,z:0};
+      a.pivot=sampleClip(a.action,a.actionT,a.actionW,a.delta,a.touched,acc);
+      a.hipsOffset.x+=acc.x*scale; a.hipsOffset.y+=acc.y*scale;
+    }
+  }
+
+  // -- impulse spring
+  const stiff=130, damping=15;
+  a.impVel.x+=(-stiff*a.impulse.x - damping*a.impVel.x)*dt;
+  a.impVel.y+=(-stiff*a.impulse.y - damping*a.impVel.y)*dt;
+  a.impVel.z+=(-stiff*a.impulse.z - damping*a.impVel.z)*dt;
+  a.impulse.x+=a.impVel.x*dt; a.impulse.y+=a.impVel.y*dt; a.impulse.z+=a.impVel.z*dt;
+  const im=a.impulse;
+  if(Math.abs(im.x)+Math.abs(im.z)>1e-3){
+    addD(a,B.Spine,-im.z*14,im.x*9,im.x*7);
+    addD(a,B.Chest,-im.z*10,im.x*12,im.x*8);
+    addD(a,B.Head,-im.z*16,im.x*14,im.x*10);
+  }
+
+  // -- head look
+  a.lookW=damp(a.lookW,(a.lookAt&&upright)?1:0,8,dt);
+}
+function actionFinished(a){ return !a.action || a.actionT>=a.action.dur; }
+
+/* ---- audio (ported from ProceduralAudio) ------------------------------- */
+const Audio_={ ctx:null, buffers:{}, master:null, muted:false, last:{} };
+function audioInit(){
+  if(Audio_.ctx) return;
+  const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+  Audio_.ctx=new AC();
+  Audio_.master=Audio_.ctx.createGain(); Audio_.master.gain.value=.55;
+  Audio_.master.connect(Audio_.ctx.destination);
+  buildSounds();
+}
+function synth(name,dur,fn){
+  const ctxA=Audio_.ctx, sr=ctxA.sampleRate, n=Math.max(1,(sr*dur)|0);
+  const buf=ctxA.createBuffer(1,n,sr), d=buf.getChannelData(0);
+  let lp=0;
+  const noise=()=>Math.random()*2-1;
+  const lpn=(k)=>{ lp+=(noise()-lp)*clamp(k,.005,1); return lp; };
+  for(let i=0;i<n;i++){ d[i]=clamp(fn(i/sr,dur,noise,lpn),-1,1); }
+  const fade=(sr*0.002)|0;
+  for(let i=0;i<fade;i++){ const k=i/fade; d[i]*=k; d[n-1-i]*=k; }
+  Audio_.buffers[name]=buf;
+}
+const dcy=(t,r)=>Math.exp(-r*t);
+function buildSounds(){
+  synth('punch',.16,(t,d,nz)=> nz()*dcy(t,22)*.55 + Math.sin(TAU*92*t)*dcy(t,14)*.7);
+  synth('kick',.22,(t,d,nz,lp)=> lp(.35)*dcy(t,16)*.5 + Math.sin(TAU*lerp(74,48,t/d)*t)*dcy(t,10)*.85);
+  synth('heavy',.42,(t,d,nz)=> nz()*dcy(t,40)*.5 + Math.sin(TAU*lerp(62,34,t/d)*t)*dcy(t,7) + Math.sin(TAU*41*t)*dcy(t,5)*.5);
+  synth('block',.14,(t,d,nz,lp)=> lp(.15)*dcy(t,30)*.65 + Math.sin(TAU*165*t)*dcy(t,26)*.35);
+  synth('parry',.5,(t)=> (Math.sin(TAU*1180*t)*dcy(t,7)+Math.sin(TAU*1847*t)*dcy(t,9)*.7+Math.sin(TAU*2593*t)*dcy(t,12)*.45)*.36);
+  synth('whoosh',.26,(t,d,nz,lp)=>{ const u=t/d, e=Math.sin(u*Math.PI); return lp(lerp(.06,.5,e)*1.2)*e*.5; });
+  synth('whooshHeavy',.3,(t,d,nz,lp)=>{ const u=t/d, e=Math.sin(u*Math.PI); return lp(lerp(.05,.35,e)*.7)*e*.6; });
+  synth('grunt',.3,(t,d,nz,lp)=>{ const f=152*lerp(1.1,.75,t/d);
+    return (Math.sin(TAU*f*t)*.6+Math.sin(TAU*f*2*t)*.25+lp(.2)*.3)*dcy(t,9)*.7; });
+  synth('death',.75,(t,d,nz,lp)=>{ const f=140*lerp(1,.5,Math.sqrt(t/d));
+    return (Math.sin(TAU*f*t)*.55+Math.sin(TAU*f*1.5*t)*.2+lp(.14)*.35)*dcy(t,3.6)*.6; });
+  synth('bodyfall',.34,(t,d,nz,lp)=> Math.sin(TAU*lerp(70,38,t/d)*t)*dcy(t,11)*.9 + lp(.25)*dcy(t,18)*.4);
+  synth('land',.2,(t,d,nz,lp)=> Math.sin(TAU*88*t)*dcy(t,18)*.7 + lp(.4)*dcy(t,30)*.45);
+  synth('guardbreak',.6,(t,d,nz)=> nz()*dcy(t,6)*.4 + (Math.sin(TAU*620*t)+Math.sin(TAU*941*t))*dcy(t,5)*.22);
+  synth('step',.11,(t,d,nz,lp)=> lp(.3)*dcy(t,42)*.4);
+  synth('chime',.55,(t,d)=> (Math.sin(TAU*784*t)*dcy(t,6)+Math.sin(TAU*1175*Math.max(0,t-.09))*dcy(Math.max(0,t-.09),6))*.28);
+  synth('ui',.09,(t)=> Math.sin(TAU*880*t)*dcy(t,36)*.35);
+}
+function sfx(name,pos,vol=1,jitter=.08){
+  if(!Audio_.ctx||Audio_.muted) return;
+  const buf=Audio_.buffers[name]; if(!buf) return;
+  const t=Audio_.ctx.currentTime;
+  if(Audio_.last[name] && t-Audio_.last[name]<0.035) return;
+  Audio_.last[name]=t;
+  const src=Audio_.ctx.createBufferSource(); src.buffer=buf;
+  src.playbackRate.value = jitter>0 ? 1+rand(-jitter,jitter) : 1;
+  const g=Audio_.ctx.createGain();
+  let v=vol;
+  if(pos){ const dist=flatDist(pos,cam.pos); v*=clamp01(1-(dist-3)/40); }
+  g.gain.value=clamp01(v);
+  src.connect(g); g.connect(Audio_.master); src.start();
+}
+
+/* ---- particles --------------------------------------------------------- */
+const parts=[];
+function spark(pos,dir,count,speed,color,life,size,gravity=9){
+  count=Math.max(3,Math.round(count*Quality.fx));
+  for(let i=0;i<count;i++){
+    const spread=.55;
+    const d={x:dir.x+rand(-spread,spread), y:dir.y+rand(-spread*.7,spread), z:dir.z+rand(-spread,spread)};
+    const m=vlen(d)||1, sp=speed*rand(.45,1);
+    parts.push({p:{...pos}, v:{x:d.x/m*sp, y:d.y/m*sp+rand(.4,2.4), z:d.z/m*sp},
+      life:life*rand(.7,1), age:0, size:size*rand(.6,1.1), c:color, g:gravity, streak:true});
+  }
+}
+function dust(pos,count,radius,life,size,color){
+  count=Math.max(2,Math.round(count*Quality.fx));
+  for(let i=0;i<count;i++){
+    const a=Math.random()*TAU, r=Math.random()*radius;
+    parts.push({p:{x:pos.x+Math.cos(a)*r, y:pos.y+rand(0,.25), z:pos.z+Math.sin(a)*r},
+      v:{x:Math.cos(a)*rand(.4,1.6), y:rand(.3,1.1), z:Math.sin(a)*rand(.4,1.6)},
+      life:life*rand(.7,1), age:0, size:size*rand(.7,1.3), c:color, g:-.2, streak:false, grow:1.7});
+  }
+}
+const rings=[];
+function ring(pos,color,r0,r1,life){ rings.push({p:{...pos}, c:color, r0, r1, life, age:0}); }
+
+function tickFX(dt){
+  for(let i=parts.length-1;i>=0;i--){
+    const p=parts[i]; p.age+=dt;
+    if(p.age>=p.life){ parts.splice(i,1); continue; }
+    p.v.y-=p.g*dt;
+    p.p.x+=p.v.x*dt; p.p.y+=p.v.y*dt; p.p.z+=p.v.z*dt;
+    if(p.p.y<0.02){ p.p.y=0.02; p.v.y*=-0.28; p.v.x*=.6; p.v.z*=.6; }
+  }
+  for(let i=rings.length-1;i>=0;i--){ const r=rings[i]; r.age+=dt; if(r.age>=r.life) rings.splice(i,1); }
+}
+function drawFX(){
+  for(const p of parts){
+    const u=p.age/p.life;
+    const c=toCam(p.p); if(c.z<=NEAR) continue;
+    const s=projectCam(c);
+    const alpha=(1-u)*(1-fogAmount(c.z));
+    const sz=Math.max(.6, p.size*(p.grow?lerp(.5,p.grow,u):(1-u*.85))*cam.focal/c.z);
+    const col=css(p.c,alpha);
+    if(p.streak){
+      const tail={x:p.p.x-p.v.x*.03, y:p.p.y-p.v.y*.03, z:p.p.z-p.v.z*.03};
+      const tc=toCam(tail); if(tc.z<=NEAR) continue;
+      const ts=projectCam(tc);
+      push(c.z,()=>{ ctx.strokeStyle=col; ctx.lineWidth=sz; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(ts.x,ts.y); ctx.lineTo(s.x,s.y); ctx.stroke(); });
+    } else {
+      push(c.z,()=>{ ctx.fillStyle=col; ctx.beginPath(); ctx.arc(s.x,s.y,sz,0,TAU); ctx.fill(); });
+    }
+  }
+  for(const r of rings){
+    const u=r.age/r.life;
+    const c=toCam(r.p); if(c.z<=NEAR) continue;
+    const s=projectCam(c);
+    const rad=lerp(r.r0,r.r1,Math.sqrt(u))*cam.focal/c.z;
+    const col=css(r.c,(1-u)*.7*(1-fogAmount(c.z)));
+    push(c.z-.01,()=>{ ctx.strokeStyle=col; ctx.lineWidth=Math.max(1,4*(1-u));
+      ctx.beginPath(); ctx.ellipse(s.x,s.y,rad,rad*.36,0,0,TAU); ctx.stroke(); });
+  }
+}
+</script>
+
+<script>
+"use strict";
+/* ---- move data (ported from MoveSet / EnemyMoves) ---------------------- */
+const IMPACT={Light:0,Medium:1,Heavy:2,Knockdown:3,Launch:4};
+const KNOCK=[1.4,3.2,6.5,8.5,6.0];
+const STAG=[0.22,0.45,0.7,2.1,1.4];
+
+function mv(o){
+  return Object.assign({
+    id:'x', kind:'light', clip:'atk_light_jab', tag:'punch',
+    windup:.12, active:.09, recovery:.22,
+    dmg:10, impact:IMPACT.Light, stamina:8, knock:1, unblockable:false,
+    chip:.12, guardDrain:14,
+    ox:0, oy:1.15, oz:.85, radius:.62, capsule:0, maxTargets:3,
+    lunge:.85, track:1.6, comboAt:.42,
+    nextL:null, nextH:null,
+    hitStop:.055, shake:.16, kick:0, slowmo:1, slowTime:.18
+  },o);
+}
+const dur=m=>m.windup+m.active+m.recovery;
+const activeStart=m=>m.windup;
+const activeEnd=m=>m.windup+m.active;
+
+const PLAYER_MOVES={
+  light_1:mv({id:'light_1',kind:'light',clip:'atk_light_jab',tag:'punch',windup:.09,active:.07,recovery:.19,
+    dmg:9,impact:IMPACT.Light,stamina:5,ox:.18,oy:1.28,oz:.72,radius:.52,lunge:.55,comboAt:.38,
+    nextL:'light_2',nextH:'heavy_smash',hitStop:.045,shake:.11,kick:.05}),
+  light_2:mv({id:'light_2',kind:'light',clip:'atk_light_cross',tag:'punch',windup:.1,active:.07,recovery:.2,
+    dmg:11,impact:IMPACT.Light,stamina:5,ox:-.18,oy:1.26,oz:.78,radius:.55,lunge:.62,comboAt:.4,
+    nextL:'light_3',nextH:'heavy_smash',hitStop:.05,shake:.13,kick:.06}),
+  light_3:mv({id:'light_3',kind:'light',clip:'atk_light_kick',tag:'kick',windup:.13,active:.09,recovery:.26,
+    dmg:15,impact:IMPACT.Medium,stamina:8,capsule:.7,oy:1.0,oz:.7,radius:.58,lunge:.75,knock:1.3,comboAt:.44,
+    nextH:'heavy_launcher',hitStop:.07,shake:.2,kick:.1}),
+  heavy_1:mv({id:'heavy_1',kind:'heavy',clip:'atk_heavy_hook',tag:'heavy',windup:.26,active:.11,recovery:.38,
+    dmg:30,impact:IMPACT.Heavy,stamina:20,knock:1.4,guardDrain:28,chip:.18,capsule:.85,oy:1.22,oz:.8,radius:.66,
+    lunge:1.05,maxTargets:4,comboAt:.55,nextH:'heavy_2',hitStop:.1,shake:.34,kick:.22}),
+  heavy_2:mv({id:'heavy_2',kind:'heavy',clip:'atk_heavy_overhead',tag:'heavy',windup:.34,active:.12,recovery:.46,
+    dmg:42,impact:IMPACT.Knockdown,stamina:26,knock:1.6,guardDrain:38,chip:.22,capsule:.9,oy:1.1,oz:.85,radius:.72,
+    lunge:1.2,maxTargets:4,comboAt:.7,hitStop:.14,shake:.46,kick:.34,slowmo:.45,slowTime:.16}),
+  heavy_smash:mv({id:'heavy_smash',kind:'heavy',clip:'atk_heavy_hook',tag:'heavy',windup:.2,active:.1,recovery:.34,
+    dmg:34,impact:IMPACT.Heavy,stamina:22,knock:1.5,guardDrain:30,chip:.2,capsule:.85,oy:1.2,oz:.82,radius:.68,
+    lunge:1.15,maxTargets:4,comboAt:.68,hitStop:.11,shake:.38,kick:.26}),
+  heavy_launcher:mv({id:'heavy_launcher',kind:'heavy',clip:'atk_heavy_uppercut',tag:'heavy',windup:.24,active:.12,recovery:.42,
+    dmg:46,impact:IMPACT.Launch,stamina:28,knock:1.2,guardDrain:40,chip:.22,oy:1.15,oz:.7,radius:.75,
+    lunge:.8,maxTargets:3,comboAt:.75,hitStop:.15,shake:.5,kick:.3,slowmo:.4,slowTime:.22}),
+  counter:mv({id:'counter',kind:'counter',clip:'atk_counter',tag:'heavy',windup:.08,active:.1,recovery:.26,
+    dmg:38,impact:IMPACT.Heavy,stamina:0,unblockable:true,knock:1.5,oy:1.2,oz:.8,radius:.7,
+    lunge:1.3,track:2.4,maxTargets:1,comboAt:.6,nextL:'light_2',hitStop:.13,shake:.4,kick:.28,slowmo:.35,slowTime:.24}),
+  finisher:mv({id:'finisher',kind:'finisher',clip:'atk_finisher',tag:'finisher',windup:.3,active:.14,recovery:.5,
+    dmg:90,impact:IMPACT.Knockdown,stamina:15,unblockable:true,knock:.6,oy:.55,oz:.85,radius:.85,
+    lunge:.5,maxTargets:1,comboAt:1,hitStop:.2,shake:.65,kick:.4,slowmo:.3,slowTime:.5}),
+  grab:mv({id:'grab',kind:'grab',clip:'atk_grab',tag:'grab',windup:.16,active:.12,recovery:.3,
+    dmg:0,stamina:12,oy:1.1,oz:.72,radius:.6,lunge:.6,maxTargets:1,comboAt:1,hitStop:.04,shake:.08}),
+  throw:mv({id:'throw',kind:'throw',clip:'atk_throw',tag:'throw',windup:.22,active:.1,recovery:.42,
+    dmg:34,impact:IMPACT.Knockdown,stamina:10,unblockable:true,knock:2.2,oy:1.1,oz:.75,radius:.7,
+    lunge:0,maxTargets:1,comboAt:1,hitStop:.13,shake:.45,kick:.3,slowmo:.5,slowTime:.2})
+};
+const ENEMY_MOVES={
+  e_jab:mv({id:'e_jab',clip:'atk_light_jab',tag:'punch',windup:.26,active:.08,recovery:.34,dmg:9,
+    stamina:6,ox:.15,oy:1.25,oz:.7,radius:.5,lunge:.7,track:.9,maxTargets:1,comboAt:.55,nextL:'e_cross',hitStop:.04,shake:.14}),
+  e_cross:mv({id:'e_cross',clip:'atk_light_cross',tag:'punch',windup:.28,active:.08,recovery:.44,dmg:12,
+    impact:IMPACT.Medium,stamina:8,ox:-.15,oy:1.24,oz:.74,radius:.52,lunge:.8,track:1,maxTargets:1,comboAt:1,hitStop:.05,shake:.18}),
+  e_swing:mv({id:'e_swing',kind:'heavy',clip:'atk_heavy_hook',tag:'heavy',windup:.52,active:.11,recovery:.55,dmg:22,
+    impact:IMPACT.Heavy,stamina:18,knock:1.2,guardDrain:24,capsule:.7,oy:1.2,oz:.78,radius:.62,lunge:1,track:1.2,
+    maxTargets:2,comboAt:1,hitStop:.08,shake:.3,kick:.16}),
+  e_kick:mv({id:'e_kick',kind:'heavy',clip:'atk_light_kick',tag:'kick',windup:.4,active:.09,recovery:.48,dmg:16,
+    impact:IMPACT.Medium,stamina:12,knock:1.5,capsule:.6,oy:1,oz:.72,radius:.55,lunge:.9,track:1.1,maxTargets:1,
+    comboAt:1,hitStop:.06,shake:.24}),
+  b_hook:mv({id:'b_hook',kind:'heavy',clip:'atk_heavy_hook',tag:'heavy',windup:.62,active:.13,recovery:.68,dmg:30,
+    impact:IMPACT.Heavy,stamina:16,knock:1.7,guardDrain:40,chip:.2,capsule:.9,oy:1.3,oz:.9,radius:.78,lunge:1.1,
+    track:1.4,maxTargets:3,comboAt:.72,nextH:'b_slam',hitStop:.11,shake:.42,kick:.26}),
+  b_slam:mv({id:'b_slam',kind:'heavy',clip:'atk_heavy_overhead',tag:'heavy',windup:.86,active:.15,recovery:.82,dmg:44,
+    impact:IMPACT.Knockdown,stamina:24,unblockable:true,knock:1.9,capsule:.8,oy:.9,oz:.95,radius:.9,lunge:1.3,
+    track:1.6,maxTargets:4,comboAt:1,hitStop:.16,shake:.6,kick:.42}),
+  b_charge:mv({id:'b_charge',kind:'heavy',clip:'atk_heavy_uppercut',tag:'heavy',windup:.7,active:.2,recovery:.75,dmg:36,
+    impact:IMPACT.Launch,stamina:22,knock:1.4,guardDrain:46,oy:1.15,oz:.85,radius:.85,lunge:4.2,track:3.5,
+    maxTargets:3,comboAt:1,hitStop:.15,shake:.55,kick:.34}),
+  r_jab:mv({id:'r_jab',clip:'atk_light_jab',tag:'punch',windup:.16,active:.06,recovery:.24,dmg:6,stamina:4,
+    ox:.14,oy:1.2,oz:.66,radius:.46,lunge:1,track:1.6,maxTargets:1,comboAt:.5,nextL:'r_hook',hitStop:.03,shake:.1}),
+  r_hook:mv({id:'r_hook',clip:'atk_light_cross',tag:'punch',windup:.18,active:.06,recovery:.3,dmg:8,stamina:5,
+    ox:-.14,oy:1.2,oz:.68,radius:.46,lunge:.9,track:1.4,maxTargets:1,comboAt:1,hitStop:.035,shake:.12}),
+  r_kick:mv({id:'r_kick',kind:'heavy',clip:'atk_light_kick',tag:'kick',windup:.3,active:.08,recovery:.4,dmg:14,
+    impact:IMPACT.Medium,stamina:10,knock:1.6,capsule:.6,oy:1,oz:.7,radius:.52,lunge:1.6,track:2.2,maxTargets:1,
+    comboAt:1,hitStop:.06,shake:.22})
+};
+
+// ---- new fighters, ported from EnemyMoves ------------------------------
+Object.assign(ENEMY_MOVES,{
+  el_jab:mv({id:'el_jab',kind:'light',clip:'atk_light_jab',tag:'punch',windup:.2,active:.06,recovery:.22,
+    dmg:9,impact:IMPACT.Light,stamina:5,ox:.14,oy:1.24,oz:.7,radius:.48,lunge:1.1,track:1.6,maxTargets:1,
+    comboAt:.48,nextL:'el_cross',hitStop:.035,shake:.12}),
+  el_cross:mv({id:'el_cross',kind:'light',clip:'atk_light_cross',tag:'punch',windup:.2,active:.06,recovery:.26,
+    dmg:11,impact:IMPACT.Light,stamina:6,ox:-.14,oy:1.24,oz:.72,radius:.48,lunge:1,track:1.5,maxTargets:1,
+    comboAt:.5,nextL:'el_spin',hitStop:.04,shake:.14}),
+  el_spin:mv({id:'el_spin',kind:'heavy',clip:'atk_light_kick',tag:'kick',windup:.34,active:.09,recovery:.42,
+    dmg:20,impact:IMPACT.Heavy,stamina:12,knock:1.7,capsule:.7,ox:0,oy:1.05,oz:.72,radius:.56,
+    lunge:1.5,track:2,maxTargets:2,comboAt:1,hitStop:.075,shake:.26}),
+  el_hook:mv({id:'el_hook',kind:'heavy',clip:'atk_heavy_hook',tag:'heavy',windup:.46,active:.1,recovery:.5,
+    dmg:26,impact:IMPACT.Heavy,stamina:16,knock:1.9,ox:.16,oy:1.2,oz:.78,radius:.62,
+    lunge:1.7,track:1.8,maxTargets:1,comboAt:1,hitStop:.09,shake:.3}),
+
+  mb_swipe:mv({id:'mb_swipe',kind:'heavy',clip:'atk_heavy_hook',tag:'heavy',windup:.5,active:.12,recovery:.52,
+    dmg:24,impact:IMPACT.Heavy,stamina:14,knock:2,capsule:1.5,ox:0,oy:1.25,oz:.8,radius:.72,
+    lunge:1.5,track:1.4,maxTargets:3,comboAt:.62,nextH:'mb_slam',hitStop:.095,shake:.34}),
+  mb_slam:mv({id:'mb_slam',kind:'heavy',clip:'atk_heavy_overhead',tag:'heavy',windup:.86,active:.14,recovery:.75,
+    dmg:44,impact:IMPACT.Knockdown,stamina:24,knock:2.6,unblockable:true,ox:0,oy:.7,oz:.9,radius:1.05,
+    lunge:1.3,track:1.1,maxTargets:3,comboAt:1,hitStop:.13,shake:.55,kick:.4}),
+  mb_charge:mv({id:'mb_charge',kind:'heavy',clip:'atk_heavy_uppercut',tag:'heavy',windup:.72,active:.22,recovery:.7,
+    dmg:32,impact:IMPACT.Knockdown,stamina:20,knock:2.4,capsule:1,ox:0,oy:1.1,oz:.85,radius:.7,
+    lunge:5.2,track:.8,maxTargets:3,comboAt:1,hitStop:.11,shake:.42,kick:.3}),
+
+  fb_jab:mv({id:'fb_jab',kind:'light',clip:'atk_light_jab',tag:'punch',windup:.22,active:.06,recovery:.2,
+    dmg:12,impact:IMPACT.Light,stamina:5,ox:.15,oy:1.3,oz:.74,radius:.5,lunge:1.2,track:1.7,maxTargets:1,
+    comboAt:.46,nextL:'fb_cross',hitStop:.04,shake:.14}),
+  fb_cross:mv({id:'fb_cross',kind:'light',clip:'atk_light_cross',tag:'punch',windup:.2,active:.06,recovery:.24,
+    dmg:14,impact:IMPACT.Medium,stamina:6,ox:-.15,oy:1.3,oz:.76,radius:.5,lunge:1.1,track:1.5,maxTargets:1,
+    comboAt:.48,nextL:'fb_uppercut',hitStop:.05,shake:.18}),
+  fb_uppercut:mv({id:'fb_uppercut',kind:'heavy',clip:'atk_heavy_uppercut',tag:'heavy',windup:.4,active:.1,recovery:.46,
+    dmg:28,impact:IMPACT.Launch,stamina:16,knock:2.1,ox:0,oy:1.15,oz:.72,radius:.62,
+    lunge:1.4,track:1.6,maxTargets:1,comboAt:1,hitStop:.1,shake:.34,kick:.26}),
+  fb_smash:mv({id:'fb_smash',kind:'heavy',clip:'atk_heavy_overhead',tag:'heavy',windup:.78,active:.13,recovery:.66,
+    dmg:46,impact:IMPACT.Knockdown,stamina:24,knock:2.5,unblockable:true,ox:0,oy:.75,oz:.86,radius:1,
+    lunge:1.6,track:1.2,maxTargets:3,comboAt:1,hitStop:.13,shake:.6,kick:.45}),
+  fb_sweep:mv({id:'fb_sweep',kind:'heavy',clip:'atk_light_kick',tag:'kick',windup:.44,active:.14,recovery:.5,
+    dmg:22,impact:IMPACT.Knockdown,stamina:14,knock:1.5,capsule:1.8,ox:0,oy:.45,oz:.75,radius:.6,
+    lunge:2.2,track:1.8,maxTargets:3,comboAt:1,hitStop:.09,shake:.34})
+});
+
+const MOVES=Object.assign({},PLAYER_MOVES,ENEMY_MOVES);
+
+/* ---- character styles (ported from CharacterStyle) --------------------- */
+function style(o){ return o; }
+const STYLES={
+  player:{height:1.84,build:1.26,skin:hexRGB('#C08A5E'),torso:hexRGB('#C08A5E'),legs:hexRGB('#1A2129'),
+    shoes:hexRGB('#14161A'),hair:hexRGB('#24201E'),accent:hexRGB('#46C2C8'),
+    shirtless:true, tattoo:hexRGB('#14212B')},
+  thug:{height:1.78,build:1.05,skin:hexRGB('#B98A63'),torso:hexRGB('#59323A'),legs:hexRGB('#2B2A31'),
+    shoes:hexRGB('#1A1A1D'),hair:hexRGB('#1B1614'),accent:hexRGB('#D8563F')},
+  bruiser:{height:2.02,build:1.38,skin:hexRGB('#A97B58'),torso:hexRGB('#3E3326'),legs:hexRGB('#262119'),
+    shoes:hexRGB('#17140F'),hair:hexRGB('#15110E'),accent:hexRGB('#E0913A')},
+  runner:{height:1.72,build:0.85,skin:hexRGB('#C08F6A'),torso:hexRGB('#2C3F35'),legs:hexRGB('#1D2622'),
+    shoes:hexRGB('#121614'),hair:hexRGB('#2A211C'),accent:hexRGB('#7FD858')},
+  defender:{height:1.86,build:1.18,skin:hexRGB('#A87A55'),torso:hexRGB('#2E3A44'),legs:hexRGB('#22282E'),
+    shoes:hexRGB('#14171A'),hair:hexRGB('#1A1614'),accent:hexRGB('#8FB4CC')},
+  elite:{height:1.88,build:1.08,skin:hexRGB('#B4835C'),torso:hexRGB('#2A2233'),legs:hexRGB('#1B1722'),
+    shoes:hexRGB('#121016'),hair:hexRGB('#21191F'),accent:hexRGB('#C77DFF')},
+  miniboss:{height:2.16,build:1.62,skin:hexRGB('#9E7048'),torso:hexRGB('#9E7048'),legs:hexRGB('#2A2118'),
+    shoes:hexRGB('#15110C'),hair:hexRGB('#120E0A'),accent:hexRGB('#E0913A'),
+    shirtless:true, tattoo:hexRGB('#2A1408')},
+  finalboss:{height:2.02,build:1.34,skin:hexRGB('#C29060'),torso:hexRGB('#C29060'),legs:hexRGB('#15161B'),
+    shoes:hexRGB('#0E0F12'),hair:hexRGB('#E8E2D6'),accent:hexRGB('#FF7A3D'),
+    shirtless:true, tattoo:hexRGB('#3A1206')}
+};
+
+/* ---- archetypes (ported from EnemyArchetype) --------------------------- */
+const ARCHETYPES={
+  brawler:{ name:'Thug', style:STYLES.thug, hp:90, stam:70, poise:28, poiseRegen:9, resist:0,
+    walk:2.0, chase:4.1, strafe:2.2, turn:460*DEG, sight:17, sightAngle:72*DEG, react:.32,
+    range:2.5, attackRange:2.1, cd:1.5, cdVar:.45, block:.3, retreat:.25, flank:.35,
+    moves:['e_jab','e_cross','e_swing','e_kick'], opener:'e_jab' },
+  bruiser:{ name:'Bruiser', style:STYLES.bruiser, hp:240, stam:120, poise:95, poiseRegen:16, resist:.18,
+    walk:1.6, chase:2.9, strafe:1.3, turn:190*DEG, sight:15, sightAngle:62*DEG, react:.6,
+    range:2.9, attackRange:2.7, cd:2.5, cdVar:.6, block:.12, retreat:.02, flank:.05,
+    moves:['b_hook','b_slam','b_charge'], opener:'b_hook' },
+  runner:{ name:'Runner', style:STYLES.runner, hp:55, stam:90, poise:10, poiseRegen:7, resist:0,
+    walk:2.6, chase:6.1, strafe:3.6, turn:720*DEG, sight:20, sightAngle:85*DEG, react:.16,
+    range:3.6, attackRange:1.9, cd:1.05, cdVar:.3, block:.05, retreat:.75, flank:.9,
+    moves:['r_jab','r_hook','r_kick'], opener:'r_jab' }
+};
+// ---- new archetypes, ported from EnemyArchetype ------------------------
+Object.assign(ARCHETYPES,{
+  defender:{ name:'Defender', style:STYLES.defender, hp:120, stam:140, poise:42, poiseRegen:12, resist:.1,
+    walk:1.9, chase:3.4, strafe:2.4, turn:420*DEG, sight:17, sightAngle:78*DEG, react:.26,
+    range:2.6, attackRange:2.2, cd:2.1, cdVar:.5, block:.72, retreat:.45, flank:.15,
+    moves:['e_jab','e_cross','e_swing'], opener:'e_jab', xp:45, money:30 },
+  elite:{ name:'Elite', style:STYLES.elite, hp:165, stam:130, poise:58, poiseRegen:15, resist:.12,
+    walk:2.4, chase:5.2, strafe:3.2, turn:620*DEG, sight:21, sightAngle:88*DEG, react:.18,
+    range:2.7, attackRange:2.4, cd:1.15, cdVar:.35, block:.4, retreat:.35, flank:.6, dmgMul:1.15,
+    moves:['el_jab','el_cross','el_spin','el_hook'], opener:'el_jab', xp:110, money:70 },
+  miniboss:{ name:'Bulldozer', style:STYLES.miniboss, hp:420, stam:200, poise:190, poiseRegen:26, resist:.24,
+    walk:1.9, chase:4.1, strafe:1.6, turn:240*DEG, sight:24, sightAngle:80*DEG, react:.3,
+    range:3.1, attackRange:2.9, cd:1.9, cdVar:.45, block:.08, retreat:0, flank:0, dmgMul:1.3,
+    moves:['mb_swipe','mb_slam','mb_charge'], opener:'mb_swipe', xp:320, money:220, boss:true },
+  finalboss:{ name:'Kaskade', style:STYLES.finalboss, hp:680, stam:240, poise:150, poiseRegen:30, resist:.2,
+    walk:2.3, chase:5, strafe:3, turn:480*DEG, sight:30, sightAngle:110*DEG, react:.16,
+    range:3, attackRange:2.6, cd:1.5, cdVar:.4, block:.3, retreat:.2, flank:.35, dmgMul:1.35,
+    moves:['fb_jab','fb_cross','fb_uppercut','fb_smash','fb_sweep'], opener:'fb_jab',
+    xp:900, money:600, boss:true }
+});
+
+
+
+/* ---- combat director (ported from CombatDirector) ---------------------- */
+const Director={
+  participants:[], slots:new Map(), tokens:[], slotCount:8, slotRadius:3.1,
+  maxAttackers:2, spacing:.45, tokenTimeout:3.5, nextToken:0, nextRefresh:0, focus:null,
+  register(p){ if(!this.participants.includes(p)){ this.participants.push(p); this.nextRefresh=0; } },
+  unregister(p){
+    const i=this.participants.indexOf(p); if(i>=0) this.participants.splice(i,1);
+    this.release(p); this.slots.delete(p);
+  },
+  request(p){
+    if(!p.alive) return false;
+    if(this.tokens.some(t=>t.h===p)) return true;
+    if(this.tokens.length>=this.maxAttackers) return false;
+    if(now<this.nextToken) return false;
+    this.tokens.push({h:p, exp:now+this.tokenTimeout});
+    this.nextToken=now+this.spacing;
+    return true;
+  },
+  release(p){ const i=this.tokens.findIndex(t=>t.h===p); if(i>=0) this.tokens.splice(i,1); },
+  slotPosition(p,radius){
+    const f=this.focus; if(!f) return p.pos;
+    const r=radius||this.slotRadius;
+    const slot=this.slots.get(p);
+    if(slot===undefined){
+      const d=flatDir(vsub(f.pos,p.pos));
+      return {x:f.pos.x-d.x*r, y:0, z:f.pos.z-d.z*r};
+    }
+    const ang=slot/this.slotCount*TAU;
+    // Slots are laid out relative to the target's facing, so "behind you"
+    // keeps meaning behind you as the player turns.
+    const sy=Math.sin(f.yaw), cy=Math.cos(f.yaw);
+    const lx=Math.sin(ang), lz=Math.cos(ang);
+    return { x:f.pos.x + (lx*cy + lz*sy)*r, y:0, z:f.pos.z + (-lx*sy + lz*cy)*r };
+  },
+  tick(dt){
+    for(let i=this.tokens.length-1;i>=0;i--){
+      const t=this.tokens[i];
+      if(!t.h.alive || !t.h.engaged || now>=t.exp) this.tokens.splice(i,1);
+    }
+    if(now<this.nextRefresh) return;
+    this.nextRefresh=now+.9;
+    this.assign();
+  },
+  assign(){
+    const f=this.focus; if(!f) return;
+    const taken=new Array(this.slotCount).fill(false);
+    this.slots.clear();
+    const list=this.participants.filter(p=>p.alive&&p.engaged)
+      .sort((a,b)=>flatDist(a.pos,f.pos)-flatDist(b.pos,f.pos));
+    const sy=Math.sin(f.yaw), cy=Math.cos(f.yaw);
+    const fwd={x:sy,z:cy};
+    for(const p of list){
+      const to=flatDir(vsub(p.pos,f.pos));
+      let best=-1, bestScore=Infinity;
+      for(let s=0;s<this.slotCount;s++){
+        if(taken[s]) continue;
+        const ang=s/this.slotCount*TAU, lx=Math.sin(ang), lz=Math.cos(ang);
+        const dir={x:lx*cy+lz*sy, z:-lx*sy+lz*cy};
+        const travel=1-(to.x*dir.x+to.z*dir.z);
+        const behind=1-clamp01((fwd.x*dir.x+fwd.z*dir.z)*.5+.5);
+        const score=travel-behind*p.flank*1.2;
+        if(score<bestScore){ bestScore=score; best=s; }
+      }
+      if(best>=0){ taken[best]=true; this.slots.set(p,best); }
+    }
+  },
+  alarm(pos,radius){
+    for(const p of this.participants){
+      if(!p.alive || !p.onAlert) continue;
+      if(flatDist(p.pos,pos)<=radius) p.onAlert(pos);
+    }
+  },
+  reset(){ this.participants.length=0; this.slots.clear(); this.tokens.length=0; this.nextToken=0; this.nextRefresh=0; }
+};
+</script>
+
+<script>
+"use strict";
+let now=0;                       // seconds of scaled game time
+let unscaled=0;                  // wall-clock seconds, for hit stop and UI
+const chars=[];
+
+/* ---- time control (ported from TimeController) ------------------------- */
+const Time_={ scale:1, hitStopUntil:0, hitStopScale:1, slowUntil:0, slowScale:1, slowFrom:0, paused:false,
+  hitStop(d,s=.02){ if(d<=0)return; const u=unscaled+d; if(u>this.hitStopUntil)this.hitStopUntil=u;
+    this.hitStopScale=Math.min(this.hitStopScale,clamp01(s)); },
+  slowMo(d,s=.35){ if(d<=0)return; this.slowUntil=Math.max(this.slowUntil,unscaled+d);
+    this.slowScale=Math.min(this.slowScale,clamp(s,.01,1)); this.slowFrom=unscaled; },
+  apply(){
+    let sc=1;
+    if(this.paused) sc=0;
+    else if(unscaled<this.hitStopUntil) sc=this.hitStopScale;
+    else {
+      if(this.hitStopScale<1) this.hitStopScale=1;
+      if(unscaled<this.slowUntil) sc=lerp(1,this.slowScale,clamp01((unscaled-this.slowFrom)/.05));
+      else if(this.slowScale<1) this.slowScale=1;
+    }
+    this.scale=sc; return sc;
+  },
+  clear(){ this.hitStopUntil=0; this.hitStopScale=1; this.slowUntil=0; this.slowScale=1; }
+};
+
+/* ---- world ------------------------------------------------------------- */
+const World={ boxes:[], props:[], bounds:34 };
+function addBlock(x,z,w,d,h,rgb,windows){
+  World.boxes.push({x,z,hw:w/2,hd:d/2,h,rgb,windows});
+}
+function buildWorld(){
+  World.boxes.length=0; World.props.length=0;
+  const asphalt=hexRGB('#2E3136');
+  // A street with buildings down both sides: enough city to fight in.
+  const lit=[];
+  for(let i=0;i<40;i++) lit.push(Math.random()<0.42);
+  const facades=['#4A4139','#3E4148','#514540','#3A3F45','#57493F','#434A50'];
+  let z=-24;
+  let n=0;
+  while(z<30){
+    const d=rand(7,11), h=rand(7,17);
+    addBlock(-16-rand(0,1.5), z+d/2, rand(9,13), d, h, hexRGB(facades[n%facades.length]),
+      {windows:true, cols:3, rows:Math.max(2,(h/3)|0), lit:lit.slice((n*7)%20,(n*7)%20+14)});
+    const d2=rand(7,11), h2=rand(6,16);
+    addBlock( 16+rand(0,1.5), z+d2/2, rand(9,13), d2, h2, hexRGB(facades[(n+3)%facades.length]),
+      {windows:true, cols:3, rows:Math.max(2,(h2/3)|0), lit:lit.slice((n*5+3)%20,(n*5+3)%20+14)});
+    z+=Math.max(d,d2)+rand(1.5,3.5);
+    n++;
+  }
+  // street furniture
+  for(let i=-3;i<=4;i++){
+    World.props.push({type:'lamp', x:-9.4, z:i*8, s:1});
+    World.props.push({type:'lamp', x: 9.4, z:i*8+4, s:-1});
+  }
+  for(let i=0;i<7;i++){
+    World.props.push({type:'bin', x:rand(-8.8,-7.6), z:rand(-20,26)});
+    World.props.push({type:'bin', x:rand(7.6,8.8), z:rand(-20,26)});
+  }
+  for(let i=0;i<5;i++){
+    const side=i%2?1:-1;
+    World.props.push({type:'car', x:side*6.4, z:-16+i*10+rand(-2,2), yaw:(side>0?0:Math.PI)+rand(-.05,.05),
+      col:hexRGB(['#5A6470','#6B4B44','#41505A','#6E6353','#495159'][i%5])});
+  }
+  // collision for props that matter
+  for(const p of World.props){
+    if(p.type==='car') World.boxes.push({x:p.x,z:p.z,hw:1.0,hd:2.2,h:1.35,rgb:null,noDraw:true});
+  }
+}
+function drawWorld(){
+  const sidewalk=hexRGB('#4C4A45'), road=hexRGB('#2E3136'), paint=hexRGB('#C8B27A');
+  // Kerbs and lane markings belong to a street. Drawing them under a warehouse
+  // floor or a rooftop deck is what makes every arena look like the same place.
+  const street=(World.arena===undefined||World.arena==='streets');
+  if(!street) return drawArenaFloor();
+  // road surface markings + kerbs
+  for(let i=-30;i<=34;i+=4){
+    groundSeg({x:-9.2,y:.02,z:i},{x:-9.2,y:.02,z:i+4}, sidewalk, .26);
+    groundSeg({x: 9.2,y:.02,z:i},{x: 9.2,y:.02,z:i+4}, sidewalk, .26);
+  }
+  for(let i=-30;i<=34;i+=6) groundSeg({x:0,y:.02,z:i},{x:0,y:.02,z:i+3}, paint, .16);
+  for(let i=-30;i<=34;i+=3){
+    if(Math.abs(i-cam.pos.z)>46) continue;
+    groundSeg({x:-9.2,y:.02,z:i},{x:-13.5,y:.02,z:i}, sidewalk, .06);
+    groundSeg({x: 9.2,y:.02,z:i},{x: 13.5,y:.02,z:i}, sidewalk, .06);
+  }
+  for(const b of World.boxes){
+    if(b.noDraw) continue;
+    const d=flatDist(b,cam.pos);
+    if(d>Quality.boxDist) continue;
+    const x={m:[1,0,0,0,1,0,0,0,1], p:{x:b.x,y:b.h/2,z:b.z}};
+    drawBox(x,{x:b.hw,y:b.h/2,z:b.hd}, b.rgb, d<Quality.windowDist?b.windows:null);
+  }
+  drawProps();
+}
+/* Push a circle out of the world's axis-aligned boxes. */
+function collideWorld(pos,radius){
+  for(const b of World.boxes){
+    // Seating tiers and the skyline below a rooftop are scenery, not walls.
+    if(b.noCollide||b.sunk) continue;
+    const nx=clamp(pos.x,b.x-b.hw,b.x+b.hw), nz=clamp(pos.z,b.z-b.hd,b.z+b.hd);
+    let dx=pos.x-nx, dz=pos.z-nz;
+    let d=Math.hypot(dx,dz);
+    if(d>=radius) continue;
+    if(d<1e-4){
+      // Centre inside the box: eject along the shallowest axis.
+      const px=(b.hw+radius)-Math.abs(pos.x-b.x), pz=(b.hd+radius)-Math.abs(pos.z-b.z);
+      if(px<pz) pos.x=b.x+Math.sign(pos.x-b.x||1)*(b.hw+radius);
+      else pos.z=b.z+Math.sign(pos.z-b.z||1)*(b.hd+radius);
+      continue;
+    }
+    dx/=d; dz/=d;
+    pos.x=nx+dx*radius; pos.z=nz+dz*radius;
+  }
+  const L=World.bounds;
+  pos.x=clamp(pos.x,-L,L); pos.z=clamp(pos.z,-L,L);
+}
+
+/* ---- character base ---------------------------------------------------- */
+function makeChar(kind, styleDef, pos, yaw){
+  const rig=buildRig(styleDef);
+  const c={
+    kind, rig, anim:makeAnimator(rig), style:styleDef,
+    pos:{...pos}, vel:v3(), yaw, prevYaw:yaw, vy:0, grounded:true,
+    radius:.3*styleDef.build, height:styleDef.height,
+    hp:100, hpMax:100, stam:100, stamMax:100, lastSpend:-9, regenBlock:0,
+    poise:0, poiseMax:0, poiseRegen:0, resist:0, lastPoiseHit:-9,
+    alive:true, down:false, controlUntil:0, invulUntil:0,
+    guard:false, guardRaised:-9, guardBrokenUntil:-9,
+    faction:kind==='player'?'player':'hostile',
+    grabbedBy:null, external:v3(), name:'', flank:0, engaged:false,
+    hitFlash:0
+  };
+  return c;
+}
+const isAlive=c=>c.alive;
+const aimPoint=c=>({x:c.pos.x, y:c.pos.y+c.rig.aim, z:c.pos.z});
+const reacting=c=>now<c.controlUntil;
+
+function spendStamina(c,amount,force){
+  if(amount<=0) return true;
+  if(!force && (c.stamExhausted || c.stam<amount)) return false;
+  c.stam=Math.max(0,c.stam-amount); c.lastSpend=now;
+  if(c.stam<=.001) c.stamExhausted=true;
+  return true;
+}
+function tickStamina(c,dt){
+  if(c.stam>=c.stamMax) return;
+  if(now-c.lastSpend<.7 || now<c.regenBlock) return;
+  const rate=24*(c.stamExhausted?.6:1);
+  c.stam=Math.min(c.stamMax,c.stam+rate*dt);
+  if(c.stamExhausted && c.stam>=c.stamMax*.28) c.stamExhausted=false;
+}
+
+function applyStagger(c,duration,dir,impact){
+  if(!c.alive) return;
+  if(duration<=0) duration=STAG[impact];
+  const unstoppable=(impact>=IMPACT.Knockdown);
+
+  if(!unstoppable && c.poiseMax>0){
+    c.poise-=[9,18,42,60,60][impact];
+    c.lastPoiseHit=now;
+    if(c.poise>0){
+      // Absorbed: the body reacts but the character keeps control. This is
+      // what lets a bruiser walk through jabs.
+      const local=worldToLocalDir(c,dir);
+      addImpulse(c.anim,local,.8+impact*.4);
+      return;
+    }
+    c.poise=0;
+  }
+  const local=worldToLocalDir(c,dir);
+  addImpulse(c.anim,local,lerp(.6,2.4,impact/4));
+  if(unstoppable){
+    c.down=true; c.controlUntil=now+duration;
+    c.anim.stance=STANCE.Downed; playAction(c.anim,'knockdown');
+    sfx('bodyfall',c.pos,.9);
+    ring({x:c.pos.x,y:.06,z:c.pos.z}, hexRGB('#E8DCC6'), .5, 4.5, .42);
+    dust({x:c.pos.x,y:.05,z:c.pos.z},14,.7,1.0,.5,hexRGB('#8E8271'));
+  } else {
+    c.controlUntil=now+duration;
+    playAction(c.anim, impact===IMPACT.Light?'hit_light':'hit_heavy');
+  }
+  if(c.onStagger) c.onStagger(duration);
+}
+function worldToLocalDir(c,dir){
+  const cy=Math.cos(-c.yaw), sy=Math.sin(-c.yaw);
+  return { x: dir.x*cy + dir.z*sy, y:dir.y, z: -dir.x*sy + dir.z*cy };
+}
+function applyKnockback(c,vel){
+  c.external.x+=vel.x; c.external.z+=vel.z;
+  if(vel.y>.01){ c.vy=Math.max(c.vy,vel.y); c.grounded=false; }
+}
+function killChar(c){
+  if(!c.alive) return;
+  c.alive=false; c.hp=0; c.down=true; c.guard=false; c.grabbedBy=null;
+  c.anim.stance=STANCE.Dead; playAction(c.anim,'death');
+  sfx('death',c.pos,.9,.12);
+  dust({x:c.pos.x,y:.05,z:c.pos.z},10,.6,1.0,.5,hexRGB('#8E8271'));
+  if(c.onDeath) c.onDeath();
+}
+</script>
+
+<script>
+"use strict";
+/* ---- damage pipeline (ported from Combatant.ApplyDamage) --------------- */
+const RESULT={Missed:0,Hit:1,Blocked:2,Parried:3,Killed:4,Immune:5};
+
+function guardAvailable(c){ return now>=c.guardBrokenUntil; }
+function isBlocking(c){
+  if(c.kind==='player') return c.guard && guardAvailable(c) && c.alive && !c.down && !reacting(c);
+  return c.guard && c.alive && !c.down && !reacting(c);
+}
+function inParryWindow(c){ return isBlocking(c) && now-c.guardRaised<=0.19; }
+
+function evaluateDefence(c,info){
+  if(info.unblockable || !isBlocking(c)) return RESULT.Hit;
+  const toAttacker=flatDir(vmul(info.dir,-1));
+  if(Math.hypot(toAttacker.x,toAttacker.z)>1e-4){
+    const fwd={x:Math.sin(c.yaw), z:Math.cos(c.yaw)};
+    const dot=fwd.x*toAttacker.x+fwd.z*toAttacker.z;
+    const arc = c.kind==='player' ? Math.cos(57.5*DEG) : Math.cos(60*DEG);
+    if(dot<arc) return RESULT.Hit;      // you cannot guard what you cannot see
+  }
+  if(c.stamExhausted) return RESULT.Hit;
+  return inParryWindow(c) ? RESULT.Parried : RESULT.Blocked;
+}
+
+function applyDamage(target, info){
+  if(!target.alive) return RESULT.Missed;
+  if(!hostileTo(info.faction,target.faction)) return RESULT.Missed;
+  if(now<target.invulUntil){
+    if(target.onEvade) target.onEvade(info);
+    return RESULT.Immune;
+  }
+
+  const res=evaluateDefence(target,info);
+  if(res===RESULT.Parried){
+    onParried(target,info);
+    return res;
+  }
+  if(res===RESULT.Blocked){
+    const chip=info.amount*info.chip;
+    if(chip>0) target.hp=Math.max(0,target.hp-chip);
+    target.stam=Math.max(0,target.stam-info.guardDrain); target.lastSpend=now;
+    if(target.stam<=.001) target.stamExhausted=true;
+    playAction(target.anim,'guard_impact');
+    target.hitFlash=.12;
+    if(target.stamExhausted) breakGuard(target,info.point);
+    return RESULT.Blocked;
+  }
+
+  const dealt=info.amount*(1-target.resist);
+  target.hp=Math.max(0,target.hp-dealt);
+  target.hitFlash=.16;
+  if(target.hp<=0){ killChar(target); return RESULT.Killed; }
+  return RESULT.Hit;
+}
+
+function onParried(victim,info){
+  const attacker=info.attacker;
+  if(attacker && attacker!==victim){
+    const push=flatDir(vsub(attacker.pos,victim.pos));
+    applyStagger(attacker,.85,push,IMPACT.Medium);
+    applyKnockback(attacker,vmul(push,2.4));
+  }
+  playAction(victim.anim,'guard_parry');
+  victim.stam=Math.min(victim.stamMax,victim.stam+14);
+  if(victim.onParry) victim.onParry(attacker);
+}
+function breakGuard(c,point){
+  c.guard=false; c.guardBrokenUntil=now+1.35; c.poise=0;
+  applyStagger(c,.62,{x:-Math.sin(c.yaw),y:0,z:-Math.cos(c.yaw)},IMPACT.Medium);
+  playAction(c.anim,'guard_break');
+  Time_.hitStop(.1); shakeCam(.38);
+  spark(point||aimPoint(c),{x:0,y:1,z:0},14,7,hexRGB('#FFD08A'),.4,.15);
+  sfx('guardbreak',c.pos);
+}
+
+/* ---- feedback (ported from CombatFeedback) ----------------------------- */
+function shakeCam(t){ Shake.trauma=clamp01(Shake.trauma+t); }
+function kickCam(dir,strength){ Shake.kx+=dir.x*strength; Shake.kz+=dir.z*strength; }
+const Shake={trauma:0, kx:0, kz:0, vx:0, vz:0, seed:Math.random()*99};
+
+function feedback(move,info,result,point,byPlayer){
+  if(result===RESULT.Missed) return;
+  if(result===RESULT.Immune){
+    spark(point,{x:0,y:1,z:0},4,3,hexRGB('#BFD8FF'),.2,.08); return;
+  }
+  if(result===RESULT.Blocked){
+    Time_.hitStop(move.hitStop*.6); shakeCam(move.shake*.4);
+    spark(point,vmul(info.dir,-1),12,4.5,hexRGB('#BFD8FF'),.24,.09);
+    sfx('block',point,.9); commotion(point,.55); return;
+  }
+  if(result===RESULT.Parried){
+    Time_.hitStop(.13,.01); Time_.slowMo(.3,.4); shakeCam(.32);
+    spark(point,vmul(info.dir,-1),16,6.5,hexRGB('#FFFFFF'),.3,.1);
+    ring(point,hexRGB('#CFE8FF'),.3,3.4,.34);
+    sfx('parry',point,1,.03); commotion(point,.8); return;
+  }
+
+  const killed=(result===RESULT.Killed);
+  const w=byPlayer?1:.45;
+  Time_.hitStop(move.hitStop*w);
+  shakeCam(move.shake*w);
+  if(move.kick>0) kickCam(info.dir,move.kick*w);
+  if(byPlayer && move.slowmo<.999) Time_.slowMo(move.slowTime,move.slowmo);
+
+  const heavy=(move.kind==='heavy'||move.kind==='counter'||move.kind==='finisher');
+  const big=killed||move.impact>=IMPACT.Knockdown||move.kind==='throw';
+  const back=vmul(info.dir,-1);
+  if(big){
+    ring(point,hexRGB('#FFF0D0'),.4,3.4,.34);
+    spark(point,back,18,8,hexRGB('#FFD08A'),.4,.16);
+    dust({x:point.x,y:.05,z:point.z},10,.6,.9,.45,hexRGB('#8E8271'));
+  } else if(heavy){
+    ring(point,hexRGB('#FFF0D0'),.3,2.2,.26);
+    spark(point,back,16,8,hexRGB('#FFD08A'),.38,.15);
+  } else {
+    spark(point,back,9,5.5,hexRGB('#FFE9B0'),.26,.11);
+  }
+  sfx(move.tag==='kick'?'kick':(heavy||big?'heavy':'punch'), point, byPlayer?1:.8);
+  if(!killed && move.impact>=IMPACT.Medium) sfx('grunt',point,.7,.14);
+  commotion(point, killed?1:clamp01(.5+move.impact*.15));
+}
+
+/* ---- hit detection (ported from MeleeHitbox) --------------------------- */
+function hitboxCenter(c,move){
+  const cy=Math.cos(c.yaw), sy=Math.sin(c.yaw);
+  return { x: c.pos.x + move.ox*cy + move.oz*sy,
+           y: c.pos.y + move.oy,
+           z: c.pos.z - move.ox*sy + move.oz*cy };
+}
+function overlapsCapsule(center,move,c,target){
+  // Approximate every character as an upright cylinder; a capsule hitbox is
+  // sampled at both ends plus the middle.
+  const samples=[center];
+  if(move.capsule>0){
+    const f={x:Math.sin(c.yaw)*move.capsule*.5, z:Math.cos(c.yaw)*move.capsule*.5};
+    samples.push({x:center.x-f.x,y:center.y,z:center.z-f.z});
+    samples.push({x:center.x+f.x,y:center.y,z:center.z+f.z});
+  }
+  const r=move.radius+target.radius;
+  for(const s of samples){
+    if(Math.hypot(s.x-target.pos.x, s.z-target.pos.z) > r) continue;
+    if(s.y < target.pos.y-0.3 || s.y > target.pos.y+target.height+0.35) continue;
+    return true;
+  }
+  return false;
+}
+function contactPoint(attacker,target,center){
+  const d=flatDir(vsub(center,target.pos));
+  const y=clamp(center.y, target.pos.y+0.4, target.pos.y+target.height*0.95);
+  return { x: target.pos.x+d.x*target.radius, y, z: target.pos.z+d.z*target.radius };
+}
+
+/* ---- attack runner (ported from AttackRunner) -------------------------- */
+function makeRunner(owner){
+  return { owner, move:null, t:0, opened:false, hit:new Set(), dmgMul:1 };
+}
+function runnerBegin(r,move){ r.move=move; r.t=0; r.opened=false; r.hit.clear(); }
+function runnerCancel(r){ r.move=null; r.t=0; r.opened=false; r.hit.clear(); }
+function runnerFinished(r){ return !r.move || r.t>=dur(r.move); }
+function runnerInRecovery(r){ return r.move && r.t>activeEnd(r.move); }
+function runnerInCombo(r){
+  if(!r.move) return false;
+  const d=dur(r.move);
+  return r.t>=d*r.move.comboAt && r.t<=d;
+}
+function runnerSkipToRecovery(r,move){ r.move=move; r.t=activeEnd(move)+.001; r.opened=true; }
+
+function runnerTick(r,dt,target){
+  const c=r.owner, move=r.move;
+  if(!move) return v3();
+  r.t+=dt;
+
+  if(!r.opened && r.t>=activeStart(move)){
+    r.opened=true; r.hit.clear();
+    const heavy=(move.kind==='heavy'||move.kind==='finisher');
+    sfx(heavy?'whooshHeavy':'whoosh', c.pos, heavy?.85:.6, .12);
+  }
+  if(r.t>=activeStart(move) && r.t<=activeEnd(move)) resolveHits(r,move);
+
+  return runnerLunge(r,move,target);
+}
+function resolveHits(r,move){
+  const c=r.owner;
+  const center=hitboxCenter(c,move);
+  const byPlayer=(c.faction==='player');
+  // The archetype carries the difficulty and boss-phase scaling, so every move
+  // inherits it without the move table knowing anything about either.
+  const dmgMul=(c.arch&&c.arch.dmgMul)||1;
+  for(const t of chars){
+    if(t===c || !t.alive) continue;
+    if(!hostileTo(c.faction,t.faction)) continue;
+    if(r.hit.size>=move.maxTargets) break;
+    if(r.hit.has(t)) continue;
+    if(!overlapsCapsule(center,move,c,t)) continue;
+    r.hit.add(t);
+
+    let dir=flatDir(vsub(t.pos,c.pos));
+    if(Math.hypot(dir.x,dir.z)<1e-4) dir={x:Math.sin(c.yaw),y:0,z:Math.cos(c.yaw)};
+    const point=contactPoint(c,t,center);
+    const info={ amount:move.dmg*r.dmgMul, impact:move.impact, dir, point,
+      unblockable:move.unblockable, chip:move.chip, guardDrain:move.guardDrain,
+      faction:c.faction, attacker:c, knock:KNOCK[move.impact]*move.knock };
+    info.amount*=dmgMul;
+
+    const res=applyDamage(t,info);
+    if(res===RESULT.Hit||res===RESULT.Killed){
+      applyStagger(t,0,dir,move.impact);
+      applyKnockback(t,vmul(dir,info.knock));
+    } else if(res===RESULT.Blocked){
+      applyKnockback(t,vmul(dir,info.knock*.3));
+    }
+    feedback(move,info,res,point,byPlayer);
+    if(r.onLanded) r.onLanded(move,t,res,info);
+  }
+}
+function runnerLunge(r,move,target){
+  const c=r.owner, end=activeEnd(move);
+  if(r.t>end || end<=0) return v3();
+  let distance=move.lunge;
+  if(target && target.alive && move.track>0){
+    const gap=flatDist(c.pos,target.pos);
+    const reach=move.oz+move.radius;
+    if(gap>reach) distance+=Math.min(gap-reach,move.track);
+  }
+  const u=clamp01(r.t/end);
+  const speed=distance/end*(Math.sin(u*Math.PI)/(2/Math.PI));
+  return { x:Math.sin(c.yaw)*speed, y:0, z:Math.cos(c.yaw)*speed };
+}
+function playMoveClip(c,move){
+  const clip=CLIPS[move.clip]; if(!clip) return;
+  playAction(c.anim, move.clip, clip.dur/dur(move), .04);
+}
+
+/* ---- shared physics ---------------------------------------------------- */
+function integrate(c, desired, dt){
+  const GRAV=-24, FALL=1.7;
+  if(c.grounded && c.vy<=0) c.vy=-4;
+  else { c.vy += GRAV*(c.vy<0?FALL:1)*dt; c.vy=Math.max(c.vy,-60); }
+
+  c.pos.x += (desired.x + c.external.x)*dt;
+  c.pos.z += (desired.z + c.external.z)*dt;
+  c.pos.y += c.vy*dt;
+
+  if(c.pos.y<=0){ 
+    if(!c.grounded && c.vy<-6){ 
+      sfx('land',c.pos,clamp01(-c.vy/14)*.7);
+      dust({x:c.pos.x,y:.04,z:c.pos.z},6,.4,.6,.35,hexRGB('#9C8F7E'));
+    }
+    c.pos.y=0; c.vy=0; c.grounded=true;
+  } else c.grounded=false;
+
+  const k=Math.exp(-6*dt);
+  c.external.x*=k; c.external.z*=k;
+  if(Math.abs(c.external.x)+Math.abs(c.external.z)<.02){ c.external.x=0; c.external.z=0; }
+
+  collideWorld(c.pos,c.radius);
+  separate(c,dt);
+}
+function separate(c,dt){
+  for(const o of chars){
+    if(o===c || !o.alive) continue;
+    const dx=c.pos.x-o.pos.x, dz=c.pos.z-o.pos.z;
+    const minD=c.radius+o.radius;
+    let d=Math.hypot(dx,dz);
+    if(d>=minD) continue;
+    if(d<1e-4){ c.pos.x+=rand(-.02,.02); c.pos.z+=rand(-.02,.02); continue; }
+    const push=(minD-d)*0.5;
+    c.pos.x+=dx/d*push; c.pos.z+=dz/d*push;
+    o.pos.x-=dx/d*push; o.pos.z-=dz/d*push;
+  }
+}
+</script>
+
+<script>
+"use strict";
+/* ---- input ------------------------------------------------------------- */
+const Keys={};
+const Mouse={dx:0,dy:0,left:false,right:false,middle:false,leftEdge:false,rightEdge:false};
+const Input={ move:{x:0,y:0}, look:{x:0,y:0},
+  sprint:false, block:false, jump:false, jumpHeld:false, dodge:false,
+  light:false, heavy:false, grab:false, lock:false };
+
+function buffer(win){ return {at:-99, win, feed(p){ if(p) this.at=now; },
+  get pending(){ return now-this.at<=this.win; }, consume(){ if(now-this.at>this.win) return false; this.at=-99; return true; },
+  clear(){ this.at=-99; } }; }
+
+/* ---- player ------------------------------------------------------------ */
+const PCFG={ walk:2.1, jog:4.6, sprint:7.4, strafe:3.4, accel:14, decel:18, air:.35,
+  turn:900*DEG, lockedTurn:1400*DEG, jumpH:1.25, coyote:.14,
+  dodgeDist:4.2, dodgeTime:.42, iframes:.28, iframeDelay:.06, dodgeCd:.22, dodgeCost:22,
+  sprintDrain:12, sprintMin:12, jumpCost:8 };
+
+let player=null;
+function makePlayer(pos){
+  const p=makeChar('player',STYLES.player,pos,0);
+  p.name='Player';
+  p.hp=p.hpMax=140; p.stam=p.stamMax=110;
+  p.state='loco'; p.stateT=0; p.lockUntil=0;
+  p.planar=v3(); p.dodgeDir=v3(); p.dodgeReady=0; p.sprinting=false;
+  p.jumpBuf=buffer(.16); p.dodgeBuf=buffer(.2);
+  p.lightBuf=buffer(.24); p.heavyBuf=buffer(.24); p.grabBuf=buffer(.2);
+  p.runner=makeRunner(p); p.combatState='ready'; p.queued=null;
+  p.counterUntil=-99; p.held=null; p.grabEnds=0; p.nextGrabPunch=0;
+  p.combo=0; p.comboExpires=0; p.lockTarget=null; p.jumpCut=false;
+  p.runner.onLanded=(move,victim,res)=>{ if(res===RESULT.Hit||res===RESULT.Killed) addCombo(); };
+  p.onParry=()=>{ p.counterUntil=now+1.1; };
+  p.onEvade=()=>{ if(p.state==='dodge') p.counterUntil=now+1.1; };
+  p.onStagger=()=>{ abortCombat(p); };
+  p.onDeath=()=>{ abortCombat(p); Game.over=true;
+    if(typeof Stage!=='undefined') Stage.fail();
+    else showBanner('You are down — press R to restart',true); };
+  return p;
+}
+function addCombo(){ player.combo++; player.comboExpires=now+2.4; HUD.combo(); }
+
+function canAct(p){
+  return p.alive && p.state!=='dodge' && !p.down && !reacting(p) && now>=p.lockUntil;
+}
+
+function tickPlayer(p,dt){
+  p.jumpBuf.feed(Input.jump); p.dodgeBuf.feed(Input.dodge);
+  p.lightBuf.feed(Input.light); p.heavyBuf.feed(Input.heavy); p.grabBuf.feed(Input.grab);
+  p.stateT+=dt;
+
+  if(p.combo>0 && now>=p.comboExpires){ p.combo=0; HUD.combo(); }
+
+  // variable jump height
+  if(!p.jumpCut && !p.grounded && p.vy>0 && !Input.jumpHeld){ p.jumpCut=true; p.vy*=1/2.4; }
+
+  if(!p.alive){ p.planar=vmul(p.planar,Math.exp(-8*dt)); integrate(p,p.planar,dt); pushAnim(p,dt); return; }
+
+  updateLockOn(p);
+  updateGuard(p);
+
+  if(p.combatState==='attacking'){ tickPlayerAttack(p,dt); }
+  else if(p.combatState==='holding'){ tickHold(p,dt); }
+  else if(p.state==='dodge'){ tickDodge(p,dt); }
+  else if(reacting(p)){ p.planar=vmul(p.planar,Math.exp(-10*dt)); integrate(p,p.planar,dt); }
+  else { tickLocomotion(p,dt); tryStartAttack(p); }
+
+  tickStamina(p,dt);
+  pushAnim(p,dt);
+}
+
+function updateGuard(p){
+  const can=canAct(p) && p.combatState==='ready' && p.grounded;
+  const want=can && Input.block;
+  if(want && !p.guard) p.guardRaised=now;
+  p.guard=want;
+}
+
+function camRelative(mx,my){
+  const fx=Math.sin(cam.yaw), fz=Math.cos(cam.yaw);
+  const rx=Math.cos(cam.yaw), rz=-Math.sin(cam.yaw);
+  let x=fx*my+rx*mx, z=fz*my+rz*mx;
+  const m=Math.hypot(x,z);
+  if(m>1) { x/=m; z/=m; }
+  return {x,y:0,z};
+}
+function tickLocomotion(p,dt){
+  const wish=camRelative(Input.move.x,Input.move.y);
+  const moving=Math.hypot(wish.x,wish.z)>1e-3;
+
+  // sprint gating
+  let wantSprint=Input.sprint&&moving;
+  if(!p.sprinting&&wantSprint) wantSprint=!p.stamExhausted&&p.stam>=PCFG.sprintMin;
+  if(wantSprint){ if(!spendStamina(p,PCFG.sprintDrain*dt,true)||p.stam<=0) wantSprint=false; }
+  p.sprinting=wantSprint;
+
+  let target=0;
+  if(moving){
+    const mag=Math.min(1,Math.hypot(Input.move.x,Input.move.y));
+    if(p.sprinting) target=PCFG.sprint*mag;
+    else if(p.lockTarget){
+      const to=flatDir(vsub(p.lockTarget.pos,p.pos));
+      const align=wish.x*to.x+wish.z*to.z;
+      target=lerp(PCFG.strafe,PCFG.jog,clamp01((align-.2)/.7))*mag;
+    } else target=lerp(PCFG.walk,PCFG.jog,clamp01((mag-.25)/.6));
+  }
+  if(p.guard) target=Math.min(target,PCFG.walk*.8);
+
+  const accel=(moving&&target>.01?PCFG.accel:PCFG.decel)*(p.grounded?1:PCFG.air);
+  p.planar=moveToward(p.planar,{x:wish.x*target,y:0,z:wish.z*target},accel*dt);
+
+  if(tryDodge(p,wish)) return;
+  tryJump(p);
+
+  // rotation: lock-on faces the target, otherwise face movement
+  if(p.lockTarget){
+    const to=flatDir(vsub(p.lockTarget.pos,p.pos));
+    p.yaw=moveTowardAngle(p.yaw,Math.atan2(to.x,to.z),PCFG.lockedTurn*dt);
+  } else if(moving){
+    p.yaw=moveTowardAngle(p.yaw,Math.atan2(wish.x,wish.z),PCFG.turn*dt);
+  }
+  integrate(p,p.planar,dt);
+  p.state=p.grounded?'loco':'air';
+}
+function moveToward(a,b,maxDelta){
+  const dx=b.x-a.x, dz=b.z-a.z, m=Math.hypot(dx,dz);
+  if(m<=maxDelta||m<1e-6) return {x:b.x,y:0,z:b.z};
+  return {x:a.x+dx/m*maxDelta, y:0, z:a.z+dz/m*maxDelta};
+}
+function tryJump(p){
+  if(!p.jumpBuf.pending) return;
+  if(!p.grounded) return;
+  if(!spendStamina(p,PCFG.jumpCost)) return;
+  p.jumpBuf.consume(); p.jumpCut=false;
+  p.vy=Math.sqrt(2*24*PCFG.jumpH); p.grounded=false;
+  playAction(p.anim,'jump_takeoff');
+}
+function tryDodge(p,wish){
+  if(!p.dodgeBuf.pending || now<p.dodgeReady || !p.grounded) return false;
+  if(!spendStamina(p,PCFG.dodgeCost)) return false;
+  p.dodgeBuf.consume();
+
+  let dir=wish;
+  if(Math.hypot(dir.x,dir.z)<1e-3){
+    dir = p.lockTarget ? vmul(flatDir(vsub(p.lockTarget.pos,p.pos)),-1)
+                       : {x:-Math.sin(p.yaw),y:0,z:-Math.cos(p.yaw)};
+  }
+  const m=Math.hypot(dir.x,dir.z)||1;
+  p.dodgeDir={x:dir.x/m,y:0,z:dir.z/m};
+  p.planar=v3();
+  p.invulUntil=now+PCFG.iframeDelay+PCFG.iframes;
+  p.state='dodge'; p.stateT=0;
+
+  let forwardish=true;
+  if(p.lockTarget){
+    const to=flatDir(vsub(p.lockTarget.pos,p.pos));
+    forwardish=(p.dodgeDir.x*to.x+p.dodgeDir.z*to.z)>.3;
+  }
+  const id=forwardish?'dodge_roll':'dodge_step';
+  playAction(p.anim,id,CLIPS[id].dur/PCFG.dodgeTime);
+  sfx('whoosh',p.pos,.5,.1);
+  dust({x:p.pos.x,y:.04,z:p.pos.z},5,.35,.5,.3,hexRGB('#9C8F7E'));
+  return true;
+}
+function tickDodge(p,dt){
+  const t=clamp01(p.stateT/PCFG.dodgeTime);
+  const curve=lerp(1.35,.05,t*t*(3-2*t));
+  const speed=(PCFG.dodgeDist/PCFG.dodgeTime)*curve;
+  p.planar=vmul(p.dodgeDir,speed);
+  integrate(p,p.planar,dt);
+
+  const face=p.lockTarget?flatDir(vsub(p.lockTarget.pos,p.pos)):p.dodgeDir;
+  p.yaw=moveTowardAngle(p.yaw,Math.atan2(face.x,face.z),PCFG.lockedTurn*dt);
+
+  if(p.stateT>=PCFG.dodgeTime){
+    p.planar=vmul(p.dodgeDir,(PCFG.dodgeDist/PCFG.dodgeTime)*.25);
+    p.dodgeReady=now+PCFG.dodgeCd;
+    p.state='loco';
+  }
+}
+
+/* ---- player offence ---------------------------------------------------- */
+function autoFaceTarget(p){
+  if(p.lockTarget && p.lockTarget.alive) return flatDir(vsub(p.lockTarget.pos,p.pos));
+  let best=null, bestScore=Infinity;
+  const fwd={x:Math.sin(p.yaw), z:Math.cos(p.yaw)};
+  for(const c of chars){
+    if(c===p||!c.alive||!hostileTo(p.faction,c.faction)) continue;
+    const to=vsub(c.pos,p.pos), d=flatLen(to);
+    if(d>4.5) continue;
+    const dir=flatDir(to);
+    const align=fwd.x*dir.x+fwd.z*dir.z;
+    if(align<Math.cos(100*DEG)) continue;
+    const score=d*(2-align);
+    if(score<bestScore){ bestScore=score; best=dir; }
+  }
+  if(best) return best;
+  if(Math.hypot(Input.move.x,Input.move.y)>.2) return camRelative(Input.move.x,Input.move.y);
+  return {x:Math.sin(p.yaw),y:0,z:Math.cos(p.yaw)};
+}
+function snapFace(p,dir){ if(Math.hypot(dir.x,dir.z)>1e-4) p.yaw=Math.atan2(dir.x,dir.z); }
+
+function tryStartAttack(p){
+  if(!canAct(p)) return;
+  const light=p.lightBuf.pending, heavy=p.heavyBuf.pending;
+
+  if(p.grabBuf.pending && startMove(p,MOVES.grab)){ p.grabBuf.consume(); return; }
+  if(!light && !heavy) return;
+
+  if(now<p.counterUntil && startMove(p,MOVES.counter)){
+    p.counterUntil=-99; if(light) p.lightBuf.consume(); else p.heavyBuf.consume(); return;
+  }
+  if(heavy && tryFinisher(p)){ p.heavyBuf.consume(); return; }
+
+  const move = heavy ? MOVES.heavy_1 : MOVES.light_1;
+  if(startMove(p,move)){ if(light) p.lightBuf.consume(); else p.heavyBuf.consume(); }
+}
+function tryFinisher(p){
+  let victim=null, bestD=Infinity;
+  for(const c of chars){
+    if(c===p||!c.alive||!hostileTo(p.faction,c.faction)||!c.down) continue;
+    const d=flatDist(p.pos,c.pos);
+    if(d<1.9 && d<bestD){ bestD=d; victim=c; }
+  }
+  if(!victim) return false;
+  snapFace(p,flatDir(vsub(victim.pos,p.pos)));
+  return startMove(p,MOVES.finisher);
+}
+function startMove(p,move){
+  if(!move) return false;
+  if(move.stamina>0 && !spendStamina(p,move.stamina)) return false;
+  runnerBegin(p.runner,move);
+  p.queued=null; p.combatState='attacking'; p.guard=false;
+  p.state='attack';
+  snapFace(p,autoFaceTarget(p));
+  playMoveClip(p,move);
+  p.regenBlock=now+dur(move)+.25;
+  return true;
+}
+function tickPlayerAttack(p,dt){
+  const r=p.runner, move=r.move;
+  if(!move){ endAttack(p); return; }
+
+  const lunge=runnerTick(r,dt,p.lockTarget);
+  p.planar=lunge;
+  integrate(p,p.planar,dt);
+
+  if(r.t<activeEnd(move)){
+    const dir=autoFaceTarget(p);
+    p.yaw=moveTowardAngle(p.yaw,Math.atan2(dir.x,dir.z),720*DEG*dt);
+  }
+
+  // queue a follow-up during the combo window
+  if(!p.queued && runnerInCombo(r)){
+    const heavy=p.heavyBuf.pending, light=p.lightBuf.pending;
+    if(heavy||light){
+      const nextId = heavy ? (move.nextH||'heavy_1') : (move.nextL||'light_1');
+      const next=MOVES[nextId];
+      if(next && (next.stamina<=0 || (!p.stamExhausted && p.stam>=next.stamina))){
+        p.queued=next;
+        if(heavy) p.heavyBuf.consume(); else p.lightBuf.consume();
+      }
+    }
+  }
+  // dodge-cancel out of recovery
+  if(runnerInRecovery(r) && p.dodgeBuf.pending){ endAttack(p); return; }
+
+  if(!runnerFinished(r)) return;
+  if(p.queued){ const n=p.queued; p.queued=null; if(startMove(p,n)) return; }
+  endAttack(p);
+}
+function endAttack(p){
+  p.combatState='ready'; runnerCancel(p.runner); p.queued=null;
+  p.planar=v3(); p.state='loco';
+}
+function abortCombat(p){
+  if(p.held){ p.held.grabbedBy=null; p.held=null; }
+  p.combatState='ready'; runnerCancel(p.runner); p.queued=null;
+  p.planar=v3(); p.combo=0; HUD.combo();
+}
+/* grab / throw */
+function trySeize(p,move){
+  let victim=null,bestD=Infinity;
+  const center=hitboxCenter(p,move);
+  for(const c of chars){
+    if(c===p||!c.alive||!hostileTo(p.faction,c.faction)||c.down||c.grabbedBy) continue;
+    const d=Math.hypot(center.x-c.pos.x,center.z-c.pos.z);
+    if(d<move.radius+c.radius && d<bestD){ bestD=d; victim=c; }
+  }
+  if(!victim) return false;
+  p.held=victim; victim.grabbedBy=p;
+  p.combatState='holding'; p.grabEnds=now+3.2; p.nextGrabPunch=now+.2;
+  playAction(p.anim,'atk_grab_hold',1,.1);
+  sfx('block',p.pos,.6);
+  return true;
+}
+function tickHold(p,dt){
+  const v=p.held;
+  if(!v||!v.alive||v.grabbedBy!==p){ releaseHold(p); return; }
+  const fx=Math.sin(p.yaw), fz=Math.cos(p.yaw);
+  const anchor={x:p.pos.x+fx*1.05, z:p.pos.z+fz*1.05};
+  const k=1-Math.exp(-18*dt);
+  v.pos.x+=(anchor.x-v.pos.x)*k; v.pos.z+=(anchor.z-v.pos.z)*k;
+  v.yaw=Math.atan2(-fx,-fz);
+  p.planar=v3(); integrate(p,p.planar,dt);
+
+  if(p.heavyBuf.pending||p.grabBuf.pending){ p.heavyBuf.clear(); p.grabBuf.clear(); performThrow(p); return; }
+  if(p.lightBuf.pending && now>=p.nextGrabPunch){
+    p.lightBuf.consume(); p.nextGrabPunch=now+.38;
+    const point=aimPoint(v), dir={x:fx,y:0,z:fz};
+    const info={amount:12,impact:IMPACT.Light,dir,point,unblockable:true,chip:0,guardDrain:0,
+      faction:p.faction,attacker:p,knock:0};
+    const res=applyDamage(v,info);
+    playAction(p.anim,'atk_light_cross',1.4,.03);
+    feedback(MOVES.grab,info,res,point,true);
+    addCombo();
+    if(!v.alive) releaseHold(p);
+    return;
+  }
+  if(Input.dodge||now>=p.grabEnds) releaseHold(p);
+}
+function performThrow(p){
+  const move=MOVES.throw, v=p.held;
+  if(!v){ releaseHold(p); return; }
+  const dir={x:Math.sin(p.yaw),y:0,z:Math.cos(p.yaw)};
+  const point=aimPoint(v);
+  v.grabbedBy=null; p.held=null;
+  const info={amount:move.dmg,impact:move.impact,dir,point,unblockable:true,chip:move.chip,
+    guardDrain:move.guardDrain,faction:p.faction,attacker:p,knock:KNOCK[move.impact]*move.knock};
+  const res=applyDamage(v,info);
+  applyStagger(v,1.9,dir,IMPACT.Knockdown);
+  applyKnockback(v,{x:dir.x*info.knock, y:3.4, z:dir.z*info.knock});
+  feedback(move,info,res,point,true);
+  addCombo();
+  playAction(p.anim,'atk_throw',1,.04);
+  runnerSkipToRecovery(p.runner,move);
+  p.combatState='attacking';
+}
+function releaseHold(p){
+  if(p.held){ p.held.grabbedBy=null; p.held=null; }
+  if(p.combatState!=='holding') return;
+  p.combatState='ready'; stopAction(p.anim); p.planar=v3();
+}
+/* lock-on */
+function updateLockOn(p){
+  if(Input.lock){
+    Input.lock=false;
+    if(p.lockTarget) p.lockTarget=null;
+    else p.lockTarget=findLockTarget(p);
+  }
+  if(p.lockTarget && (!p.lockTarget.alive || flatDist(p.pos,p.lockTarget.pos)>26)) p.lockTarget=null;
+}
+function findLockTarget(p){
+  let best=null,bestScore=Infinity;
+  const fwd={x:Math.sin(cam.yaw), z:Math.cos(cam.yaw)};
+  for(const c of chars){
+    if(c===p||!c.alive||!hostileTo(p.faction,c.faction)) continue;
+    const to=vsub(c.pos,p.pos), d=flatLen(to);
+    if(d>18) continue;
+    const dir=flatDir(to);
+    const align=fwd.x*dir.x+fwd.z*dir.z;
+    if(align<Math.cos(75*DEG)) continue;
+    const score=(1-align)*.65+(d/18)*.35;
+    if(score<bestScore){ bestScore=score; best=c; }
+  }
+  return best;
+}
+function pushAnim(c,dt){
+  const a=c.anim;
+  const local=worldToLocalDir(c,{x:c.planar?c.planar.x:0,y:0,z:c.planar?c.planar.z:0});
+  a.speed=Math.hypot(local.x,local.z);
+  a.airborne=c.grounded?0:1;
+  a.turnRate=damp(a.turnRate, wrapAngle(c.yaw-c.prevYaw)/Math.max(dt,1e-4)/DEG, 12, dt);
+  c.prevYaw=c.yaw;
+  if(!c.alive) a.stance=STANCE.Dead;
+  else if(c.down) a.stance=STANCE.Downed;
+  else if(isBlocking(c)) a.stance=STANCE.Guard;
+  else if(c.kind==='player') a.stance=(c.lockTarget||c.combatState!=='ready')?STANCE.Combat:STANCE.Relaxed;
+  a.lookAt=(c.kind==='player'&&c.lockTarget)?c.lockTarget:a.lookAt;
+}
+</script>
+
+<script>
+"use strict";
+/* ---- enemy brain (ported from EnemyBrain + EnemyStates) ---------------- */
+function makeEnemy(kindKey,pos,yaw){
+  const A=ARCHETYPES[kindKey];
+  // Scaled by difficulty at spawn: a copy, never an edit, or the multipliers
+  // would compound on every enemy the stage sends.
+  const D=(typeof Save!=='undefined')?Save.profile():{dmg:1,hp:1,cd:1,react:1};
+  const A2=Object.assign({},A,{
+    hp:A.hp*D.hp, cd:A.cd*D.cd, cdVar:A.cdVar*D.cd, react:A.react*D.react,
+    dmgMul:(A.dmgMul||1)*D.dmg
+  });
+  const e=makeChar('enemy',A2.style,pos,yaw);
+  e.arch=A2; e.name=A2.name;
+  e.hp=e.hpMax=A2.hp; e.stam=e.stamMax=A2.stam;
+  e.poise=e.poiseMax=A2.poise; e.poiseRegen=A2.poiseRegen; e.resist=A2.resist;
+  e.flank=A2.flank;
+  e.state='idle'; e.stateAt=now; e.home={...pos}; e.patrol={...pos}; e.pauseUntil=0;
+  e.target=null; e.canSee=false; e.lastSeen=-99; e.lastKnown={...pos};
+  e.nextPerception=now+Math.random()*.18; e.nextAttack=0;
+  e.orbit=Math.random()<.5?1:-1; e.nextFlip=0;
+  e.runner=makeRunner(e); e.desired=v3(); e.facing=null;
+  e.engaged=false;
+  e.onStagger=(d)=>{ runnerCancel(e.runner); Director.release(e);
+    e.nextAttack=Math.max(e.nextAttack, now+d+.25); e.guard=false; setState(e,'react'); };
+  e.onDeath=()=>{ runnerCancel(e.runner); Director.unregister(e); setState(e,'dead');
+    Game.kills++;
+    // Rewards land as they are earned, so dying on the last enemy still keeps them.
+    Save.data.money+=(A.money||14); Save.data.xp+=(A.xp||22);
+    if(typeof Stage!=='undefined') Stage.killed(); else HUD.objective(); };
+  e.onAlert=(p)=>{ e.lastKnown={...p}; e.lastSeen=now;
+    if(e.state==='idle'||e.state==='patrol') setState(e,'alert'); };
+  Director.register(e);
+  return e;
+}
+function setState(e,s){ if(e.state===s) return; e.state=s; e.stateAt=now;
+  if(s==='dead'){ e.engaged=false; } }
+const stateTime=e=>now-e.stateAt;
+
+function tickEnemy(e,dt){
+  if(!e.alive){ e.desired=v3(); e.planar=v3(); integrate(e,v3(),dt); pushAnimEnemy(e,dt); return; }
+  if(e.grabbedBy){ e.planar=v3(); pushAnimEnemy(e,dt); return; }
+
+  perceive(e);
+  e.desired=v3(); e.facing=null;
+  e.engaged=(e.state==='combat'||e.state==='chase'||e.state==='attack');
+
+  switch(e.state){
+    case 'idle': stIdle(e,dt); break;
+    case 'patrol': stPatrol(e,dt); break;
+    case 'alert': stAlert(e,dt); break;
+    case 'chase': stChase(e,dt); break;
+    case 'combat': stCombat(e,dt); break;
+    case 'attack': stAttack(e,dt); break;
+    case 'reposition': stReposition(e,dt); break;
+    case 'react': stReact(e,dt); break;
+    case 'recover': stRecover(e,dt); break;
+    case 'search': stSearch(e,dt); break;
+    case 'dead': e.desired=v3(); break;
+  }
+
+  // recovery from a stagger is driven by the control timer
+  if(e.state==='react' && !reacting(e)){
+    if(e.down){
+      e.down=false;
+      const g=CLIPS['get_up'];
+      e.controlUntil=now+g.dur; playAction(e.anim,'get_up');
+      setState(e,'react');
+    } else setState(e,'recover');
+  }
+
+  steerAndMove(e,dt);
+  if(e.poise<e.poiseMax && now-e.lastPoiseHit>1.1)
+    e.poise=Math.min(e.poiseMax,e.poise+e.poiseRegen*dt);
+  tickStamina(e,dt);
+  pushAnimEnemy(e,dt);
+}
+function perceive(e){
+  if(now<e.nextPerception) return;
+  e.nextPerception=now+.18;
+  if(!e.target||!e.target.alive) e.target=player&&player.alive?player:null;
+  if(!e.target){ e.canSee=false; return; }
+  const eye={x:e.pos.x,y:e.pos.y+1.55,z:e.pos.z};
+  const to=vsub(aimPoint(e.target),eye), d=vlen(to);
+  if(d>e.arch.sight){ e.canSee=false; return; }
+  const flat=flatDir(to), fwd={x:Math.sin(e.yaw),z:Math.cos(e.yaw)};
+  const ang=Math.acos(clamp(fwd.x*flat.x+fwd.z*flat.z,-1,1));
+  // someone standing right behind you still registers
+  if(d>2.2 && ang>e.arch.sightAngle){ e.canSee=false; return; }
+  if(blocked(eye,aimPoint(e.target))){ e.canSee=false; return; }
+  e.canSee=true; e.lastSeen=now; e.lastKnown={...e.target.pos};
+}
+function blocked(a,b){
+  // Coarse line of sight: sample the segment against the world boxes.
+  const steps=8;
+  for(let i=1;i<steps;i++){
+    const t=i/steps;
+    const p={x:lerp(a.x,b.x,t), y:lerp(a.y,b.y,t), z:lerp(a.z,b.z,t)};
+    for(const box of World.boxes){
+      if(p.y>box.h) continue;
+      if(Math.abs(p.x-box.x)<box.hw && Math.abs(p.z-box.z)<box.hd) return true;
+    }
+  }
+  return false;
+}
+const remembers=e=>e.target&&e.target.alive&&(now-e.lastSeen)<7;
+const distToTarget=e=>e.target?flatDist(e.pos,e.target.pos):Infinity;
+
+function faceTarget(e){ if(e.target) e.facing=flatDir(vsub(e.target.pos,e.pos)); }
+function moveTo(e,point,speed){
+  const to={x:point.x-e.pos.x,y:0,z:point.z-e.pos.z};
+  const d=Math.hypot(to.x,to.z);
+  if(d<=.25){ e.desired=v3(); return; }
+  const s=d<1.4?speed*(d-.25)/1.15:speed;
+  e.desired={x:to.x/d*Math.min(s,speed),y:0,z:to.z/d*Math.min(s,speed)};
+}
+function circle(e,speed){
+  if(!e.target) return;
+  if(now>=e.nextFlip){ e.nextFlip=now+rand(2.5,6); if(Math.random()<.4) e.orbit=-e.orbit; }
+  const from={x:e.pos.x-e.target.pos.x, z:e.pos.z-e.target.pos.z};
+  const d=Math.hypot(from.x,from.z); if(d<.05) return;
+  const rx=from.x/d, rz=from.z/d;
+  const tx=-rz*e.orbit, tz=rx*e.orbit;
+  const err=clamp((d-e.arch.range)/Math.max(.5,e.arch.range),-1,1);
+  let vx=tx*(1-Math.abs(err)*.6)-rx*err, vz=tz*(1-Math.abs(err)*.6)-rz*err;
+  const m=Math.hypot(vx,vz)||1;
+  e.desired={x:vx/m*speed,y:0,z:vz/m*speed};
+}
+function backAway(e,speed){
+  if(!e.target) return;
+  const d=flatDir(vsub(e.pos,e.target.pos));
+  e.desired=vmul(d,speed);
+}
+
+function stIdle(e){
+  if(e.pauseUntil===0) e.pauseUntil=now+rand(1.5,4);
+  const sweep=Math.sin(now*.5+e.rig.h*7)*55*DEG;
+  e.facing={x:Math.sin(sweep),y:0,z:Math.cos(sweep)};
+  if(e.canSee) return setState(e,'alert');
+  if(now>=e.pauseUntil){ e.pauseUntil=0; e.patrol=pickPatrol(e); setState(e,'patrol'); }
+}
+function stPatrol(e){
+  if(e.canSee) return setState(e,'alert');
+  moveTo(e,e.patrol,e.arch.walk);
+  if(flatDist(e.pos,e.patrol)<=.6 || stateTime(e)>12){ e.pauseUntil=0; setState(e,'idle'); }
+}
+function pickPatrol(e){
+  for(let i=0;i<6;i++){
+    const a=Math.random()*TAU, r=rand(1.5,6);
+    const p={x:e.home.x+Math.cos(a)*r, y:0, z:e.home.z+Math.sin(a)*r};
+    if(Math.abs(p.x)>World.bounds-1||Math.abs(p.z)>World.bounds-1) continue;
+    let inside=false;
+    for(const b of World.boxes){ if(Math.abs(p.x-b.x)<b.hw+.6&&Math.abs(p.z-b.z)<b.hd+.6){inside=true;break;} }
+    if(!inside) return p;
+  }
+  return {...e.home};
+}
+function stAlert(e){
+  if(stateTime(e)<0.02) Director.alarm(e.pos, e.arch.sight+6);
+  e.anim.stance=STANCE.Combat;
+  if(e.target) faceTarget(e); else e.facing=flatDir(vsub(e.lastKnown,e.pos));
+  if(stateTime(e)<e.arch.react) return;
+  setState(e, remembers(e)?'chase':'search');
+}
+function stChase(e){
+  if(!remembers(e)) return setState(e,'search');
+  const dest=Director.slotPosition(e,e.arch.range);
+  moveTo(e,dest,e.arch.chase);
+  if(e.canSee) faceTarget(e);
+  if(e.canSee && distToTarget(e)<=e.arch.range*1.35) setState(e,'combat');
+}
+function stCombat(e,dt){
+  if(!remembers(e)) return setState(e,'search');
+  const d=distToTarget(e);
+  faceTarget(e);
+  if(d>e.arch.range*2.2 || !e.canSee) return setState(e,'chase');
+
+  if(now>=e.nextAttack && d<=e.arch.attackRange*1.15 && beginEnemyAttack(e)){
+    setState(e,'attack'); return;
+  }
+  // With the cooldown up, close the gap instead of circling: the preferred
+  // range sits outside the attack range, so an enemy that only ever holds
+  // station can never actually commit to a swing.
+  if(now>=e.nextAttack && e.canSee){
+    moveTo(e,e.target.pos,e.arch.chase*.8);
+    return;
+  }
+  // Otherwise holding position is still active: close, back off, or circle.
+  if(d<e.arch.range*.7) backAway(e,e.arch.strafe);
+  else if(d>e.arch.range*1.25) moveTo(e,Director.slotPosition(e,e.arch.range),e.arch.strafe*1.4);
+  else circle(e,e.arch.strafe);
+
+  const waiting=now<e.nextAttack;
+  if(waiting && d<e.arch.range*1.4){
+    if(!e.guard && Math.random()<e.arch.block*dt*4) e.guard=true;
+  } else e.guard=false;
+}
+function beginEnemyAttack(e){
+  if(e.runner.move||!e.target) return false;
+  const move=chooseMove(e);
+  if(!move) return false;
+  if(!Director.request(e)) return false;
+  if(move.stamina>0 && !spendStamina(e,move.stamina)){ Director.release(e); return false; }
+  e.guard=false;
+  runnerBegin(e.runner,move);
+  playMoveClip(e,move);
+  faceTarget(e);
+  return true;
+}
+function chooseMove(e){
+  const d=distToTarget(e);
+  let best=null,bestFit=Infinity;
+  for(const id of e.arch.moves){
+    const m=MOVES[id];
+    const reach=m.oz+m.radius+m.lunge+m.track;
+    if(reach<d) continue;
+    const fit=reach-d;
+    if(fit<bestFit){ bestFit=fit; best=m; }
+  }
+  return best;
+}
+function stAttack(e,dt){
+  const r=e.runner;
+  if(!r.move){ finishEnemyAttack(e); return setState(e,'combat'); }
+  const lunge=runnerTick(r,dt,e.target);
+  e.desired=lunge;
+  if(r.t<activeStart(r.move)) faceTarget(e);
+  if(!runnerFinished(r)) return;
+  finishEnemyAttack(e);
+  setState(e, Math.random()<e.arch.retreat ? 'reposition' : 'combat');
+}
+function finishEnemyAttack(e){
+  runnerCancel(e.runner);
+  e.nextAttack=now+Math.max(.15, e.arch.cd+rand(-e.arch.cdVar,e.arch.cdVar));
+  Director.release(e);
+}
+function stReposition(e){
+  if(!remembers(e)) return setState(e,'search');
+  faceTarget(e); backAway(e,e.arch.strafe*1.3);
+  if(stateTime(e)>.75 || distToTarget(e)>e.arch.range*1.6) setState(e,'combat');
+}
+function stReact(e){ e.desired=v3(); if(e.target&&!e.down) faceTarget(e); }
+function stRecover(e){
+  e.desired=v3(); if(e.target) faceTarget(e);
+  if(stateTime(e)<.35) return;
+  setState(e, remembers(e)?'combat':'search');
+}
+function stSearch(e){
+  if(e.canSee) return setState(e,'combat');
+  moveTo(e,e.lastKnown,e.arch.walk*1.35);
+  const arrived=flatDist(e.pos,e.lastKnown)<1.2;
+  if(arrived){
+    e.desired=v3();
+    const sweep=Math.sin(now*2.2)*85*DEG;
+    e.facing={x:Math.sin(sweep),y:0,z:Math.cos(sweep)};
+  }
+  if(stateTime(e)>6||(arrived&&stateTime(e)>3)){ e.anim.stance=STANCE.Relaxed; e.pauseUntil=0; setState(e,'idle'); }
+}
+function steerAndMove(e,dt){
+  // separation from other characters, then obstacle avoidance
+  let vx=e.desired.x, vz=e.desired.z;
+  for(const o of chars){
+    if(o===e||!o.alive) continue;
+    const dx=e.pos.x-o.pos.x, dz=e.pos.z-o.pos.z;
+    const d=Math.hypot(dx,dz);
+    if(d>1.5||d<1e-4) continue;
+    const w=(1-d/1.5)*3.4;
+    vx+=dx/d*w; vz+=dz/d*w;
+  }
+  const speedCap=Math.max(e.arch.chase,e.arch.strafe);
+  const m=Math.hypot(vx,vz);
+  if(m>speedCap){ vx=vx/m*speedCap; vz=vz/m*speedCap; }
+  e.planar={x:vx,y:0,z:vz};
+  integrate(e,e.planar,dt);
+
+  const face=e.facing||(m>.2?{x:vx/m,z:vz/m}:null);
+  if(face) e.yaw=moveTowardAngle(e.yaw,Math.atan2(face.x,face.z),e.arch.turn*dt);
+}
+function pushAnimEnemy(e,dt){
+  const a=e.anim;
+  const local=worldToLocalDir(e,{x:e.planar?e.planar.x:0,y:0,z:e.planar?e.planar.z:0});
+  a.speed=Math.hypot(local.x,local.z);
+  a.airborne=e.grounded?0:1;
+  a.turnRate=damp(a.turnRate, wrapAngle(e.yaw-e.prevYaw)/Math.max(dt,1e-4)/DEG, 12, dt);
+  e.prevYaw=e.yaw;
+  if(!e.alive) a.stance=STANCE.Dead;
+  else if(e.down) a.stance=STANCE.Downed;
+  else if(isBlocking(e)) a.stance=STANCE.Guard;
+  else if(remembers(e)) a.stance=STANCE.Combat;
+  else a.stance=STANCE.Relaxed;
+  a.lookAt=remembers(e)?e.target:null;
+}
+</script>
+
+<script>
+"use strict";
+/* ---- civilian clips (ported from CivilianPoses) ------------------------ */
+reg(tr(tr(mirror(mirror(tr(tr(tr(clip('civ_startle',.5,{full:true}),
+  B.Spine,K(0,0,0,0),K(.08,14,0,0),K(.26,6,0,0),K(.5,0,0,0)),
+  B.Head,K(0,0,0,0),K(.07,-16,0,0),K(.3,-4,0,0),K(.5,0,0,0)),
+  B.UpperArmL,K(0,0,0,0),K(.1,-34,0,26),K(.32,-14,0,14),K(.5,0,0,0)),
+  B.UpperArmL,B.UpperArmR), B.LowerArmL,B.LowerArmR),
+  B.LowerArmL,K(0,0,0,0),K(.1,-46,0,0),K(.5,0,0,0)),
+  B.Chest,K(0,0,0,0),K(.08,10,0,0),K(.5,0,0,0)));
+
+(function(){
+  const c=clip('civ_cower',.55,{full:true,hold:true});
+  tr(c,B.Spine,K(0,0,0,0),K(.55,34,0,0));
+  tr(c,B.Chest,K(0,0,0,0),K(.55,20,0,0));
+  tr(c,B.Head,K(0,0,0,0),K(.55,26,0,0));
+  tr(c,B.UpperArmL,K(0,0,0,0),K(.55,-128,0,44)); mirror(c,B.UpperArmL,B.UpperArmR);
+  tr(c,B.LowerArmL,K(0,0,0,0),K(.55,-104,0,0)); mirror(c,B.LowerArmL,B.LowerArmR);
+  tr(c,B.ThighL,K(0,0,0,0),K(.55,-34,0,0));     mirror(c,B.ThighL,B.ThighR);
+  tr(c,B.ShinL,K(0,0,0,0),K(.55,52,0,0));       mirror(c,B.ShinL,B.ShinR);
+  hips(c,K(0,0,0,0),K(.55,0,-.34,0));
+  reg(c);
+
+  const s=clip('civ_shield',.45,{full:true,hold:true});
+  tr(s,B.Spine,K(0,0,0,0),K(.12,18,0,0),K(.45,12,0,0));
+  tr(s,B.Head,K(0,0,0,0),K(.12,14,0,0),K(.45,10,0,0));
+  tr(s,B.UpperArmL,K(0,0,0,0),K(.14,-96,0,30),K(.45,-88,0,28)); mirror(s,B.UpperArmL,B.UpperArmR);
+  tr(s,B.LowerArmL,K(0,0,0,0),K(.14,-88,0,0),K(.45,-84,0,0));   mirror(s,B.LowerArmL,B.LowerArmR);
+  reg(s);
+
+  const w=clip('civ_wave',1.5);
+  tr(w,B.UpperArmR,K(0,0,0,0),K(.3,-132,0,-22),K(1.2,-132,0,-22),K(1.5,0,0,0));
+  tr(w,B.LowerArmR,K(0,0,0,0),K(.3,-20,0,0),K(.55,-20,0,-34),K(.8,-20,0,22),
+     K(1.05,-20,0,-30),K(1.2,-20,0,0),K(1.5,0,0,0));
+  tr(w,B.Head,K(0,0,0,0),K(.35,0,-16,0),K(1.2,0,-16,0),K(1.5,0,0,0));
+  tr(w,B.Chest,K(0,0,0,0),K(.35,0,-10,0),K(1.2,0,-10,0),K(1.5,0,0,0));
+  reg(w);
+
+  const t=clip('civ_check_watch',1.2);
+  tr(t,B.UpperArmL,K(0,0,0,0),K(.28,-62,0,30),K(.9,-62,0,30),K(1.2,0,0,0));
+  tr(t,B.LowerArmL,K(0,0,0,0),K(.28,-86,0,0),K(.9,-86,0,0),K(1.2,0,0,0));
+  tr(t,B.Head,K(0,0,0,0),K(.3,22,12,0),K(.9,22,12,0),K(1.2,0,0,0));
+  tr(t,B.Spine,K(0,0,0,0),K(.3,8,6,0),K(.9,8,6,0),K(1.2,0,0,0));
+  reg(t);
+
+  const l=clip('civ_look_around',2.4);
+  tr(l,B.Head,K(0,0,0,0),K(.5,0,-40,0),K(1,0,-34,0),K(1.5,0,44,0),K(2,0,36,0),K(2.4,0,0,0));
+  tr(l,B.Chest,K(0,0,0,0),K(.5,0,-12,0),K(1.5,0,14,0),K(2.4,0,0,0));
+  reg(l);
+
+  const u=clip('civ_stumble',.7,{full:true});
+  tr(u,B.Spine,K(0,0,0,0),K(.12,-26,10,8),K(.4,16,0,0),K(.7,0,0,0));
+  tr(u,B.Head,K(0,0,0,0),K(.12,-22,16,10),K(.7,0,0,0));
+  tr(u,B.UpperArmL,K(0,0,0,0),K(.14,-76,0,52),K(.42,-30,0,24),K(.7,0,0,0));
+  mirror(u,B.UpperArmL,B.UpperArmR);
+  tr(u,B.ThighL,K(0,0,0,0),K(.18,-52,0,0),K(.45,10,0,0),K(.7,0,0,0));
+  tr(u,B.ShinL,K(0,0,0,0),K(.18,40,0,0),K(.7,0,0,0));
+  tr(u,B.ThighR,K(0,0,0,0),K(.22,30,0,0),K(.7,0,0,0));
+  hips(u,K(0,0,0,0),K(.14,0,-.12,0),K(.4,0,-.05,0),K(.7,0,0,0));
+  reg(u);
+})();
+
+/* ---- pedestrian network (ported from PedestrianNetwork) ---------------- */
+const Walk={ nodes:[], build(){
+  this.nodes.length=0;
+  const laneX=[-11.3, 11.3];
+  const zs=[]; for(let z=-28; z<=32; z+=6.5) zs.push(z);
+
+  for(let li=0; li<laneX.length; li++)
+    for(let zi=0; zi<zs.length; zi++)
+      this.nodes.push({x:laneX[li], z:zs[zi], links:[]});
+
+  const idx=(li,zi)=>li*zs.length+zi;
+  const link=(a,b,crossing)=>{
+    this.nodes[a].links.push({to:b,crossing});
+    this.nodes[b].links.push({to:a,crossing});
+  };
+
+  for(let li=0; li<laneX.length; li++)
+    for(let zi=0; zi+1<zs.length; zi++) link(idx(li,zi), idx(li,zi+1), false);
+
+  // crossings over the carriageway, every third node
+  for(let zi=0; zi<zs.length; zi+=3) link(idx(0,zi), idx(1,zi), true);
+},
+nearest(p){
+  let best=-1, bestD=1e9;
+  for(let i=0;i<this.nodes.length;i++){
+    const n=this.nodes[i], d=(n.x-p.x)**2+(n.z-p.z)**2;
+    if(d<bestD){bestD=d;best=i;}
+  }
+  return best;
+},
+next(from, cameFrom, heading){
+  const n=this.nodes[from]; if(!n||!n.links.length) return -1;
+  const hl=Math.hypot(heading.x,heading.z);
+  const fx=hl>1e-4?heading.x/hl:0, fz=hl>1e-4?heading.z/hl:0;
+  let total=0; const w=[];
+  for(const l of n.links){
+    let weight = (l.to===cameFrom)?.06:(l.crossing?.45:1);
+    if(hl>1e-4){
+      const t=this.nodes[l.to];
+      const dx=t.x-n.x, dz=t.z-n.z, d=Math.hypot(dx,dz)||1;
+      const a=(dx/d)*fx+(dz/d)*fz;
+      weight*=lerp(.25,2.4,clamp01((a+1)/2));
+    }
+    w.push(weight); total+=weight;
+  }
+  let draw=Math.random()*total, run=0;
+  for(let i=0;i<n.links.length;i++){ run+=w[i]; if(draw<=run) return n.links[i].to; }
+  return n.links[n.links.length-1].to;
+},
+awayFrom(from, threat){
+  const n=this.nodes[from]; if(!n) return -1;
+  const here=(n.x-threat.x)**2+(n.z-threat.z)**2;
+  let best=-1, bestGain=0;
+  for(const l of n.links){
+    const t=this.nodes[l.to];
+    let gain=(t.x-threat.x)**2+(t.z-threat.z)**2-here;
+    if(l.crossing) gain*=.8;
+    if(gain>bestGain){ bestGain=gain; best=l.to; }
+  }
+  return best;
+},
+pos(i){ const n=this.nodes[i]; return {x:n.x, y:0, z:n.z}; }
+};
+
+/* ---- civilian styles --------------------------------------------------- */
+const CIV_SKIN=['#F0C8A0','#D9A578','#B07C4F','#8A5A38','#5E3A22'];
+const CIV_TOP=['#6B7B8C','#8C6B6B','#4E5D52','#7A7285','#A8A093','#3B4A5A','#94684F'];
+const CIV_LEG=['#343A42','#4A4038','#2C3038','#5A5348'];
+const CIV_HAIR=['#1B1512','#3A2A1E','#6B5238','#8F8F92','#2A2A2E'];
+const pick=a=>a[(Math.random()*a.length)|0];
+function civilianStyle(){
+  return { height:rand(1.62,1.88), build:rand(.86,1.16),
+    skin:hexRGB(pick(CIV_SKIN)), torso:hexRGB(pick(CIV_TOP)), legs:hexRGB(pick(CIV_LEG)),
+    shoes:hexRGB('#1C1A18'), hair:hexRGB(pick(CIV_HAIR)), accent:hexRGB(pick(CIV_TOP)) };
+}
+
+/* ---- the crowd (ported from CrowdDirector + CivilianBrain) ------------- */
+const PANIC_R=11, CALM_R=22;
+const Crowd={
+  people:[], population:14, spawnR:44, minSpawn:14, recycleR:60,
+  alarmR:26, alarmDur:6, nextMaintain:0, dangers:[],
+
+  reset(){ for(const c of this.people){ const i=chars.indexOf(c); if(i>=0) chars.splice(i,1); }
+    this.people.length=0; this.dangers.length=0; this.nextMaintain=0; },
+
+  tick(){
+    if(!player || now<this.nextMaintain) return;
+    this.nextMaintain=now+.35;
+
+    for(let i=this.people.length-1;i>=0;i--){
+      const c=this.people[i];
+      if(flatDist(c.pos,player.pos)>this.recycleR) this.relocate(c);
+    }
+    let spawned=0;
+    while(this.people.length<this.population && spawned<3){
+      const node=this.pickNode(); if(node<0) break;
+      this.people.push(makeCivilian(node)); spawned++;
+    }
+  },
+
+  pickNode(){
+    const count=Walk.nodes.length; if(!count) return -1;
+    const start=(Math.random()*count)|0;
+    for(let i=0;i<count;i++){
+      const idx=(start+i)%count;
+      const d=flatDist(Walk.nodes[idx], player.pos);
+      if(d>=this.minSpawn && d<=this.spawnR) return idx;
+    }
+    return -1;
+  },
+
+  relocate(c){
+    const node=this.pickNode(); if(node<0) return;
+    const p=Walk.pos(node);
+    c.pos.x=p.x; c.pos.z=p.z; c.pos.y=0;
+    c.node=node; c.prevNode=-1; c.target=null;
+    c.threatUntil=0; c.down=false; c.controlUntil=0;
+    c.anim.stance=STANCE.Relaxed;
+    civSetState(c,'stroll');
+  },
+
+  alarm(point,severity){
+    if(!this.people.length) return;
+    for(const c of this.people){
+      if(flatDist(c.pos,point)>this.alarmR) continue;
+      civAlarm(c,point,severity,this.alarmDur);
+    }
+  }
+};
+function commotion(point,severity){ Crowd.alarm(point,severity); }
+
+function makeCivilian(node){
+  const p=Walk.pos(node);
+  const c=makeChar('civilian', civilianStyle(), {x:p.x,y:0,z:p.z}, rand(-Math.PI,Math.PI));
+  c.faction='civilian';
+  c.name='Civilian';
+  c.node=node; c.prevNode=-1; c.target=null;
+  c.walk=rand(1.15,1.75); c.hurry=c.walk+rand(.6,1.1); c.flee=rand(4.1,5.2);
+  c.turn=rand(360,520)*DEG;
+  c.state='stroll'; c.stateAt=now;
+  c.threat={x:0,y:0,z:0}; c.threatUntil=0; c.severity=0;
+  c.desired=v3(); c.facing=null;
+  c.anim.stance=STANCE.Relaxed;
+  chars.push(c);
+  return c;
+}
+function civSetState(c,s){ if(c.state===s) return; c.state=s; c.stateAt=now;
+  if(s==='flee') c.anim.stance=STANCE.Combat;
+  else if(s==='stroll'||s==='watch') c.anim.stance=STANCE.Relaxed; }
+const civTime=c=>now-c.stateAt;
+const civHasThreat=c=>now<c.threatUntil;
+const civThreatDist=c=>civHasThreat(c)?flatDist(c.pos,c.threat):1e9;
+
+function civAlarm(c,point,severity,duration){
+  const d=flatDist(c.pos,point);
+  if(civHasThreat(c) && d>civThreatDist(c) && severity<=c.severity) return;
+  c.threat={...point}; c.severity=severity;
+  c.threatUntil=Math.max(c.threatUntil, now+duration);
+  if(c.state==='stroll'||c.state==='pause') civSetState(c,'startled');
+}
+
+function civChooseStop(c){
+  if(c.node<0) c.node=Walk.nearest(c.pos);
+  const prev=c.prevNode>=0?Walk.nodes[c.prevNode]:null;
+  const here=Walk.nodes[c.node];
+  const heading=prev?{x:here.x-prev.x,z:here.z-prev.z}:{x:Math.sin(c.yaw),z:Math.cos(c.yaw)};
+  const next=Walk.next(c.node,c.prevNode,heading);
+  if(next<0) return false;
+  c.prevNode=c.node; c.node=next;
+  const p=Walk.pos(next);
+  c.target={x:p.x+rand(-.55,.55), y:0, z:p.z+rand(-.55,.55)};
+  return true;
+}
+function civChooseEscape(c){
+  if(c.node<0) c.node=Walk.nearest(c.pos);
+  const next=Walk.awayFrom(c.node,c.threat);
+  if(next<0) return false;
+  c.prevNode=c.node; c.node=next;
+  const p=Walk.pos(next);
+  c.target={x:p.x+rand(-.5,.5), y:0, z:p.z+rand(-.5,.5)};
+  return true;
+}
+const civCornered=c=>c.node<0 || Walk.awayFrom(c.node,c.threat)<0;
+function civArrive(c,speed){
+  if(!c.target) return;
+  const dx=c.target.x-c.pos.x, dz=c.target.z-c.pos.z;
+  const d=Math.hypot(dx,dz);
+  if(d<=.3){ c.desired=v3(); return; }
+  const s=d<1.2?speed*(d-.3)/.9:speed;
+  c.desired={x:dx/d*Math.min(s,speed), y:0, z:dz/d*Math.min(s,speed)};
+}
+const civDist=c=>c.target?flatDist(c.pos,c.target):1e9;
+
+function tickCivilian(c,dt){
+  if(!c.alive){ integrate(c,v3(),dt); pushAnimCiv(c,dt); return; }
+  c.desired=v3(); c.facing=null;
+
+  if(reacting(c)){
+    integrate(c,v3(),dt); pushAnimCiv(c,dt);
+    if(!reacting(c) && c.down){ c.down=false; c.anim.stance=STANCE.Relaxed; playAction(c.anim,'get_up'); }
+    return;
+  }
+
+  switch(c.state){
+    case 'stroll':   civStroll(c); break;
+    case 'pause':    civPause(c); break;
+    case 'startled': civStartled(c); break;
+    case 'flee':     civFlee(c); break;
+    case 'cower':    civCower(c); break;
+    case 'watch':    civWatch(c); break;
+  }
+
+  civBarge(c);
+  civApplyMovement(c,dt);
+  pushAnimCiv(c,dt);
+}
+
+/* separation from other characters, then move and turn */
+function civApplyMovement(c,dt){
+  let vx=c.desired.x, vz=c.desired.z;
+  for(const o of chars){
+    if(o===c||!o.alive) continue;
+    const dx=c.pos.x-o.pos.x, dz=c.pos.z-o.pos.z;
+    const d=Math.hypot(dx,dz);
+    if(d>1.4||d<1e-4) continue;
+    const w=(1-d/1.4)*2.6;
+    vx+=dx/d*w; vz+=dz/d*w;
+  }
+  const cap=Math.max(c.flee,c.hurry);
+  const m=Math.hypot(vx,vz);
+  if(m>cap){ vx=vx/m*cap; vz=vz/m*cap; }
+  c.planar={x:vx,y:0,z:vz};
+  integrate(c,c.planar,dt);
+
+  const face=c.facing||(m>.2?{x:vx/m,z:vz/m}:null);
+  if(face) c.yaw=moveTowardAngle(c.yaw,Math.atan2(face.x,face.z),c.turn*dt);
+}
+function civStroll(c){
+  if(civHasThreat(c) && civThreatDist(c)<CALM_R){ civSetState(c,'startled'); return; }
+  if(!c.target && !civChooseStop(c)) return;
+  civArrive(c,c.walk);
+  if(civDist(c)>.6) return;
+  if(Math.random()<.22){ civSetState(c,'pause'); return; }
+  civChooseStop(c);
+}
+function civPause(c){
+  if(civTime(c)<.02){
+    const r=Math.random();
+    playAction(c.anim, r<.4?'civ_look_around':(r<.7?'civ_check_watch':'civ_wave'));
+  }
+  if(civHasThreat(c) && civThreatDist(c)<CALM_R){ civSetState(c,'startled'); return; }
+  if(civTime(c)<1.6) return;
+  if(c.anim.action) return;
+  civSetState(c,'stroll');
+}
+function civStartled(c){
+  if(civTime(c)<.02){ playAction(c.anim,'civ_startle'); sfx('grunt',c.pos,.3,.22); }
+  c.facing={x:c.threat.x-c.pos.x, y:0, z:c.threat.z-c.pos.z};
+  if(civTime(c)<.45) return;
+  if(!civHasThreat(c)){ civSetState(c,'stroll'); return; }
+  if(civThreatDist(c)<PANIC_R) civSetState(c, civCornered(c)?'cower':'flee');
+  else civSetState(c,'watch');
+}
+function civFlee(c){
+  if(!civHasThreat(c) || civThreatDist(c)>CALM_R){ civSetState(c,'watch'); return; }
+  if(civCornered(c)){ civSetState(c,'cower'); return; }
+  if(!c.target || civDist(c)<.8){ if(!civChooseEscape(c)){ civSetState(c,'cower'); return; } }
+  civArrive(c,c.flee);
+}
+function civCower(c){
+  if(civTime(c)<.02) playAction(c.anim,'civ_cower');
+  c.facing={x:c.threat.x-c.pos.x, y:0, z:c.threat.z-c.pos.z};
+  if(civTime(c)<1.2) return;
+  if(civHasThreat(c) && civThreatDist(c)<PANIC_R && civCornered(c)) return;
+  stopAction(c.anim);
+  civSetState(c, civHasThreat(c)?'flee':'stroll');
+}
+function civWatch(c){
+  if(!civHasThreat(c)){ civSetState(c,'stroll'); return; }
+  const d=civThreatDist(c);
+  if(d<PANIC_R){ civSetState(c, civCornered(c)?'cower':'flee'); return; }
+  c.facing={x:c.threat.x-c.pos.x, y:0, z:c.threat.z-c.pos.z};
+  if(d<CALM_R*.75){
+    const dx=c.pos.x-c.threat.x, dz=c.pos.z-c.threat.z, l=Math.hypot(dx,dz)||1;
+    c.desired={x:dx/l*c.walk*.45, y:0, z:dz/l*c.walk*.45};
+  }
+  if(civTime(c)<=4.5) return;
+  c.threatUntil=0;              // seen enough; a fresh commotion re-alarms them
+  civSetState(c,'stroll');
+}
+function civBarge(c){
+  if(!player || !player.alive) return;
+  const d=flatDist(c.pos,player.pos);
+  if(d>.95) return;
+  const speed=Math.hypot(player.planar.x, player.planar.z);
+  if(speed<4) return;
+  const dx=c.pos.x-player.pos.x, dz=c.pos.z-player.pos.z, l=Math.hypot(dx,dz)||1;
+  const push=Math.min(speed*.6,8);
+  applyKnockback(c,{x:dx/l*push, y:0, z:dz/l*push});
+  addImpulse(c.anim, worldToLocalDir(c,{x:dx/l,y:0,z:dz/l}), 1.3);
+  playAction(c.anim,'civ_stumble');
+  civAlarm(c, player.pos, .5, 2.5);
+}
+function pushAnimCiv(c,dt){
+  const a=c.anim;
+  const local=worldToLocalDir(c,{x:c.planar?c.planar.x:0,y:0,z:c.planar?c.planar.z:0});
+  a.speed=Math.hypot(local.x,local.z);
+  a.airborne=c.grounded?0:1;
+  a.turnRate=damp(a.turnRate, wrapAngle(c.yaw-c.prevYaw)/Math.max(dt,1e-4)/DEG, 12, dt);
+  c.prevYaw=c.yaw;
+  if(!c.alive) a.stance=STANCE.Dead;
+  else if(c.down) a.stance=STANCE.Downed;
+}
+</script>
+
+<script>
+"use strict";
+/* ======================================================================
+   THE CAMPAIGN
+   Ported from Assets/Scripts/Stages/*. Difficulty rises through enemy
+   composition and arena shape rather than through bigger numbers.
+   ====================================================================== */
+
+const STAGES=[
+  { name:'THE STREETS', tagline:'Somebody has been leaning on the shopkeepers.',
+    arena:'streets', radius:17, xp:250, money:120, civilians:true,
+    objective:'DEFEAT ALL ENEMIES',
+    waves:[ {kind:'brawler',count:3,delay:0}, {kind:'runner',count:2,delay:6} ] },
+
+  { name:'THE ABANDONED WAREHOUSE', tagline:'Whatever they are moving, it is in here.',
+    arena:'warehouse', radius:15, xp:400, money:200, civilians:false,
+    objective:'DEFEAT ALL ENEMIES',
+    waves:[ {kind:'brawler',count:4,delay:0}, {kind:'bruiser',count:2,delay:8} ] },
+
+  { name:'THE DOCKS', tagline:'Cold night, open ground, nowhere to hide.',
+    arena:'docks', radius:22, xp:650, money:320, civilians:false,
+    objective:'DEFEAT ALL ENEMIES',
+    waves:[ {kind:'runner',count:3,delay:0}, {kind:'bruiser',count:2,delay:7},
+            {kind:'elite',count:1,delay:15} ] },
+
+  { name:'THE UNDERGROUND ARENA', tagline:'They paid to watch this one.',
+    arena:'underground', radius:13, xp:1000, money:550, civilians:false,
+    objective:'DEFEAT THE BULLDOZER',
+    waves:[ {kind:'defender',count:2,delay:0}, {kind:'elite',count:2,delay:9},
+            {kind:'miniboss',count:1,delay:20} ] },
+
+  { name:'THE ROOFTOP', tagline:'The whole city is watching this one end.',
+    arena:'rooftop', radius:20, xp:2000, money:1200, civilians:false,
+    objective:'DEFEAT KASKADE',
+    waves:[ {kind:'elite',count:2,delay:0}, {kind:'defender',count:1,delay:6},
+            {kind:'runner',count:2,delay:11}, {kind:'finalboss',count:1,delay:18} ] }
+];
+const stageTotal=st=>st.waves.reduce((a,w)=>a+w.count,0);
+
+/* ---- difficulty (ported from DifficultyProfile) ------------------------
+   Multipliers, never replacement values. Normal is exactly 1 on every axis,
+   because the balance was tuned by playing it. */
+const DIFFICULTY={
+  easy:   { name:'Easy',   dmg:.65, hp:.75, cd:1.35, react:1.4,  attackers:1 },
+  normal: { name:'Normal', dmg:1,   hp:1,   cd:1,    react:1,    attackers:2 },
+  hard:   { name:'Hard',   dmg:1.45,hp:1.35,cd:.7,   react:.65,  attackers:3 }
+};
+
+/* ---- persistence (ported from SaveData/SaveFile) ---------------------- */
+const SAVE_KEY='glowpulse.save.v1';
+
+/* ---- key bindings (ported from InputBindings) -------------------------
+   Two keys per action, because the shipped controls genuinely use two for
+   dodge and block and collapsing that would quietly change the game.
+   Claiming a key takes it from whoever had it and leaves that action
+   visibly unbound - a problem you can see - rather than two actions
+   silently sharing one. */
+const ACTIONS=[
+  {id:'forward', name:'Move Forward'},
+  {id:'back',    name:'Move Backward'},
+  {id:'left',    name:'Move Left'},
+  {id:'right',   name:'Move Right'},
+  {id:'sprint',  name:'Sprint'},
+  {id:'jump',    name:'Jump'},
+  {id:'dodge',   name:'Dodge'},
+  {id:'light',   name:'Attack'},
+  {id:'heavy',   name:'Heavy Attack'},
+  {id:'block',   name:'Block'},
+  {id:'grab',    name:'Grab'},
+  {id:'lock',    name:'Lock On'}
+];
+const DEFAULT_BINDS={
+  forward:['KeyW','ArrowUp'], back:['KeyS','ArrowDown'],
+  left:['KeyA','ArrowLeft'], right:['KeyD','ArrowRight'],
+  sprint:['ShiftLeft','ShiftRight'], jump:['Space',null],
+  dodge:['ControlLeft','KeyC'], light:['Mouse0',null],
+  heavy:['KeyF',null], block:['Mouse1','KeyQ'],
+  grab:['KeyG',null], lock:['Tab','Mouse2']
+};
+function defaultBinds(){ const o={}; for(const k in DEFAULT_BINDS) o[k]=DEFAULT_BINDS[k].slice(); return o; }
+
+function keyLabel(code){
+  if(!code) return '-';
+  const named={ Mouse0:'LMB', Mouse1:'RMB', Mouse2:'MMB', Space:'Space', Tab:'Tab',
+    ControlLeft:'Left Ctrl', ControlRight:'Right Ctrl', ShiftLeft:'Left Shift',
+    ShiftRight:'Right Shift', AltLeft:'Left Alt', AltRight:'Right Alt',
+    ArrowUp:'Up', ArrowDown:'Down', ArrowLeft:'Left', ArrowRight:'Right',
+    Escape:'Esc', Enter:'Enter', Backspace:'Backspace' };
+  if(named[code]) return named[code];
+  if(code.startsWith('Key')) return code.slice(3);
+  if(code.startsWith('Digit')) return code.slice(5);
+  return code;
+}
+function bindLabel(id){
+  const b=Save.data.binds[id]||[];
+  if(!b[0]&&!b[1]) return 'Unbound';
+  if(!b[1]) return keyLabel(b[0]);
+  if(!b[0]) return keyLabel(b[1]);
+  return keyLabel(b[0])+' / '+keyLabel(b[1]);
+}
+function bindHeld(id){
+  const b=Save.data.binds[id]||[];
+  return b.some(c=>c&&(c.startsWith('Mouse')?mouseDown(c):!!Keys[c]));
+}
+function mouseDown(code){
+  return code==='Mouse0'?Mouse.left : code==='Mouse1'?Mouse.right : Mouse.middle;
+}
+function rebind(id,code,slot){
+  if(!code) return;
+  // Take the key from whoever had it rather than refusing the rebind.
+  for(const a of ACTIONS){
+    const b=Save.data.binds[a.id];
+    for(let i=0;i<2;i++) if(b[i]===code && !(a.id===id&&i===slot)) b[i]=null;
+  }
+  Save.data.binds[id][slot]=code;
+  Save.write();
+}
+
+const Save={
+  data:{ difficulty:'normal', sensitivity:1, highestUnlocked:0, current:0,
+         completed:[], xp:0, money:0, binds:defaultBinds() },
+  load(){
+    // Start from defaults every time. Merging onto whatever is already in
+    // memory means clearing the save leaves the old progress behind.
+    this.data={ difficulty:'normal', sensitivity:1, highestUnlocked:0, current:0,
+                completed:[], xp:0, money:0, binds:defaultBinds() };
+    try{
+      const raw=localStorage.getItem(SAVE_KEY);
+      if(raw) Object.assign(this.data, JSON.parse(raw)||{});
+    }catch(e){ /* a corrupt save must never stop the game starting */ }
+    this.repair();
+  },
+  repair(){
+    const d=this.data;
+    if(!DIFFICULTY[d.difficulty]) d.difficulty='normal';
+    d.sensitivity=clamp(+d.sensitivity||1,.25,3);
+    d.highestUnlocked=clamp(d.highestUnlocked|0,0,STAGES.length-1);
+    d.current=clamp(d.current|0,0,d.highestUnlocked);
+    if(!Array.isArray(d.completed)) d.completed=[];
+    d.completed=d.completed.filter(i=>i>=0&&i<STAGES.length);
+    d.xp=Math.max(0,d.xp|0); d.money=Math.max(0,d.money|0);
+    // Repair a binding table written by an older build: an action with
+    // nothing on it falls back to its default rather than being unplayable.
+    const def=defaultBinds();
+    if(!d.binds||typeof d.binds!=='object') d.binds=def;
+    for(const a of ACTIONS){
+      const b=d.binds[a.id];
+      if(!Array.isArray(b)||b.length!==2||(!b[0]&&!b[1])) d.binds[a.id]=def[a.id].slice();
+    }
+  },
+  write(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(this.data)); }catch(e){} },
+  unlocked(i){ return i<=this.data.highestUnlocked; },
+  completed(i){ return this.data.completed.includes(i); },
+  complete(i){
+    if(!this.data.completed.includes(i)) this.data.completed.push(i);
+    // Forward only: replaying an early stage must not wind progress back.
+    if(i+1<STAGES.length && i+1>this.data.highestUnlocked) this.data.highestUnlocked=i+1;
+    this.write();
+  },
+  profile(){ return DIFFICULTY[this.data.difficulty]; }
+};
+Save.load();
+
+/* ---- arenas (ported from ArenaBuilder) --------------------------------
+   Each arena is shaped differently, not merely dressed differently: the
+   warehouse breaks sightlines, the pit corners you, the rooftop is wide
+   and exposed. */
+function buildArena(st){
+  World.boxes.length=0; World.props.length=0;
+  const r=st.radius;
+  World.bounds=r*1.02;
+  World.arena=st.arena;
+
+  const ring=(deg,rad)=>({x:Math.sin(deg*DEG)*rad, z:Math.cos(deg*DEG)*rad});
+  const wall=(rad,h,thick,rgb)=>{
+    for(let i=0;i<24;i++){
+      const a=i*15, p=ring(a,rad+thick*.5);
+      // segments overlap, or a knockback pushes you through a seam
+      const w=rad*2*Math.PI/24*1.15;
+      World.boxes.push({x:p.x,z:p.z,hw:w*.5,hd:thick*.5,h,rgb,yaw:a*DEG});
+    }
+  };
+
+  if(st.arena==='streets'){
+    const facades=['#4A4139','#3E4148','#514540','#3A3F45','#57493F','#434A50'];
+    for(let i=0;i<12;i++){
+      const p=ring(i*30, r+8), h=rand(9,20);
+      World.boxes.push({x:p.x,z:p.z,hw:5.5,hd:5.5,h,rgb:hexRGB(facades[i%6]),
+        windows:{windows:true,cols:3,rows:Math.max(2,(h/3)|0),lit:[]}});
+    }
+    for(let i=0;i<5;i++){
+      const a=40+i*66, p=ring(a,r*.86);
+      World.props.push({type:'car',x:p.x,z:p.z,yaw:a*DEG,
+        col:hexRGB(['#5A6470','#6B4B44','#41505A','#6E6353','#495159'][i%5])});
+      World.boxes.push({x:p.x,z:p.z,hw:1,hd:2.2,h:1.35,rgb:null,noDraw:true});
+    }
+    for(let i=0;i<8;i++){ const p=ring(i*45,r*.98); World.props.push({type:'lamp',x:p.x,z:p.z,s:1}); }
+  }
+  else if(st.arena==='warehouse'){
+    wall(r,8,1.2,hexRGB('#6A665E'));
+    for(let sx=-1;sx<=1;sx+=2) for(let sz=-1;sz<=1;sz+=2)
+      World.boxes.push({x:sx*r*.5,z:sz*r*.5,hw:.65,hd:.65,h:8,rgb:hexRGB('#6A665E')});
+    for(let i=0;i<7;i++){
+      const p=ring(i*51,r*.78);
+      World.boxes.push({x:p.x,z:p.z,hw:.75,hd:.75,h:1.5,rgb:hexRGB('#4A3A2C')});
+    }
+    for(let i=0;i<6;i++){ const p=ring(i*60,r*.9); World.props.push({type:'lamp',x:p.x,z:p.z,s:1}); }
+  }
+  else if(st.arena==='docks'){
+    // No wall: the openness is the point, containers are the cover.
+    const cols=['#73402F','#33525E','#5A5B47','#472F42','#385844'];
+    for(let i=0;i<9;i++){
+      const a=i*40+rand(0,14), p=ring(a,r*rand(.55,.92));
+      const h=Math.random()<.4?5.2:2.6;
+      World.boxes.push({x:p.x,z:p.z,hw:1.4,hd:3.1,h,rgb:hexRGB(cols[i%5]),yaw:a*DEG});
+    }
+    World.boxes.push({x:r*.8,z:-r*.7,hw:.55,hd:.55,h:18,rgb:hexRGB('#6E7378')});
+    for(let i=0;i<10;i++){ const p=ring(i*36,r*1.02); World.props.push({type:'lamp',x:p.x,z:p.z,s:1}); }
+  }
+  else if(st.arena==='underground'){
+    wall(r,3.2,1.6,hexRGB('#5E5B54'));
+    for(let tier=0;tier<4;tier++){
+      const rad=r+3+tier*2.2, h=1.4+tier*1.1;
+      for(let i=0;i<26;i++){
+        const a=i*(360/26), p=ring(a,rad);
+        World.boxes.push({x:p.x,z:p.z,hw:1.6,hd:1.1,h,rgb:hexRGB('#6A665E'),yaw:a*DEG,noCollide:true});
+      }
+    }
+    for(let i=0;i<8;i++){ const p=ring(i*45,r*.7); World.props.push({type:'lamp',x:p.x,z:p.z,s:1,high:true}); }
+  }
+  else { // rooftop
+    wall(r,1.1,.5,hexRGB('#6A665E'));
+    for(let i=0;i<5;i++){
+      const a=30+i*72, p=ring(a,r*.62), h=rand(2,3.4);
+      World.boxes.push({x:p.x,z:p.z,hw:1.7,hd:1.3,h,rgb:hexRGB('#6E7378'),yaw:a*DEG});
+    }
+    // skyline below the deck, so the edge reads as a drop
+    for(let i=0;i<22;i++){
+      const a=i*(360/22)+rand(0,9), p=ring(a,r+14+rand(0,26)), h=rand(14,46);
+      World.boxes.push({x:p.x,z:p.z,hw:4.5,hd:4.5,h,rgb:hexRGB('#3A3F45'),
+        sunk:h+2, noCollide:true});
+    }
+    for(let i=0;i<6;i++){ const p=ring(i*60,r*.92); World.props.push({type:'lamp',x:p.x,z:p.z,s:1}); }
+  }
+}
+
+/* ---- the runner (ported from StageRunner) ----------------------------- */
+const Stage={
+  index:0, def:null, pending:[], startedAt:0, defeated:0, total:0,
+  running:false, finished:false, boss:null,
+
+  begin(i){
+    this.index=i; this.def=STAGES[i];
+    this.pending=this.def.waves.map(w=>({...w}));
+    this.startedAt=now; this.defeated=0; this.total=stageTotal(this.def);
+    this.running=true; this.finished=false; this.boss=null;
+  },
+  tick(){
+    if(!this.running||this.finished) return;
+    const elapsed=now-this.startedAt;
+    for(let i=this.pending.length-1;i>=0;i--){
+      if(this.pending[i].delay>elapsed) continue;
+      const w=this.pending.splice(i,1)[0];
+      this.spawn(w);
+    }
+    // Cleared only when nothing is left to send and nothing is left alive.
+    const alive=chars.some(c=>c.kind==='enemy'&&c.alive);
+    if(this.pending.length===0 && !alive) this.finish();
+  },
+  spawn(w){
+    const A=ARCHETYPES[w.kind];
+    const bossWave=!!A.boss;
+    const r=this.def.radius;
+    for(let i=0;i<w.count;i++){
+      let a, rad;
+      if(bossWave){
+        // Straight across the arena from the player: it deserves to be seen coming.
+        const dx=-player.pos.x, dz=-player.pos.z;
+        a=Math.atan2(dx,dz); rad=r*.92;
+      } else {
+        a=(i/Math.max(1,w.count))*TAU + rand(-.38,.38);
+        rad=r*lerp(.7,.95, i/Math.max(1,w.count));
+      }
+      const pos={x:Math.sin(a)*rad, y:0, z:Math.cos(a)*rad};
+      const yaw=Math.atan2(-pos.x,-pos.z);
+      const e=makeEnemy(w.kind,pos,yaw);
+      if(bossWave){ this.boss=e; e.isBoss=true; bossPhaseBind(e); HUD.bossShow(e); }
+      chars.push(e);
+    }
+    HUD.objective();
+  },
+  killed(){ this.defeated++; HUD.objective(); },
+  finish(){
+    if(this.finished) return;
+    this.finished=true; this.running=false;
+    Save.data.xp+=this.def.xp; Save.data.money+=this.def.money;
+    Save.complete(this.index);
+    Screens.victory(this.def);
+  },
+  fail(){
+    if(this.finished) return;
+    this.finished=true; this.running=false;
+    Save.write();
+    Screens.defeat(this.def);
+  }
+};
+
+/* ---- boss phases (ported from BossBrain) -----------------------------
+   A boss with more health is a longer fight, not a boss. Phases key off
+   health so the change always lands on something the player did, and they
+   move forward only. */
+const BOSS_PHASES=[
+  { at:1,   cd:1,   speed:1,    dmg:1,   poise:1,    say:null },
+  { at:.65, cd:.76, speed:1.12, dmg:1.1, poise:1.15, say:'ENRAGED' },
+  { at:.3,  cd:.55, speed:1.24, dmg:1.2, poise:1.35, say:'LAST STAND' }
+];
+function bossPhaseBind(e){
+  e.phase=0;
+  e.baseArch=Object.assign({},e.arch);
+}
+function bossPhaseTick(e){
+  if(!e.isBoss||!e.alive) return;
+  const frac=e.hp/e.hpMax;
+  while(e.phase+1<BOSS_PHASES.length && frac<=BOSS_PHASES[e.phase+1].at)
+    bossEnterPhase(e, e.phase+1);
+}
+function bossEnterPhase(e,i){
+  e.phase=i;
+  const ph=BOSS_PHASES[i], b=e.baseArch;
+  // Retune, never rebuild: the damage already dealt has to stay dealt.
+  e.arch=Object.assign({},b,{
+    cd:b.cd*ph.cd, cdVar:b.cdVar*ph.cd, react:b.react*ph.cd,
+    chase:b.chase*ph.speed, strafe:b.strafe*ph.speed, walk:b.walk*ph.speed,
+    dmgMul:(b.dmgMul||1)*ph.dmg,
+    retreat:b.retreat*Math.max(0,1-i*.5)
+  });
+  e.poiseMax=b.poise*ph.poise;
+  e.poise=e.poiseMax;   // the turn itself cannot be interrupted
+  if(!ph.say) return;
+  shakeCam(.5);
+  ring({x:e.pos.x,y:.06,z:e.pos.z},hexRGB('#FF7A3D'),.5,6,.5);
+  sfx('guard_break',e.pos,1,.05);
+  commotion(e.pos,1);
+  HUD.bossPhase(ph.say);
+}
+
+/* ---- title card, HUD and screens -------------------------------------- */
+const Screens={
+  el(id){ return document.getElementById(id); },
+
+  card(st,n){
+    const c=this.el('titleCard');
+    this.el('cardNum').textContent='STAGE '+(n+1);
+    this.el('cardName').textContent=st.name;
+    this.el('cardTag').textContent=st.tagline;
+    // Fades in, holds, fades out - and never blocks input. A card that takes
+    // the game away for three seconds is a loading screen.
+    c.classList.remove('on'); void c.offsetWidth; c.classList.add('on');
+    setTimeout(()=>c.classList.remove('on'),2900);
+  },
+
+  victory(st){
+    this.el('endTitle').textContent='STAGE COMPLETE';
+    this.el('endTitle').style.color='var(--sun)';
+    this.el('endStage').textContent=st.name;
+    this.el('endRewards').innerHTML=`+${st.xp} XP<br>+$${st.money}`;
+    const hasNext=Stage.index+1<STAGES.length;
+    this.el('endNote').textContent=hasNext
+      ? `STAGE ${Stage.index+2} unlocked.`
+      : 'That was the last of them. The city is yours.';
+    this.el('endNext').textContent=hasNext?'NEXT STAGE':'FIGHT IT AGAIN';
+    this.el('endScreen').classList.add('on');
+    Time_.paused=true;
+  },
+
+  defeat(st){
+    this.el('endTitle').textContent='YOU WENT DOWN';
+    this.el('endTitle').style.color='var(--thug)';
+    this.el('endStage').textContent=st.name;
+    this.el('endRewards').innerHTML=`XP ${Save.data.xp}<br>$${Save.data.money}`;
+    this.el('endNote').textContent='Everything you earned on the way is kept.';
+    this.el('endNext').textContent='TRY AGAIN';
+    this.el('endScreen').classList.add('on');
+    Time_.paused=true;
+  },
+
+  hideEnd(){ this.el('endScreen').classList.remove('on'); Time_.paused=false; },
+
+  select(){
+    const list=this.el('selectList');
+    list.innerHTML='';
+    STAGES.forEach((st,i)=>{
+      const unlocked=Save.unlocked(i), done=Save.completed(i);
+      const current=unlocked&&!done&&i===Save.data.highestUnlocked;
+      const row=document.createElement('div');
+      row.className='srow'+(unlocked?'':' locked')+(current?' current':'')+(done?' done':'');
+      row.innerHTML=`<div class="smark">${done?'✓':(unlocked?'▶':'✕')}</div>
+        <div class="sbody"><div class="stitle">STAGE ${i+1} — ${st.name}</div>
+        <div class="sdetail">${unlocked?(done?'Cleared':st.tagline):'Locked — clear the stage before it.'}</div></div>`;
+      // A locked row genuinely does not respond; a dimmed row that still
+      // swallows clicks reads as a broken game.
+      if(unlocked) row.onclick=()=>{ this.hideSelect(); enterStage(i); };
+      list.appendChild(row);
+    });
+    this.el('selectScreen').classList.add('on');
+    Time_.paused=true;
+  },
+  hideSelect(){ this.el('selectScreen').classList.remove('on'); Time_.paused=false; },
+
+  /* ---- settings ------------------------------------------------------
+     Changes apply as they are made rather than behind an Apply button: a
+     sensitivity slider you cannot feel while dragging is useless. */
+  settings(){
+    // Titled by context: it is a pause menu mid-fight and a settings screen
+    // from the title, but it is the same panel either way.
+    this.el('settingsTitle').textContent=Game.running?'PAUSED':'SETTINGS';
+    this.el('pauseRestart').style.display=Game.running?'':'none';
+    this.el('pauseSelect').style.display=Game.running?'':'none';
+    this.el('settingsBack').querySelector('span').textContent=Game.running?'RESUME':'BACK';
+    this.refreshSettings();
+    this.el('settingsScreen').classList.add('on');
+    Time_.paused=true;
+    releasePointer();
+  },
+  hideSettings(){
+    Rebind.cancel();
+    Save.write();
+    this.el('settingsScreen').classList.remove('on');
+    Time_.paused=false;
+    // Give the mouse back to the game, or the camera stays dead after a pause.
+    if(Game.running && !Touch.enabled && !isCoarse()) canvas.requestPointerLock();
+  },
+  refreshSettings(){
+    const d=Save.data;
+
+    document.querySelectorAll('button.diff').forEach(b=>
+      b.classList.toggle('on', b.dataset.diff===d.difficulty));
+
+    this.el('diffNote').textContent={
+      easy:'Enemies hit softer, have less health, and come at you one at a time.',
+      normal:'The fight as it was tuned.',
+      hard:'Enemies hit harder, take more punishment, and three can swing at once.'
+    }[d.difficulty];
+
+    this.el('sensSlider').value=d.sensitivity;
+    this.el('sensValue').textContent=(+d.sensitivity).toFixed(2);
+
+    const list=this.el('bindList');
+    list.innerHTML='';
+    for(const a of ACTIONS){
+      const b=d.binds[a.id];
+      const unbound=!b[0]&&!b[1];
+      const listening=Rebind.action===a.id;
+      const row=document.createElement('div');
+      row.className='bindrow'+(unbound?' unbound':'')+(listening?' listening':'');
+      row.innerHTML=`<div class="bname">${a.name}</div>
+        <div class="bkeys">${listening?'Press a key...':bindLabel(a.id)}</div>`;
+      for(let slot=0;slot<2;slot++){
+        const btn=document.createElement('button');
+        btn.innerHTML=`<span>${slot?'ALT':'SET'}</span>`;
+        btn.onclick=()=>Rebind.begin(a.id,slot);
+        row.appendChild(btn);
+      }
+      list.appendChild(row);
+    }
+  }
+};
+
+/* ---- capturing a new key ---------------------------------------------
+   Escape cancels the capture rather than closing the menu, and is never
+   itself bindable: it is the way out of the screen that rebinds everything
+   else, so it has to stay where it is. */
+const Rebind={
+  action:null, slot:0,
+  begin(id,slot){
+    this.action=id; this.slot=slot;
+    Screens.el('bindNote').textContent='Press a key or mouse button. Escape cancels.';
+    Screens.refreshSettings();
+  },
+  cancel(){ this.action=null; },
+  take(code){
+    if(!this.action) return false;
+    if(code==='Escape'){
+      this.cancel();
+      Screens.el('bindNote').textContent='Rebinding cancelled.';
+      Screens.refreshSettings();
+      return true;
+    }
+    const stolen=ACTIONS.find(a=>a.id!==this.action &&
+      Save.data.binds[a.id].includes(code));
+    rebind(this.action,code,this.slot);
+    const name=ACTIONS.find(a=>a.id===this.action).name;
+    this.cancel();
+    Screens.el('bindNote').textContent = stolen
+      ? `${keyLabel(code)} taken from ${stolen.name}.`
+      : `${name} is now ${keyLabel(code)}.`;
+    Screens.refreshSettings();
+    return true;
+  }
+};
+
+function enterStage(i){
+  if(!Save.unlocked(i)) return;
+  Save.data.current=i; Save.write();
+
+  Screens.hideEnd(); Screens.hideSelect();
+  const st=STAGES[i];
+
+  chars.length=0; parts.length=0; rings.length=0;
+  Director.reset(); Time_.clear(); Crowd.reset();
+  Shake.trauma=0; Shake.kx=Shake.kz=Shake.vx=Shake.vz=0;
+
+  buildArena(st);
+  if(st.civilians){ Walk.build(); Crowd.population=10; } else { Walk.nodes.length=0; Crowd.population=0; }
+
+  player=makePlayer({x:0,y:0,z:-st.radius*.72});
+  chars.push(player);
+  Director.focus=player;
+  Director.maxAttackers=Save.profile().attackers;
+
+  Stage.begin(i);
+  HUD.bossHide();
+  HUD.objective();
+  Screens.card(st,i);
+
+  Game.running=true; Game.over=false; Game.won=false;
+  Game.manualPause=false; Time_.paused=false;
+  CamState.init=false; cam.yaw=0; cam.pitch=14*DEG;
+  document.getElementById('banner').classList.remove('on');
+}
+</script>
+
+<script>
+"use strict";
+/* ---- camera (ported from ThirdPersonCamera) ---------------------------- */
+const CCFG={ pivotH:1.42, shoulder:.45, dist:5.3, combatDist:4.4, sprintBoost:1.1, minDist:1.1,
+  minPitch:-34*DEG, maxPitch:50*DEG, rotSharp:22, followSharp:16, vertSharp:9,
+  collideR:.3, pad:.14, pullIn:40, pushOut:6, fov:58, sprintFov:9, fovSharp:6,
+  lockBias:.34, lockPitch:16*DEG, lockPerM:.16, lockMax:2.4 };
+const CamState={ pivot:v3(), dist:CCFG.dist, occluded:CCFG.dist, fov:CCFG.fov, combatW:0, init:false };
+
+function tickCamera(p,dt,dtUnscaled){
+  // look input on unscaled time so the camera stays responsive in hit stop
+  const lock=p.lockTarget;
+  if(lock&&lock.alive){
+    const to=flatDir(vsub(lock.pos,p.pos));
+    if(Math.hypot(to.x,to.z)>1e-4) cam.yaw=dampAngle(cam.yaw,Math.atan2(to.x,to.z),CCFG.rotSharp*.5,dtUnscaled);
+    cam.pitch=clamp(damp(cam.pitch,CCFG.lockPitch-Input.look.y*.4*DEG,CCFG.rotSharp*.4,dtUnscaled),
+      CCFG.minPitch,CCFG.maxPitch);
+  } else {
+    cam.yaw+=Input.look.x*DEG;
+    cam.pitch=clamp(cam.pitch-Input.look.y*DEG,CCFG.minPitch,CCFG.maxPitch);
+  }
+
+  // combat framing
+  let hostiles=0;
+  for(const c of chars) if(c.alive&&c.faction==='hostile'&&flatDist(c.pos,p.pos)<14) hostiles++;
+  const inCombat=(lock&&lock.alive)||hostiles>0;
+  CamState.combatW=damp(CamState.combatW,inCombat?1:0,2.5,dtUnscaled);
+
+  let desired={x:p.pos.x, y:p.pos.y+CCFG.pivotH, z:p.pos.z};
+  if(lock&&lock.alive){
+    const a=aimPoint(lock);
+    desired={x:lerp(desired.x,a.x,CCFG.lockBias), y:lerp(desired.y,a.y,CCFG.lockBias), z:lerp(desired.z,a.z,CCFG.lockBias)};
+  }
+  if(!CamState.init){ CamState.pivot={...desired}; CamState.init=true; }
+  else {
+    // horizontal follow is tight, vertical is loose so stairs do not jolt
+    CamState.pivot.x=damp(CamState.pivot.x,desired.x,CCFG.followSharp,dt);
+    CamState.pivot.z=damp(CamState.pivot.z,desired.z,CCFG.followSharp,dt);
+    CamState.pivot.y=damp(CamState.pivot.y,desired.y,CCFG.vertSharp,dt);
+  }
+
+  const speedN=clamp01(Math.hypot(p.planar.x,p.planar.z)/PCFG.sprint);
+  let target=lerp(CCFG.dist,CCFG.combatDist,CamState.combatW)+CCFG.sprintBoost*speedN*(1-CamState.combatW*.6);
+  if(lock&&lock.alive) target+=Math.min(flatDist(p.pos,lock.pos)*CCFG.lockPerM,CCFG.lockMax);
+  CamState.dist=damp(CamState.dist,Math.max(CCFG.minDist,target),8,dt);
+
+  updateCameraBasis();
+  const shoulderOff=CCFG.shoulder*(1-CamState.combatW*.35);
+  const anchor={ x:CamState.pivot.x+cam.right.x*shoulderOff,
+                 y:CamState.pivot.y+cam.right.y*shoulderOff,
+                 z:CamState.pivot.z+cam.right.z*shoulderOff };
+
+  // wall avoidance: snap in hard, ease back out
+  let allowed=CamState.dist;
+  const back={x:-cam.fwd.x,y:-cam.fwd.y,z:-cam.fwd.z};
+  const hitD=sweepWorld(anchor,back,CamState.dist,CCFG.collideR);
+  if(hitD>=0) allowed=Math.max(CCFG.minDist,hitD-CCFG.pad);
+  const sharp=allowed<CamState.occluded?CCFG.pullIn:CCFG.pushOut;
+  CamState.occluded=damp(CamState.occluded,allowed,sharp,dtUnscaled);
+  const d=clamp(CamState.occluded,CCFG.minDist,CamState.dist);
+
+  cam.pos={ x:anchor.x+back.x*d, y:Math.max(.45,anchor.y+back.y*d), z:anchor.z+back.z*d };
+
+  // shake, on unscaled time so hit stop does not stretch it
+  Shake.trauma=Math.max(0,Shake.trauma-1.6*dtUnscaled);
+  const st=90;
+  Shake.vx+=(-st*Shake.kx-2*Math.sqrt(st)*Shake.vx)*dtUnscaled;
+  Shake.vz+=(-st*Shake.kz-2*Math.sqrt(st)*Shake.vz)*dtUnscaled;
+  Shake.kx+=Shake.vx*dtUnscaled; Shake.kz+=Shake.vz*dtUnscaled;
+  const sh=Shake.trauma*Shake.trauma;
+  const t=unscaled*22;
+  cam.shakeX=(Math.sin(t*1.7+Shake.seed)*.5+Math.sin(t*2.9)*.5)*26*sh + Shake.kx*40;
+  cam.shakeY=(Math.sin(t*2.3+Shake.seed*2)*.5+Math.sin(t*3.7)*.5)*26*sh + Shake.kz*22;
+
+  const fovTarget=CCFG.fov+CCFG.sprintFov*speedN*(1-CamState.combatW*.5);
+  CamState.fov=damp(CamState.fov,fovTarget,CCFG.fovSharp,dt);
+  cam.fov=CamState.fov*DEG; cam.focal=(VH*0.5)/Math.tan(cam.fov*0.5);
+  updateCameraBasis();
+}
+/* Distance to the first world box along a ray, or -1. */
+function sweepWorld(origin,dir,maxDist,radius){
+  let best=-1;
+  for(const b of World.boxes){
+    const minx=b.x-b.hw-radius, maxx=b.x+b.hw+radius;
+    const minz=b.z-b.hd-radius, maxz=b.z+b.hd+radius;
+    const maxy=b.h+radius;
+    let t0=0, t1=maxDist;
+    for(const [o,d,lo,hi] of [[origin.x,dir.x,minx,maxx],[origin.z,dir.z,minz,maxz],[origin.y,dir.y,-radius,maxy]]){
+      if(Math.abs(d)<1e-6){ if(o<lo||o>hi){ t0=t1+1; break; } continue; }
+      let a=(lo-o)/d, b2=(hi-o)/d;
+      if(a>b2){ const tmp=a; a=b2; b2=tmp; }
+      t0=Math.max(t0,a); t1=Math.min(t1,b2);
+      if(t0>t1) break;
+    }
+    if(t0<=t1 && t0>=0 && t0<=maxDist){ if(best<0||t0<best) best=t0; }
+  }
+  return best;
+}
+
+/* ---- game state -------------------------------------------------------- */
+const Game={ running:false, over:false, won:false, kills:0, total:0, xp:0, money:0, started:0, manualPause:false };
+const el=id=>document.getElementById(id);
+const HUD={
+  vitals(){
+    const p=player; if(!p) return;
+    el('hpFill').style.transform=`scaleX(${clamp01(p.hp/p.hpMax)})`;
+    el('hpGhost').style.transform=`scaleX(${clamp01(p.hp/p.hpMax)})`;
+    el('spFill').style.transform=`scaleX(${clamp01(p.stam/p.stamMax)})`;
+    el('vitals').classList.toggle('exhausted',!!p.stamExhausted);
+    let tag='Ready';
+    if(!p.alive) tag='Down';
+    else if(p.down) tag='Downed';
+    else if(now<p.counterUntil) tag='Counter!';
+    else if(isBlocking(p)) tag=inParryWindow(p)?'Parry window':'Guarding';
+    else if(p.combatState==='holding') tag='Holding';
+    else if(p.combatState==='attacking') tag='Attacking';
+    else if(p.sprinting) tag='Sprinting';
+    el('stateTag').textContent=tag;
+    el('stateTag').style.color = tag==='Counter!'?'var(--sun)':(tag==='Parry window'?'#fff':'var(--cyan)');
+  },
+  foe(){
+    const p=player; if(!p) return;
+    let t=p.lockTarget;
+    if(!t||!t.alive){
+      // fall back to whoever is closest and actually fighting
+      let best=null,bd=Infinity;
+      for(const c of chars){
+        if(!c.alive||c.faction!=='hostile'||!c.engaged) continue;
+        const d=flatDist(c.pos,p.pos); if(d<bd&&d<12){bd=d;best=c;}
+      }
+      t=best;
+    }
+    const box=el('foe');
+    if(!t){ box.classList.remove('on'); return; }
+    box.classList.add('on');
+    el('foeName').textContent=t.name;
+    el('foeFill').style.transform=`scaleX(${clamp01(t.hp/t.hpMax)})`;
+    el('foePoiseFill').style.transform=`scaleX(${t.poiseMax?clamp01(t.poise/t.poiseMax):0})`;
+    el('foeState').textContent=t.down?'Down':(t.state||'').toUpperCase();
+  },
+  combo(){
+    const box=el('combo');
+    if(!player||player.combo<2){ box.classList.remove('on'); return; }
+    box.classList.add('on'); el('comboN').textContent=player.combo;
+  },
+  bossShow(e){
+    el('bossName').textContent=(e.name||'BOSS').toUpperCase();
+    el('bossBar').classList.add('on');
+    HUD._boss=e;
+  },
+  bossHide(){ el('bossBar').classList.remove('on'); HUD._boss=null; },
+  bossTick(){
+    const e=HUD._boss; if(!e) return;
+    if(!e.alive){ HUD.bossHide(); return; }
+    el('bossFill').style.transform=`scaleX(${clamp01(e.hp/e.hpMax)})`;
+  },
+  bossPhase(text){
+    const n=el('bossPhase');
+    n.textContent=text;
+    n.classList.remove('on'); void n.offsetWidth; n.classList.add('on');
+  },
+  objective(){
+    if(typeof Stage==='undefined'||!Stage.def) return;
+    el('objLabel').textContent='STAGE '+(Stage.index+1);
+    el('objTitle').textContent=Stage.def.name;
+    el('objCount').textContent=`${Stage.def.objective}  —  ${Stage.defeated} / ${Stage.total}`;
+  }
+};
+let bannerTimer=0;
+function showBanner(text,sticky){
+  el('bannerText').textContent=text;
+  el('banner').classList.add('on');
+  bannerTimer=sticky?1e9:2.6;
+}
+
+function spawnEncounter(){
+  const roster=[['brawler',2],['runner',2],['bruiser',1]];
+  let i=0; const total=roster.reduce((a,r)=>a+r[1],0);
+  const center={x:0,y:0,z:16};
+  for(const [kind,count] of roster){
+    for(let n=0;n<count;n++){
+      const a=(i/total)*TAU+0.6;
+      const r=lerp(2.6,5.2,(i%3)/2);
+      const pos={x:center.x+Math.cos(a)*r, y:0, z:center.z+Math.sin(a)*r};
+      const yaw=Math.atan2(-Math.cos(a),-Math.sin(a));
+      chars.push(makeEnemy(kind,pos,yaw));
+      i++;
+    }
+  }
+  Game.total=total;
+}
+function startGame(){
+  // The campaign owns setup now: enter wherever the save left off, so a player
+  // who closed the tab on the docks comes back to the docks.
+  enterStage(Save.data.current);
+}
+
+
+/* ---- input wiring ------------------------------------------------------ */
+// Was the key just pressed bound to this action?
+function bindPressed(id,code){ const b=Save.data.binds[id]; return b[0]===code||b[1]===code; }
+
+addEventListener('keydown',e=>{
+  if(e.repeat){ e.preventDefault(); return; }
+
+  // While a rebind is armed the settings screen owns every key, so a capture
+  // cannot also fire the action it is being bound to.
+  if(Rebind.take(e.code)){ e.preventDefault(); return; }
+
+  Keys[e.code]=true;
+
+  if(bindPressed('lock',e.code)){ Input.lock=true; e.preventDefault(); }
+  if(bindPressed('heavy',e.code)) Input.heavy=true;
+  if(bindPressed('grab',e.code)) Input.grab=true;
+  if(bindPressed('jump',e.code)){ Input.jump=true; e.preventDefault(); }
+  if(bindPressed('dodge',e.code)) Input.dodge=true;
+  if(bindPressed('light',e.code)) Input.light=true;
+
+  if(e.code==='KeyR'&&Game.running){ enterStage(Stage.def?Stage.index:Save.data.current); Game.manualPause=false; Time_.paused=false; }
+  if(e.code==='KeyM'){ Audio_.muted=!Audio_.muted; showBanner(Audio_.muted?'Sound off':'Sound on'); }
+  if(e.code==='KeyO'&&Game.running) Screens.settings();
+  if(e.code==='Escape'){
+    // Escape is the pause menu, not just a pointer release. Stopping the game
+    // and offering nothing to do is the least useful thing a pause key can do.
+    const settingsOpen=document.getElementById('settingsScreen').classList.contains('on');
+    const selectOpen=document.getElementById('selectScreen').classList.contains('on');
+    const endOpen=document.getElementById('endScreen').classList.contains('on');
+
+    if(settingsOpen) Screens.hideSettings();
+    else if(selectOpen) Screens.hideSelect();
+    else if(endOpen) { /* the end screen is a decision; Escape does not skip it */ }
+    else if(Game.running) Screens.settings();
+    else releasePointer();
+    e.preventDefault();
+  }
+  if(['Space','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+});
+addEventListener('keyup',e=>{ Keys[e.code]=false; });
+canvas.addEventListener('mousedown',e=>{
+  if(Touch.enabled) return;
+
+  // Mouse buttons are bindable too, so they go through the same table as keys.
+  const code=e.button===0?'Mouse0':e.button===2?'Mouse1':e.button===1?'Mouse2':null;
+  if(e.button===0) Mouse.left=true;
+  if(e.button===2) Mouse.right=true;
+  if(e.button===1) Mouse.middle=true;
+
+  if(code && Rebind.take(code)){ e.preventDefault(); return; }
+  if(code){
+    if(bindPressed('light',code)) Input.light=true;
+    if(bindPressed('heavy',code)) Input.heavy=true;
+    if(bindPressed('grab',code)) Input.grab=true;
+    if(bindPressed('dodge',code)) Input.dodge=true;
+    if(bindPressed('jump',code)) Input.jump=true;
+    if(bindPressed('lock',code)) Input.lock=true;
+  }
+  if(document.pointerLockElement!==canvas && !isCoarse()) canvas.requestPointerLock();
+});
+addEventListener('mouseup',e=>{
+  if(e.button===0) Mouse.left=false;
+  if(e.button===2) Mouse.right=false;
+  if(e.button===1) Mouse.middle=false;
+});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('mousemove',e=>{
+  if(document.pointerLockElement!==canvas) return;
+  Mouse.dx+=e.movementX; Mouse.dy+=e.movementY;
+});
+function releasePointer(){ if(document.pointerLockElement) document.exitPointerLock(); }
+
+/* ---- touch controls ----------------------------------------------------
+   Left thumb drives a floating stick that appears wherever it lands; right
+   thumb drags the camera. Pushing the stick to its edge is sprint, which
+   keeps the button cluster down to the things you actually press. */
+const Touch={
+  enabled:false, stickId:null, lookId:null,
+  ox:0, oy:0, mx:0, my:0, sprint:false, block:false, jumpHeld:false,
+  lookDX:0, lookDY:0, lastX:0, lastY:0
+};
+const STICK_R=52;
+
+function enableTouch(){
+  if(Touch.enabled) return;
+  Touch.enabled=true;
+  document.body.classList.add('touch');
+  updateOrientation();
+  writeControlHints();
+}
+function isCoarse(){
+  return (window.matchMedia && matchMedia('(pointer: coarse)').matches) || (navigator.maxTouchPoints||0)>0;
+}
+function updateOrientation(){
+  const portrait = innerHeight > innerWidth;
+  document.body.classList.toggle('portrait', portrait);
+  if(Touch.enabled && Game.running && !Game.over) Time_.paused = portrait || Game.manualPause;
+}
+addEventListener('orientationchange', ()=>setTimeout(updateOrientation,120));
+addEventListener('resize', updateOrientation);
+
+const stickEl=()=>document.getElementById('stick');
+
+canvas.addEventListener('pointerdown', e=>{
+  if(e.pointerType==='mouse') return;
+  enableTouch();
+  // Capture keeps a finger that slides over a button still driving the stick.
+  // It can legitimately fail (a pointer that is already gone), and it must
+  // never abort the rest of this handler.
+  try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+  const half = VW*0.46;
+  if(e.clientX < half && Touch.stickId===null){
+    Touch.stickId=e.pointerId; Touch.ox=e.clientX; Touch.oy=e.clientY;
+    Touch.mx=0; Touch.my=0;
+    const st=stickEl();
+    st.style.left=Touch.ox+'px'; st.style.top=Touch.oy+'px';
+    st.classList.add('on'); st.firstElementChild.style.transform='translate(0,0)';
+  } else if(Touch.lookId===null){
+    Touch.lookId=e.pointerId; Touch.lastX=e.clientX; Touch.lastY=e.clientY;
+  }
+  e.preventDefault();
+},{passive:false});
+
+canvas.addEventListener('pointermove', e=>{
+  if(e.pointerType==='mouse') return;
+  if(e.pointerId===Touch.stickId){
+    let dx=e.clientX-Touch.ox, dy=e.clientY-Touch.oy;
+    const m=Math.hypot(dx,dy);
+    const clampM=Math.min(m,STICK_R);
+    if(m>1e-3){ dx=dx/m*clampM; dy=dy/m*clampM; }
+    Touch.mx=dx/STICK_R; Touch.my=-dy/STICK_R;
+    Touch.sprint = m > STICK_R*0.94;
+    const st=stickEl();
+    st.classList.toggle('sprint',Touch.sprint);
+    st.firstElementChild.style.transform=`translate(${dx}px,${dy}px)`;
+  } else if(e.pointerId===Touch.lookId){
+    Touch.lookDX+=e.clientX-Touch.lastX; Touch.lookDY+=e.clientY-Touch.lastY;
+    Touch.lastX=e.clientX; Touch.lastY=e.clientY;
+  }
+  e.preventDefault();
+},{passive:false});
+
+function endTouch(e){
+  if(e.pointerId===Touch.stickId){
+    Touch.stickId=null; Touch.mx=0; Touch.my=0; Touch.sprint=false;
+    const st=stickEl(); st.classList.remove('on','sprint');
+  } else if(e.pointerId===Touch.lookId){ Touch.lookId=null; }
+}
+canvas.addEventListener('pointerup',endTouch);
+canvas.addEventListener('pointercancel',endTouch);
+
+// action buttons
+document.querySelectorAll('#touch .btn').forEach(btn=>{
+  const act=btn.dataset.act;
+  const press=e=>{
+    e.preventDefault(); e.stopPropagation();
+    enableTouch();
+    btn.classList.add('held');
+    if(act==='light') Input.light=true;
+    else if(act==='heavy') Input.heavy=true;
+    else if(act==='dodge') Input.dodge=true;
+    else if(act==='grab') Input.grab=true;
+    else if(act==='jump'){ Input.jump=true; Touch.jumpHeld=true; }
+    else if(act==='block') Touch.block=true;
+    else if(act==='pause') togglePause();
+  };
+  const release=e=>{
+    e.preventDefault(); e.stopPropagation();
+    btn.classList.remove('held');
+    if(act==='block') Touch.block=false;
+    if(act==='jump') Touch.jumpHeld=false;
+  };
+  btn.addEventListener('pointerdown',press,{passive:false});
+  btn.addEventListener('pointerup',release,{passive:false});
+  btn.addEventListener('pointercancel',release,{passive:false});
+  btn.addEventListener('pointerleave',release,{passive:false});
+  btn.addEventListener('contextmenu',e=>e.preventDefault());
+});
+
+function togglePause(){
+  if(!Game.running||Game.over) return;
+  Game.manualPause=!Game.manualPause;
+  Time_.paused=Game.manualPause;
+  if(Game.manualPause) showBanner('Paused',true);
+  else { document.getElementById('banner').classList.remove('on'); bannerTimer=0; }
+}
+
+/* Double-tapping the right side toggles lock-on, which keeps a dedicated
+   button off an already busy thumb cluster. */
+let lastTapAt=0;
+canvas.addEventListener('pointerup', e=>{
+  if(e.pointerType==='mouse') return;
+  if(e.clientX < VW*0.46) return;
+  const t=performance.now();
+  if(t-lastTapAt<300) Input.lock=true;
+  lastTapAt=t;
+});
+
+function writeControlHints(){
+  const grid=document.getElementById('ctrlGrid');
+  if(!grid) return;
+  grid.innerHTML=[
+    ['Left thumb','Move — push to edge to sprint'],
+    ['Right thumb','Look around'],
+    ['Hit','Light attack'],
+    ['Heavy','Heavy attack'],
+    ['Block','Hold to guard, tap on impact to parry'],
+    ['Dodge','Roll'],
+    ['Grab','Grab, then Heavy to throw'],
+    ['Double-tap right','Lock on']
+  ].map(([k,v])=>`<div class="kv"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  const hint=document.getElementById('startHint');
+  if(hint) hint.textContent='Best in landscape. Tap the pause button any time.';
+}
+document.addEventListener('pointerlockchange',()=>{
+  if(Touch.enabled) return;
+  const locked=document.pointerLockElement===canvas;
+  Time_.paused = Game.running && !locked && !Game.over;
+  if(!locked && Game.running && !Game.over) showBanner('Paused — click to resume',true);
+  else if(locked && bannerTimer>1e8) { el('banner').classList.remove('on'); bannerTimer=0; }
+});
+
+function sampleInput(dtUnscaled){
+  let mx=0,my=0;
+  if(bindHeld('forward')) my+=1;
+  if(bindHeld('back')) my-=1;
+  if(bindHeld('left')) mx-=1;
+  if(bindHeld('right')) mx+=1;
+  if(Touch.enabled && (Touch.stickId!==null)){ mx=Touch.mx; my=Touch.my; }
+  const m=Math.hypot(mx,my); if(m>1){ mx/=m; my/=m; }
+  Input.move.x=mx; Input.move.y=my;
+
+  // The player's sensitivity multiplies the base scale, so 1 is exactly the
+  // feel the camera was tuned with.
+  const sens=Save.data.sensitivity;
+  Input.look.x=(Mouse.dx*0.13 + Touch.lookDX*0.16)*sens;
+  Input.look.y=(Mouse.dy*0.13 + Touch.lookDY*0.16)*sens;
+  Mouse.dx=0; Mouse.dy=0; Touch.lookDX=0; Touch.lookDY=0;
+
+  Input.sprint=bindHeld('sprint')||Touch.sprint;
+  Input.block=bindHeld('block')||Touch.block;
+  Input.jumpHeld=bindHeld('jump')||Touch.jumpHeld;
+}
+function clearEdges(){ Input.jump=false; Input.dodge=false; Input.light=false; Input.heavy=false; Input.grab=false; }
+
+/* ---- main loop --------------------------------------------------------- */
+let last=performance.now()/1000;
+
+/* Watch the real frame time and step the internal resolution down before the
+   game starts feeling heavy, then let it climb back when there is headroom.
+   Phones vary far too much to pick a fixed quality up front. */
+const Perf={ avg:16, steps:[1,0.82,0.66,0.54], step:0, cooldown:0 };
+function adaptQuality(dtReal){
+  Perf.avg = Perf.avg*0.92 + dtReal*1000*0.08;
+  if(Perf.cooldown>0){ Perf.cooldown-=dtReal; return; }
+
+  if(Perf.avg>30 && Perf.step<Perf.steps.length-1){
+    Perf.step++; Quality.scale=Perf.steps[Perf.step]; Perf.cooldown=1.6; resize();
+  } else if(Perf.avg<17 && Perf.step>0){
+    Perf.step--; Quality.scale=Perf.steps[Perf.step]; Perf.cooldown=3.5; resize();
+  }
+}
+
+function frame(){
+  requestAnimationFrame(frame);
+  const t=performance.now()/1000;
+  let dtReal=Math.min(.05,t-last); last=t;
+  unscaled+=dtReal;
+
+  adaptQuality(dtReal);
+  resizeIfNeeded();
+  sampleInput(dtReal);
+
+  const scale=Time_.apply();
+  const dt=dtReal*scale;
+  now+=dt;
+
+  if(Game.running && player){
+    if(dt>0){
+      for(const c of chars){
+        if(c===player) tickPlayer(c,dt);
+        else if(c.kind==='civilian') tickCivilian(c,dt);
+        else tickEnemy(c,dt);
+      }
+      Director.tick(dt);
+      Crowd.tick();
+      for(const c of chars) if(c.isBoss) bossPhaseTick(c);
+      Stage.tick();
+      HUD.bossTick();
+      tickFX(dt);
+      for(const c of chars) c.hitFlash=Math.max(0,c.hitFlash-dt*4);
+      // the grab hook runs after the move has advanced
+      if(player.combatState==='attacking' && player.runner.move &&
+         player.runner.move.kind==='grab' &&
+         player.runner.t>=activeStart(player.runner.move) &&
+         player.runner.t<=activeEnd(player.runner.move)) trySeize(player,player.runner.move);
+    }
+    tickCamera(player,Math.max(dt,1e-5),dtReal);
+    checkVictory();
+  }
+  clearEdges();
+
+  render();
+  HUD.vitals(); HUD.foe();
+  if(bannerTimer>0 && bannerTimer<1e8){
+    bannerTimer-=dtReal;
+    if(bannerTimer<=0) el('banner').classList.remove('on');
+  }
+}
+function resizeIfNeeded(){
+  if(canvas.clientWidth!==VW||canvas.clientHeight!==VH) resize();
+}
+// Completion is owned by Stage.finish, which knows about waves still pending.
+// The old kill-count check fired the moment an arena had nothing alive in it,
+// which on a staged fight means during the gap before the next wave.
+function checkVictory(){}
+function render(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  paintBackdrop();
+  drawWorld();
+
+  for(const c of chars){
+    tickAnimator(c.anim, Math.min(.05, Time_.scale>0?(performance.now()/1000-last)+1/120:1/120));
+    const rootRot=eulerZXY(0,c.yaw,0);
+    const root={m:rootRot, p:{x:c.pos.x,y:c.pos.y,z:c.pos.z}};
+    solveRig(c.rig,root,c.anim.delta,c.anim.hipsOffset,c.anim.pivot);
+    drawShadow(c.pos, c.radius*2.1*(1-clamp01(c.pos.y/2)), .34*(1-clamp01(c.pos.y/3)));
+    drawCharacter(c.rig, c.alive);
+    if(c.hitFlash>0) flashOverlay(c);
+    if(c!==player) drawTell(c);
+  }
+  drawFX();
+  drawLockReticle();
+  flushDraws();
+  drawVignette();
+}
+function flashOverlay(c){
+  const p=aimPoint(c), cc=toCam(p); if(cc.z<=NEAR) return;
+  const s=projectCam(cc);
+  const r=c.rig.h*.55*cam.focal/cc.z;
+  push(cc.z-.2,()=>{ ctx.fillStyle=`rgba(255,240,220,${c.hitFlash*.5})`;
+    ctx.beginPath(); ctx.ellipse(s.x,s.y,r*.6,r,0,0,TAU); ctx.fill(); });
+}
+/* Wind-up tell: a ring under an enemy that is committing to an attack. */
+function drawTell(c){
+  if(!c.alive||!c.runner||!c.runner.move) return;
+  const m=c.runner.move;
+  if(c.runner.t>activeStart(m)) return;
+  const u=clamp01(c.runner.t/Math.max(.01,m.windup));
+  const col=m.unblockable?hexRGB('#FF6A4A'):hexRGB('#FFD08A');
+  const cc=toCam({x:c.pos.x,y:.05,z:c.pos.z}); if(cc.z<=NEAR) return;
+  const s=projectCam(cc);
+  const rad=lerp(1.5,.55,u)*cam.focal/cc.z;
+  push(cc.z-.02,()=>{
+    ctx.strokeStyle=css(col,.35+u*.5); ctx.lineWidth=Math.max(1.5,3*u+1);
+    ctx.beginPath(); ctx.ellipse(s.x,s.y,rad,rad*.36,0,0,TAU); ctx.stroke();
+  });
+}
+function drawLockReticle(){
+  const t=player&&player.lockTarget;
+  if(!t||!t.alive) return;
+  const cc=toCam(aimPoint(t)); if(cc.z<=NEAR) return;
+  const s=projectCam(cc);
+  const r=Math.max(9, 26*cam.focal/cc.z/8);
+  push(0.01,()=>{
+    ctx.strokeStyle='rgba(70,194,200,.9)'; ctx.lineWidth=2;
+    for(let i=0;i<4;i++){
+      const a=i*Math.PI/2+Math.PI/4+unscaled*.6;
+      ctx.beginPath();
+      ctx.arc(s.x,s.y,r,a-0.28,a+0.28);
+      ctx.stroke();
+    }
+  });
+}
+function drawVignette(){
+  const g=ctx.createRadialGradient(VW/2,VH/2,Math.min(VW,VH)*.35,VW/2,VH/2,Math.max(VW,VH)*.72);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(6,7,9,.55)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,VW,VH);
+  if(player&&player.alive){
+    const hurt=1-clamp01(player.hp/player.hpMax);
+    if(hurt>.55){
+      const a=(hurt-.55)/.45*(.28+.1*Math.sin(unscaled*4));
+      const r=ctx.createRadialGradient(VW/2,VH/2,Math.min(VW,VH)*.2,VW/2,VH/2,Math.max(VW,VH)*.65);
+      r.addColorStop(0,'rgba(180,40,30,0)'); r.addColorStop(1,`rgba(180,40,30,${a})`);
+      ctx.fillStyle=r; ctx.fillRect(0,0,VW,VH);
+    }
+  }
+}
+
+/* ---- boot -------------------------------------------------------------- */
+(function setupViewport(){
+  // The artifact host owns <head>, so the viewport tag is installed at runtime.
+  let m=document.querySelector('meta[name=viewport]');
+  if(!m){ m=document.createElement('meta'); m.name='viewport'; document.head.appendChild(m); }
+  m.content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+})();
+
+(function pickQuality(){
+  const coarse=isCoarse();
+  const small=Math.min(innerWidth,innerHeight)<820;
+  if(coarse||small){
+    // Phones spend their budget on fill rate, so trim draw distance first and
+    // resolution second; the fight in front of you is unchanged.
+    Quality.cap=1.6; Quality.windowDist=34; Quality.boxDist=68;
+    Quality.propDist=44; Quality.fx=.6;
+  }
+  if(coarse){ enableTouch(); }
+})();
+
+resize();
+el('play').addEventListener('click',()=>{
+  audioInit();
+  if(Audio_.ctx&&Audio_.ctx.state==='suspended') Audio_.ctx.resume();
+  el('veil').classList.add('hide');
+  startGame();
+  if(!Touch.enabled && !isCoarse()) canvas.requestPointerLock();
+});
+// ---- campaign buttons --------------------------------------------------
+document.getElementById('endNext').addEventListener('click',()=>{
+  Screens.hideEnd();
+  // Past the last stage there is nothing to advance to, so this replays it.
+  const next=Stage.index+1;
+  enterStage(next<STAGES.length && Save.unlocked(next) ? next : Stage.index);
+});
+document.getElementById('endSelect').addEventListener('click',()=>{
+  Screens.hideEnd(); Screens.select();
+});
+document.getElementById('selectBack').addEventListener('click',()=>{
+  Screens.hideSelect();
+  // Backing out returns to the stage in progress, not an empty map.
+  enterStage(Stage.def?Stage.index:Save.data.current);
+});
+addEventListener('keydown',e=>{
+  if(!Game.running) return;
+  if(e.code==='KeyL'){ Screens.select(); }
+});
+
+document.getElementById('settingsBack').addEventListener('click',()=>Screens.hideSettings());
+document.getElementById('titleSettings').addEventListener('click',()=>Screens.settings());
+document.getElementById('pauseRestart').addEventListener('click',()=>{
+  Screens.hideSettings();
+  enterStage(Stage.def?Stage.index:Save.data.current);
+});
+document.getElementById('pauseSelect').addEventListener('click',()=>{
+  Screens.hideSettings(); Screens.select();
+});
+document.getElementById('endSettings').addEventListener('click',()=>Screens.settings());
+document.getElementById('selectSettings').addEventListener('click',()=>Screens.settings());
+document.getElementById('bindReset').addEventListener('click',()=>{
+  Save.data.binds=defaultBinds(); Save.write();
+  Rebind.cancel();
+  Screens.el('bindNote').textContent='Controls reset to defaults.';
+  Screens.refreshSettings();
+});
+document.querySelectorAll('button.diff').forEach(b=>{
+  b.addEventListener('click',()=>{
+    Save.data.difficulty=b.dataset.diff; Save.write();
+    Director.maxAttackers=Save.profile().attackers;
+    // Enemies are scaled as they spawn, so anyone already on the street keeps
+    // the stats they were built with. Say so rather than look broken.
+    Screens.el('diffNote').textContent='Applies to enemies from the next stage.';
+    Screens.refreshSettings();
+    Screens.el('diffNote').textContent+=' '+{
+      easy:'Enemies hit softer and come one at a time.',
+      normal:'The fight as it was tuned.',
+      hard:'Enemies hit harder and three can swing at once.'
+    }[Save.data.difficulty];
+  });
+});
+document.getElementById('sensSlider').addEventListener('input',e=>{
+  Save.data.sensitivity=clamp(+e.target.value,.25,3);
+  Screens.el('sensValue').textContent=Save.data.sensitivity.toFixed(2);
+  Save.write();
+});
+
+buildArena(STAGES[Save.data.current]);
+Walk.build();
+player=makePlayer({x:0,y:0,z:-6});
+chars.push(player);
+Director.focus=player;
+updateCameraBasis();
+CamState.pivot={x:0,y:1.5,z:-6};
+requestAnimationFrame(frame);
+</script>

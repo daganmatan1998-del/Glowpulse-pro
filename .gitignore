@@ -1,0 +1,55 @@
+# Unity generated folders
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Asset meta data is committed on purpose (stable GUIDs), except for ignored dirs
+/[Ll]ibrary.meta
+/[Tt]emp.meta
+/[Oo]bj.meta
+/[Bb]uild.meta
+/[Bb]uilds.meta
+/[Ll]ogs.meta
+/[Uu]ser[Ss]ettings.meta
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.opendb
+*.VC.db
+
+# Do not ignore the offline verification projects - they are the CI harness
+!Tools/CompileCheck/CompileCheck.csproj
+!Tools/LogicTests/LogicTests.csproj
+
+# .NET build output from the verification tooling
+Tools/**/bin/
+Tools/**/obj/
+
+# Builds and packages
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# OS noise
+.DS_Store
+Thumbs.db
+crashlytics-build.properties
+sysinfo.txt

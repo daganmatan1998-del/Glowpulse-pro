@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Offline compile verification for the Glowpulse Unity project.
+
+    Unity is not available in this environment, so every runtime script under
+    Assets/Scripts is compiled here against Unity's official reference
+    assemblies (NuGet: UnityEngine.Modules) plus hand-written stubs for the
+    package assemblies that ship outside the core modules (uGUI, UnityEditor,
+    AI Navigation, URP). The stubs exist ONLY for this check - Unity always
+    uses the real assemblies.
+
+    Usage: Tools/CompileCheck/check.sh
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>Glowpulse.CompileCheck</AssemblyName>
+    <RootNamespace>Glowpulse</RootNamespace>
+    <UnityRefDir>/opt/unityrefs/pkg/lib/net45/</UnityRefDir>
+    <DefineConstants>$(DefineConstants);UNITY_EDITOR;UNITY_STANDALONE;URP_PRESENT;AI_NAVIGATION_PRESENT</DefineConstants>
+    <!-- Unity itself does not treat these as errors; unused private fields are
+         common on serialized [SerializeField] members. -->
+    <NoWarn>CS0169;CS0649;CS0414;CS0067;CS1591</NoWarn>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="stubs/**/*.cs" />
+    <Compile Include="../../Assets/Scripts/**/*.cs" />
+    <Reference Include="$(UnityRefDir)*.dll" Private="false" />
+  </ItemGroup>
+
+</Project>

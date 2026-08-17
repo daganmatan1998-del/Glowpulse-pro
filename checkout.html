@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Secure checkout — Kalda</title>
+<meta name="description" content="Secure checkout for the Kalda Bloom thermal pour-over set.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1C1512">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231C1512'/%3E%3Cpath d='M7 11h18l-6.5 9.5V25h-5v-4.5z' fill='%23C88A3E'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/styles.css">
+<link rel="stylesheet" href="assets/css/checkout.css">
+</head>
+<body data-variant="clay">
+
+<!-- compact render set: same symbol ids as the storefront, simpler artwork
+     because these only ever appear as 76px order-summary thumbnails -->
+<svg class="vec-defs" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <radialGradient id="gStudio" cx="50%" cy="38%" r="78%">
+    <stop offset="0" stop-color="#FFFDFA"/><stop offset="1" stop-color="#E9DDCD"/>
+  </radialGradient>
+  <linearGradient id="gCeramic" x1="0.08" y1="0" x2="0.92" y2="1">
+    <stop offset="0" stop-color="var(--ceramic-hi)"/>
+    <stop offset="0.34" stop-color="var(--ceramic-base)"/>
+    <stop offset="1" stop-color="var(--ceramic-edge)"/>
+  </linearGradient>
+  <linearGradient id="gCork" x1="0" y1="0" x2="1" y2="0.4">
+    <stop offset="0" stop-color="#D6AC77"/><stop offset="1" stop-color="#8A5C2C"/>
+  </linearGradient>
+  <linearGradient id="gCoffee" x1="0" y1="0" x2="1" y2="0.9">
+    <stop offset="0" stop-color="#7A4321"/><stop offset="1" stop-color="#2E1508"/>
+  </linearGradient>
+  <linearGradient id="gWood" x1="0" y1="0" x2="1" y2="0.7">
+    <stop offset="0" stop-color="#8C6136"/><stop offset="1" stop-color="#4A2F19"/>
+  </linearGradient>
+
+  <symbol id="shotSet" viewBox="0 0 800 800">
+    <rect width="800" height="800" fill="url(#gStudio)"/>
+    <path d="M330,510 C302,566 270,610 270,658 C270,716 328,750 400,750 C472,750 530,716 530,658 C530,610 498,566 470,510 Z" fill="#E4DACB" opacity="0.85"/>
+    <path d="M270,650 C282,724 340,750 400,750 C460,750 518,724 530,650 C520,700 470,716 400,716 C330,716 280,700 270,650 Z" fill="url(#gCoffee)"/>
+    <path d="M334,458 L466,458 L474,510 L326,510 Z" fill="url(#gCork)"/>
+    <path d="M226,266 L364,450 L436,450 L574,266 Z" fill="url(#gCeramic)"/>
+    <ellipse cx="400" cy="266" rx="176" ry="46" fill="var(--ceramic-edge)"/>
+    <ellipse cx="400" cy="272" rx="150" ry="37" fill="#1C1512" opacity="0.28"/>
+  </symbol>
+
+  <symbol id="shotCarafe" viewBox="0 0 800 800">
+    <rect width="800" height="800" fill="url(#gStudio)"/>
+    <path d="M250,600 L550,600 L550,640 L250,640 Z" fill="url(#gWood)"/>
+    <path d="M290,640 L330,640 L330,700 L290,700 Z" fill="url(#gWood)"/>
+    <path d="M470,640 L510,640 L510,700 L470,700 Z" fill="url(#gWood)"/>
+    <path d="M250,596 L550,596 L550,606 L250,606 Z" fill="#A97C48" opacity="0.7"/>
+    <path d="M330,330 C302,400 270,450 270,500 C270,558 328,592 400,592 C472,592 530,558 530,500 C530,450 498,400 470,330 Z" fill="#E4DACB" opacity="0.8"/>
+    <path d="M334,300 L466,300 L474,340 L326,340 Z" fill="url(#gCork)"/>
+  </symbol>
+
+  <symbol id="shotScene" viewBox="0 0 800 800">
+    <rect width="800" height="800" fill="url(#gStudio)"/>
+    <path d="M150,320 L370,320 L350,600 C348,620 332,632 312,632 L208,632 C188,632 172,620 170,600 Z" fill="url(#gCeramic)"/>
+    <ellipse cx="260" cy="320" rx="110" ry="28" fill="var(--ceramic-edge)"/>
+    <ellipse cx="260" cy="324" rx="90" ry="22" fill="#4A2A14"/>
+    <path d="M370,368 C438,368 456,410 456,442 C456,482 426,506 378,510" fill="none" stroke="var(--ceramic-base)" stroke-width="30" stroke-linecap="round"/>
+    <path d="M430,320 L650,320 L630,600 C628,620 612,632 592,632 L488,632 C468,632 452,620 450,600 Z" fill="url(#gCeramic)" opacity="0.9"/>
+    <ellipse cx="540" cy="320" rx="110" ry="28" fill="var(--ceramic-edge)"/>
+    <ellipse cx="540" cy="324" rx="90" ry="22" fill="#4A2A14"/>
+  </symbol>
+</defs>
+</svg>
+
+<header class="co-nav">
+  <div class="co-nav__inner">
+    <a class="brand" href="index.html" aria-label="Kalda, back to the store">
+      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="9"/>
+        <path d="M8 11.5h16l-5.8 8.6V25h-4.4v-4.9z" class="brand__mark-cone"/>
+      </svg>
+      <span class="brand__word">KALDA</span>
+    </a>
+    <p class="co-nav__secure">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg>
+      Secure checkout · 256-bit SSL
+    </p>
+  </div>
+</header>
+
+<!-- ============ EMPTY STATE ============ -->
+<section class="co-empty" id="coEmpty" hidden>
+  <div class="wrap">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.2A2 2 0 0 1 15.8 21H8.2a2 2 0 0 1-2-1.8L5 8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>
+    <h1>There's nothing in your cart yet</h1>
+    <p>Pick a colourway and we'll get the kettle on.</p>
+    <a class="btn btn--primary btn--lg" href="index.html#product">Back to the Bloom set</a>
+  </div>
+</section>
+
+<!-- ============ CONFIRMATION ============ -->
+<section class="co-done" id="coDone" hidden>
+  <div class="wrap">
+    <span class="co-done__tick">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+    </span>
+    <p class="sec-kicker">Order confirmed</p>
+    <h1>Thank you — it's on its way.</h1>
+    <p class="co-done__lede">
+      We've emailed a receipt to <strong id="doneEmail">you</strong>. Your set leaves
+      our Portland studio within 24 hours, and the tracking link follows the moment it does.
+    </p>
+    <dl class="co-done__meta">
+      <div><dt>Order number</dt><dd id="doneOrder">—</dd></div>
+      <div><dt>Total paid</dt><dd id="doneTotal">—</dd></div>
+      <div><dt>Estimated delivery</dt><dd id="doneEta">—</dd></div>
+    </dl>
+    <a class="btn btn--dark btn--lg" href="index.html">Back to the store</a>
+  </div>
+</section>
+
+<!-- ============ CHECKOUT ============ -->
+<main class="co" id="coMain" hidden>
+  <div class="wrap co__grid">
+
+    <!-- summary toggle, mobile only -->
+    <button class="co__summary-toggle" type="button" id="summaryToggle" aria-expanded="false" aria-controls="coSummary">
+      <span class="co__summary-toggle-label">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.2A2 2 0 0 1 15.8 21H8.2a2 2 0 0 1-2-1.8L5 8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>
+        Order summary
+        <svg class="co__chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </span>
+      <strong id="toggleTotal">$0</strong>
+    </button>
+
+    <form class="co__form" id="coForm" novalidate>
+      <section class="co__step">
+        <h2><span>01</span> Contact</h2>
+        <div class="field">
+          <label for="fEmail">Email address</label>
+          <input id="fEmail" type="email" autocomplete="email" placeholder="you@example.com" required>
+          <p class="err" data-err></p>
+        </div>
+        <label class="co__check">
+          <input type="checkbox" id="fNews" checked>
+          <span class="addon__box" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+          <span>Send me Brew Notes — one email a month, recipes and restocks</span>
+        </label>
+      </section>
+
+      <section class="co__step">
+        <h2><span>02</span> Delivery address</h2>
+        <div class="co__row">
+          <div class="field">
+            <label for="fFirst">First name</label>
+            <input id="fFirst" type="text" autocomplete="given-name" required>
+            <p class="err" data-err></p>
+          </div>
+          <div class="field">
+            <label for="fLast">Last name</label>
+            <input id="fLast" type="text" autocomplete="family-name" required>
+            <p class="err" data-err></p>
+          </div>
+        </div>
+        <div class="field">
+          <label for="fAddr">Street address</label>
+          <input id="fAddr" type="text" autocomplete="street-address" required>
+          <p class="err" data-err></p>
+        </div>
+        <div class="co__row co__row--3">
+          <div class="field">
+            <label for="fCity">City</label>
+            <input id="fCity" type="text" autocomplete="address-level2" required>
+            <p class="err" data-err></p>
+          </div>
+          <div class="field">
+            <label for="fZip">Postal code</label>
+            <input id="fZip" type="text" autocomplete="postal-code" required>
+            <p class="err" data-err></p>
+          </div>
+          <div class="field">
+            <label for="fCountry">Country</label>
+            <select id="fCountry" autocomplete="country-name">
+              <option>United States</option>
+              <option>Canada</option>
+              <option>United Kingdom</option>
+              <option>Germany</option>
+              <option>Netherlands</option>
+              <option>France</option>
+              <option>Australia</option>
+              <option>Japan</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="co__step">
+        <h2><span>03</span> Delivery speed</h2>
+        <label class="co__radio">
+          <input type="radio" name="ship" value="standard" checked>
+          <span class="co__radio-dot" aria-hidden="true"></span>
+          <span class="co__radio-body">
+            <strong>Standard — tracked &amp; carbon neutral</strong>
+            <span>2–4 business days</span>
+          </span>
+          <span class="co__radio-price" id="stdPrice">Free</span>
+        </label>
+        <label class="co__radio">
+          <input type="radio" name="ship" value="express">
+          <span class="co__radio-dot" aria-hidden="true"></span>
+          <span class="co__radio-body">
+            <strong>Express</strong>
+            <span>Next business day, order before 2 pm</span>
+          </span>
+          <span class="co__radio-price">$14</span>
+        </label>
+      </section>
+
+      <section class="co__step">
+        <h2><span>04</span> Payment</h2>
+        <p class="co__demo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+          This is a demonstration storefront. Card details are validated for format only —
+          nothing is transmitted, stored or charged.
+        </p>
+        <div class="field">
+          <label for="fCard">Card number</label>
+          <input id="fCard" type="text" inputmode="numeric" placeholder="4242 4242 4242 4242" autocomplete="cc-number" required>
+          <p class="err" data-err></p>
+        </div>
+        <div class="co__row co__row--3">
+          <div class="field">
+            <label for="fExp">Expiry</label>
+            <input id="fExp" type="text" inputmode="numeric" placeholder="MM/YY" autocomplete="cc-exp" required>
+            <p class="err" data-err></p>
+          </div>
+          <div class="field">
+            <label for="fCvc">CVC</label>
+            <input id="fCvc" type="text" inputmode="numeric" placeholder="123" autocomplete="cc-csc" required>
+            <p class="err" data-err></p>
+          </div>
+          <div class="field">
+            <label for="fName">Name on card</label>
+            <input id="fName" type="text" autocomplete="cc-name" required>
+            <p class="err" data-err></p>
+          </div>
+        </div>
+      </section>
+
+      <button class="btn btn--primary btn--block btn--lg" type="submit" id="payBtn">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg>
+        <span id="payLabel">Pay $0</span>
+      </button>
+      <p class="co__micro">
+        By placing this order you agree to our terms. 30-day returns, we pay the label.
+      </p>
+    </form>
+
+    <aside class="co__summary" id="coSummary" aria-label="Order summary">
+      <div class="co__summary-inner">
+        <h2>Order summary</h2>
+        <div class="co__lines" id="coLines"></div>
+
+        <form class="promo" id="coPromo">
+          <label for="coPromoInput">Discount code</label>
+          <div class="promo__row">
+            <input id="coPromoInput" type="text" placeholder="BLOOM10" autocomplete="off" spellcheck="false">
+            <button class="btn btn--ghost" type="submit">Apply</button>
+          </div>
+          <p class="promo__msg" id="coPromoMsg" role="status"></p>
+          <div class="promo__applied" id="coPromoApplied" hidden>
+            <span class="tag" id="coPromoTag"></span>
+            <button type="button" id="coPromoRemove">Remove</button>
+          </div>
+        </form>
+
+        <dl class="totals">
+          <div><dt>Subtotal</dt><dd id="coSub">$0</dd></div>
+          <div class="totals__disc" id="coDiscRow" hidden><dt>Discount</dt><dd id="coDisc">−$0</dd></div>
+          <div><dt>Shipping</dt><dd id="coShip">Free</dd></div>
+          <div><dt>Estimated tax</dt><dd id="coTax">$0</dd></div>
+          <div class="totals__grand"><dt>Total</dt><dd id="coTotal">$0</dd></div>
+        </dl>
+
+        <ul class="assur">
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg>
+            Encrypted end to end
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>
+            30-day returns, free label
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 4.9-4.5-2.4-4.5 2.4.9-4.9L4.8 8.2l5-.7z"/></svg>
+            4.9 from 2,847 buyers
+          </li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<script src="assets/js/store.js"></script>
+<script src="assets/js/checkout.js"></script>
+</body>
+</html>

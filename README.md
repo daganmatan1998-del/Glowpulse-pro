@@ -1,1 +1,28 @@
 # Glowpulse-pro
+
+J.A.R.V.I.S. — the voice assistant, in the two halves it actually ships as.
+
+| Path | What it is |
+|---|---|
+| `jarvis-worker.js` | The Cloudflare Worker backend. Every secret lives here; the browser never sees one. Model proxy with fallback keys, `/tts`, `/stt`, `/image`, Shopify, Google Calendar, remote MCP proxy. |
+| `jarvis-desktop/` | The Tauri desktop app — the same page as a floating always-on-top orb on `Ctrl+Shift+Space`. See [its README](jarvis-desktop/README.md) for setup and for what the orb can and cannot do. |
+| `jarvis-desktop/dist/index.html` | The whole frontend, one file, no bundler. This is also what you host on the web. |
+| `jarvis-desktop/mic-test.html` | A standalone page that measures the exact RMS level the voice detector thresholds against, so "he cannot hear me" becomes a number instead of a guess. |
+
+The two halves are deployed separately and do not need each other to build: the
+worker goes up with `wrangler deploy`, the desktop app with `npm run build`
+inside `jarvis-desktop/`.
+
+## Deploying the worker
+
+```bash
+wrangler deploy jarvis-worker.js
+```
+
+The secrets it reads are listed at the top of the file. Only `JARVIS_PIN`,
+`JARVIS_TOKEN_SECRET` and one model API key are required — every other feature
+switches itself off when its secret is absent, and `GET /health` reports which
+ones came up.
+
+Voice input needs `/stt`, which this worker has. WebView2 carries no Web Speech
+API, so on the desktop app transcription has nowhere else to come from.

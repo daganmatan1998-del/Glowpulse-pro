@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS — microphone check</title>
+<style>
+  :root{ --cyan:#00e5ff; --dim:#7fa8b8; --bg:#00060e; --warn:#ffb020; --bad:#ff5a5a; --ok:#3ddc84; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--cyan); min-height:100vh;
+    font-family:'Share Tech Mono', ui-monospace, Consolas, monospace;
+    padding:28px 20px 60px; line-height:1.6;
+  }
+  .wrap{ max-width:680px; margin:0 auto; }
+  h1{ font-size:15px; letter-spacing:5px; font-weight:400; margin-bottom:4px; }
+  .sub{ color:var(--dim); font-size:12px; letter-spacing:1px; margin-bottom:26px; }
+
+  .meter{
+    height:34px; border:1px solid rgba(0,229,255,0.35); position:relative;
+    background:rgba(0,229,255,0.04); overflow:hidden; margin-bottom:6px;
+  }
+  #bar{ position:absolute; inset:0 auto 0 0; width:0%; background:rgba(0,229,255,0.5); transition:width .05s linear; }
+  #thresholdMark{
+    position:absolute; top:0; bottom:0; width:2px; background:var(--warn); left:0;
+  }
+  .scale{ display:flex; justify-content:space-between; color:var(--dim); font-size:10px; margin-bottom:22px; }
+
+  .readout{ display:grid; grid-template-columns:1fr 1fr; gap:10px 20px; margin-bottom:24px; }
+  .cell{ border:1px solid rgba(0,229,255,0.18); padding:10px 12px; }
+  .cell .k{ color:var(--dim); font-size:10px; letter-spacing:2px; text-transform:uppercase; }
+  .cell .v{ font-size:20px; }
+
+  button{
+    background:none; border:1px solid var(--cyan); color:var(--cyan);
+    font-family:inherit; font-size:12px; letter-spacing:2px; text-transform:uppercase;
+    padding:11px 16px; cursor:pointer; margin:0 8px 10px 0;
+  }
+  button:hover:not(:disabled){ background:rgba(0,229,255,0.14); }
+  button:disabled{ opacity:0.35; cursor:default; }
+
+  #status{ margin:18px 0; min-height:24px; }
+  .results{ border-top:1px solid rgba(0,229,255,0.25); margin-top:26px; padding-top:20px; display:none; }
+  .results.show{ display:block; }
+  table{ width:100%; border-collapse:collapse; font-size:12px; margin-bottom:18px; }
+  td{ padding:6px 0; border-bottom:1px solid rgba(0,229,255,0.1); }
+  td:last-child{ text-align:right; }
+  .verdict{ padding:14px; border:1px solid; font-size:13px; }
+  .verdict.ok{ border-color:var(--ok); color:var(--ok); }
+  .verdict.warn{ border-color:var(--warn); color:var(--warn); }
+  .verdict.bad{ border-color:var(--bad); color:var(--bad); }
+  code{ color:#fff; }
+  .note{ color:var(--dim); font-size:11px; margin-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>MICROPHONE CHECK</h1>
+  <div class="sub">Measures the exact value JARVIS uses to decide whether you are speaking.</div>
+
+  <div class="meter">
+    <div id="bar"></div>
+    <div id="thresholdMark" title="current threshold"></div>
+  </div>
+  <div class="scale"><span>0.000</span><span>0.025</span><span>0.050</span><span>0.075+</span></div>
+
+  <div class="readout">
+    <div class="cell"><div class="k">live level (RMS)</div><div class="v" id="live">—</div></div>
+    <div class="cell"><div class="k">in decibels</div><div class="v" id="db">—</div></div>
+  </div>
+
+  <div>
+    <button id="startBtn">Start microphone</button>
+    <button id="roomBtn" disabled>1 · Measure the room (5s)</button>
+    <button id="voiceBtn" disabled>2 · Measure your voice (5s)</button>
+  </div>
+
+  <div id="status">Press start, then allow the microphone.</div>
+
+  <div class="results" id="results">
+    <table id="table"></table>
+    <div id="verdict" class="verdict"></div>
+    <div class="note" id="advice"></div>
+  </div>
+</div>
+
+<script>
+/* The same maths as JARVIS's detector, deliberately duplicated rather than
+   approximated: an RMS over one analyser frame of time-domain samples. If
+   the numbers here did not come from the identical calculation, comparing
+   them against the thresholds below would be meaningless. */
+const VAD_MIN_LEVEL = 0.009;
+const VAD_MAX_LEVEL = 0.038;
+
+function thresholdFor(floor){
+  const mult   = floor < 0.010 ? 1.45 : floor < 0.025 ? 1.40 : 1.25;
+  const offset = floor < 0.010 ? 0 : 0.004;
+  return Math.min(VAD_MAX_LEVEL, Math.max(VAD_MIN_LEVEL, floor * mult + offset));
+}
+const toDb = rms => rms > 0 ? (20 * Math.log10(rms)).toFixed(1) : '-inf';
+
+let ctx, analyser, buf, stream, running = false;
+let latest = 0, currentThreshold = VAD_MIN_LEVEL;
+let roomFloor = null, voiceLevel = null;
+
+const $ = id => document.getElementById(id);
+
+async function start(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      /* Matching JARVIS exactly. These processors change the levels — with
+         AGC on, a quiet voice is boosted — so measuring without them would
+         produce numbers that do not apply. */
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+  }catch(err){
+    $('status').textContent = 'Microphone refused: ' + err.message;
+    return;
+  }
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream);
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  src.connect(analyser);
+  buf = new Uint8Array(analyser.fftSize);
+  running = true;
+  $('startBtn').disabled = true;
+  $('roomBtn').disabled = false;
+  $('status').textContent = 'Running. Step 1: stay quiet and measure the room.';
+  tick();
+}
+
+function sample(){
+  analyser.getByteTimeDomainData(buf);
+  let sum = 0;
+  for(let i = 0; i < buf.length; i++){ const v = (buf[i] - 128) / 128; sum += v * v; }
+  return Math.sqrt(sum / buf.length);
+}
+
+function tick(){
+  if(!running) return;
+  latest = sample();
+  $('live').textContent = latest.toFixed(4);
+  $('db').textContent = toDb(latest) + ' dBFS';
+  $('bar').style.width = Math.min(100, (latest / 0.075) * 100) + '%';
+  $('bar').style.background = latest > currentThreshold
+    ? 'rgba(61,220,132,0.55)' : 'rgba(0,229,255,0.35)';
+  $('thresholdMark').style.left = Math.min(100, (currentThreshold / 0.075) * 100) + '%';
+  requestAnimationFrame(tick);
+}
+
+/* Averaging alone would be misleading for speech, which is mostly gaps: the
+   mean of a spoken sentence sits far below the level of the words in it.
+   The median of the loud half is much closer to what the detector has to
+   catch, so that is what is reported. */
+function collect(seconds, onDone){
+  const samples = [];
+  const id = setInterval(()=> samples.push(latest), 50);
+  let left = seconds;
+  const countdown = setInterval(()=>{
+    left--;
+    if(left > 0) $('status').textContent = 'Measuring… ' + left + 's';
+  }, 1000);
+  setTimeout(()=>{
+    clearInterval(id); clearInterval(countdown);
+    samples.sort((a,b)=> a-b);
+    onDone({
+      median: samples[Math.floor(samples.length / 2)],
+      quiet:  samples[Math.floor(samples.length * 0.2)],
+      loud:   samples[Math.floor(samples.length * 0.75)],
+      peak:   samples[samples.length - 1]
+    });
+  }, seconds * 1000);
+}
+
+$('startBtn').addEventListener('click', start);
+
+$('roomBtn').addEventListener('click', ()=>{
+  $('roomBtn').disabled = true;
+  $('status').textContent = 'Stay quiet… 5s';
+  collect(5, r=>{
+    roomFloor = r.median;
+    currentThreshold = thresholdFor(roomFloor);
+    $('status').textContent = 'Room measured. Step 2: speak normally for 5 seconds.';
+    $('voiceBtn').disabled = false;
+    render();
+  });
+});
+
+$('voiceBtn').addEventListener('click', ()=>{
+  $('voiceBtn').disabled = true;
+  $('status').textContent = 'Speak normally… 5s';
+  collect(5, r=>{
+    voiceLevel = r.loud;      // the level of the words, not the gaps
+    $('status').textContent = 'Done.';
+    $('roomBtn').disabled = false;
+    $('voiceBtn').disabled = false;
+    render();
+  });
+});
+
+function render(){
+  if(roomFloor === null) return;
+  const thr = thresholdFor(roomFloor);
+  currentThreshold = thr;
+  const rows = [
+    ['Room noise floor', roomFloor.toFixed(4) + '  (' + toDb(roomFloor) + ' dBFS)'],
+    ['Threshold JARVIS will use', thr.toFixed(4) + '  (' + toDb(thr) + ' dBFS)']
+  ];
+  if(voiceLevel !== null){
+    rows.push(['Your speaking level', voiceLevel.toFixed(4) + '  (' + toDb(voiceLevel) + ' dBFS)']);
+    rows.push(['Margin above threshold', (voiceLevel / thr).toFixed(2) + '×']);
+  }
+  $('table').innerHTML = rows.map(r=> '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>').join('');
+  $('results').classList.add('show');
+
+  const v = $('verdict'), a = $('advice');
+  if(voiceLevel === null){
+    v.className = 'verdict warn';
+    v.textContent = 'Now measure your voice to see whether it clears the threshold.';
+    a.textContent = '';
+    return;
+  }
+  const margin = voiceLevel / thr;
+  if(margin >= 2){
+    v.className = 'verdict ok';
+    v.textContent = 'Good separation. Your voice sits ' + margin.toFixed(1) + '× above the threshold, so speech and room noise are clearly distinguishable.';
+    a.textContent = '';
+  } else if(margin >= 1.3){
+    v.className = 'verdict warn';
+    v.textContent = 'Workable but tight — ' + margin.toFixed(2) + '× above the threshold. Quieter sentences may be missed.';
+    a.innerHTML = 'Try moving closer to the microphone, or reduce steady noise (a fan, an open window). If it stays tight, lowering <code>VAD_MIN_LEVEL</code> toward <code>' + Math.max(0.008, voiceLevel / 2.5).toFixed(3) + '</code> in dist/index.html would help.';
+  } else {
+    v.className = 'verdict bad';
+    v.textContent = 'Too close to call — only ' + margin.toFixed(2) + '× above the threshold. JARVIS will miss a lot of what you say.';
+    a.innerHTML = 'Either the room is noisy or the microphone is quiet. Worth trying: move closer, switch input device, or set <code>VAD_MIN_LEVEL</code> to about <code>' + Math.max(0.006, voiceLevel / 2.2).toFixed(3) + '</code> and <code>VAD_MAX_LEVEL</code> to <code>' + Math.max(0.012, voiceLevel / 1.6).toFixed(3) + '</code> in dist/index.html.';
+  }
+}
+</script>
+</body>
+</html>

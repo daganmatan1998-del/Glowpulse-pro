@@ -306,6 +306,51 @@ async function handleMessages(request, env) {
   }, 502, env, request);
 }
 
+/* The system prompt and the tool schemas are byte-identical from one request
+   to the next — roughly four thousand tokens of them — and they were being
+   re-sent and re-billed every single time. Marking a cache breakpoint after
+   them is what that costs: Anthropic caches everything before the breakpoint
+   (tools first, then system, in that order), and subsequent requests read the
+   prefix back at a fraction of the price instead of paying to reprocess it.
+
+   Done HERE rather than in the page, deliberately. The page does not know
+   which engine will answer; the worker does. So the caching marker only ever
+   reaches Anthropic, and Google, Groq, Cerebras, xAI and Workers AI never see
+   a field they would not understand.
+
+   It also stays fail-safe. If Anthropic ever rejects the marker, callEngine
+   retries once with the original untouched body rather than failing the turn
+   — a caching optimisation must never be the reason an answer does not
+   arrive. */
+function withCaching(body) {
+  if (!body || typeof body.system !== 'string' || !body.system) return body;
+  /* Below roughly a thousand tokens there is nothing worth caching and the
+     marker is refused; ~4 chars per token is rough but the floor here is far
+     above it either way. */
+  if (body.system.length < 4000) return body;
+  return {
+    ...body,
+    system: [{ type: 'text', text: body.system, cache_control: { type: 'ephemeral' } }]
+  };
+}
+
+function looksLikeCacheComplaint(status, detail) {
+  return status === 400 && /cache_control|cache|ephemeral/i.test(String(detail || ''));
+}
+
+/* system arrives as a plain string from the page, but withCaching turns it
+   into blocks — and a failover to an OpenAI-compatible engine then passes
+   that array through here. String(array) yields "[object Object]", which
+   would have handed the model a system prompt made of nothing. */
+function systemText(system) {
+  if (!system) return '';
+  if (typeof system === 'string') return system;
+  if (Array.isArray(system)) {
+    return system.map(b => (b && typeof b.text === 'string') ? b.text : '').join('\n').trim();
+  }
+  return String(system);
+}
+
 async function callEngine(engine, body, env, request, announce) {
   /* Workers AI is a binding, not an endpoint: no fetch, no key, no streaming
      to convert. Handled up front so the HTTP path below stays untouched. */
@@ -321,7 +366,7 @@ async function callEngine(engine, body, env, request, announce) {
             'anthropic-version': ANTHROPIC_VERSION,
             'anthropic-beta': 'mcp-client-2025-04-04'
           },
-          body: JSON.stringify(body)
+          body: JSON.stringify(withCaching(body))
         })
       : await fetch(engine.url, {
           method: 'POST',
@@ -334,6 +379,31 @@ async function callEngine(engine, body, env, request, announce) {
   }
 
   let detail = upstream.ok ? '' : await upstream.text().catch(() => '');
+
+  /* Caching must never be the reason an answer does not arrive. If the marker
+     is ever refused — an account without it, a version that wants it spelled
+     differently — the turn is retried once with the body exactly as the page
+     sent it, and the only thing lost is the saving. */
+  if (!upstream.ok && engine.vendor === 'anthropic' &&
+      looksLikeCacheComplaint(upstream.status, detail) && withCaching(body) !== body) {
+    try {
+      const plain = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': engine.key,
+          'anthropic-version': ANTHROPIC_VERSION,
+          'anthropic-beta': 'mcp-client-2025-04-04'
+        },
+        body: JSON.stringify(body)
+      });
+      upstream = plain;
+      detail = upstream.ok ? '' : await upstream.text().catch(() => '');
+    } catch (err) {
+      return { ok: false, retriable: true, reason: 'unreachable', engine: engine,
+               response: json({ error: 'could not reach ' + engine.label }, 502, env, request) };
+    }
+  }
 
   if (!upstream.ok && upstream.status === 400 && engine.vendor === 'google' &&
       !googleRejectsReasoningEffort && /INVALID_ARGUMENT/i.test(detail)) {
@@ -424,7 +494,7 @@ const MELO_MODEL = '@cf/myshell-ai/melotts';
    an engine whose only job is to keep something responding. */
 async function callWorkersAI(engine, body, env, request, announce) {
   const messages = [];
-  if (body.system) messages.push({ role: 'system', content: String(body.system) });
+  { const sys = systemText(body.system); if (sys) messages.push({ role: 'system', content: sys }); }
   for (const m of (body.messages || [])) {
     const text = anthropicBlocksToOpenAI(m.content, false);
     if (text && text.length) messages.push({ role: m.role, content: text });
@@ -791,7 +861,7 @@ function toOpenAIRequest(body, env, provider) {
   provider = provider || fallbackProvider(env);
   const allowImages = engineSeesImages(provider, env);
   const messages = [];
-  if (body.system) messages.push({ role: 'system', content: String(body.system) });
+  { const sys = systemText(body.system); if (sys) messages.push({ role: 'system', content: sys }); }
 
   for (const message of (body.messages || [])) {
     const content = message.content;

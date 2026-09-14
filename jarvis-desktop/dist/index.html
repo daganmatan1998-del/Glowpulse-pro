@@ -7131,7 +7131,11 @@ function grabLiveFrame(){
   }
   ctx.drawImage(liveFeed, 0, 0, canvas.width, canvas.height);
   const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
-  return { kind:'image', media_type:'image/jpeg', data: dataUrl.split(',')[1], dataUrl };
+  /* live marks it as the camera's own frame rather than something he chose
+     to attach. The two look identical as content blocks and must not be
+     treated identically: a photo he attached is the subject of the
+     conversation, a live frame is only what the lens happened to see. */
+  return { kind:'image', media_type:'image/jpeg', data: dataUrl.split(',')[1], dataUrl, live:true };
 }
 
 liveBtn.addEventListener('click', ()=>{ liveActive() ? stopLive() : startLive(); });
@@ -8435,6 +8439,37 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
   return data;
 }
 
+/* Live view attaches a fresh camera frame to every message, which is the
+   whole point of it — and each one then sat in chatHistory forever. With a
+   sixteen-message window that meant up to eight stale frames riding along on
+   every request: roughly five thousand tokens of pictures of what the lens
+   happened to see several turns ago, already looked at, already answered,
+   re-sent and re-billed on every turn after.
+
+   Only the newest one is worth anything: it is what he is holding up NOW. The
+   older ones are dropped and replaced by a line saying one was there, so a
+   reference back to "the thing I showed you" still makes sense instead of
+   pointing at nothing.
+
+   Photographs he attached deliberately are never touched. Those ARE the
+   conversation — "put my product in a scene" needs the product — which is
+   exactly why live frames had to be marked apart from them rather than
+   filtered by looking like images. */
+function trimStaleFrames(messages){
+  let newestLive = -1;
+  for(let i = messages.length - 1; i >= 0; i--){
+    if(messages[i] && messages[i].liveFrame){ newestLive = i; break; }
+  }
+  return messages.map((m, i) => {
+    if(!m || !m.liveFrame) return m;
+    const { liveFrame, ...clean } = m;          // never send our own bookkeeping
+    if(i === newestLive || !Array.isArray(clean.content)) return clean;
+    const kept = clean.content.filter(b => b && b.type !== 'image');
+    kept.unshift({ type:'text', text:'[a camera frame was here; it has been dropped as out of date]' });
+    return { ...clean, content: kept };
+  });
+}
+
 async function askJarvis(userText, images, onText){
   userInterrupted = false;
   if(images && images.length){
@@ -8462,14 +8497,19 @@ async function askJarvis(userText, images, onText){
       }
     }
     if(userText) blocks.push({ type:'text', text:userText });
-    chatHistory.push({ role:'user', content: blocks });
+    /* Recorded on the message, not inside a content block: the blocks go to
+       the model verbatim and an unknown field there would be rejected. Stripped
+       again in trimStaleFrames before anything is sent. */
+    const wasLive = images.some(a => a && a.live);
+    chatHistory.push(wasLive ? { role:'user', content: blocks, liveFrame:true }
+                             : { role:'user', content: blocks });
   } else {
     chatHistory.push({ role:'user', content:userText });
   }
   const usingOwnBackend = !!backendUrl;
   const textOf = (data)=> (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
   try{
-    let workingMessages = chatHistory.slice(-16);
+    let workingMessages = trimStaleFrames(chatHistory.slice(-16));
     let budget = replyBudget();
     let data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
     let collected = textOf(data);

@@ -76,3 +76,25 @@ rather than about search results.
 ranges, link-local (including cloud metadata at 169.254.169.254) and non-http
 schemes are refused, and because redirects can point anywhere, the final URL
 is re-checked after they are followed rather than only the one submitted.
+
+## What each request costs, and what is done about it
+
+The system prompt and the tool schemas are identical from one request to the
+next — around 4,200 tokens of them for JARVIS in English, 5,400 for ULTRON —
+and they used to be re-sent and re-billed every time.
+
+The worker now marks a cache breakpoint after them on the Anthropic path, so
+subsequent requests read that prefix back instead of paying to reprocess it.
+It is done in the worker rather than the page for a reason: the page does not
+know which engine will answer, the worker does, so Google, Groq, Cerebras, xAI
+and Workers AI never see a field they would not understand. If Anthropic ever
+refuses the marker the turn is retried once with the untouched body — a saving
+must never be the reason an answer fails to arrive.
+
+The other cost was live view. It attaches a fresh camera frame to every
+message, and with a sixteen-message window up to eight stale frames rode along
+on every request: roughly 4,000 tokens of pictures already looked at and
+answered. Only the newest is kept now; the rest are replaced by a line saying
+a frame was there, so referring back to what you showed him still makes sense.
+Photographs attached deliberately are never touched — those are the
+conversation.

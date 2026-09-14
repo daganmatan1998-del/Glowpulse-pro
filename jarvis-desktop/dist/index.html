@@ -2308,6 +2308,27 @@ scene.add(hologram);
 const coreGroup = new THREE.Group();
 hologram.add(coreGroup);
 
+/* The core's shell, and the one thing in this scene that was not additive.
+   Every ring, dot, pulse, scan line, star and glow sprite blends additively,
+   which means each of them contributes light and contributes nothing at all
+   where it is dark. This shell blended normally instead, and its colour is
+   coreBase — 0x041a2a, very dark navy.
+
+   Over the old opaque background (0x00030a, nearly black) that was invisible:
+   dark on dark. Over a transparent desktop window it is the dark disc you can
+   see behind the hologram, and a DoubleSide sphere makes it worst exactly at
+   the rim, where the line of sight passes through the most material — which is
+   why it reads as a dark ring rather than an even wash.
+
+   Additive on the desktop fixes it without touching the design: the shell's
+   own dark colour adds almost nothing, while its cyan emissive and every
+   highlight on it still light up exactly as before. The white inner core and
+   the cyan wireframe are deliberately left alone — they are bright, so they
+   were never the problem and they are what makes the orb read as solid.
+
+   transmission goes with it, and only on the desktop. It refracts whatever is
+   BEHIND the surface, and behind it there is now nothing to refract, so it
+   costs a whole extra render pass to produce an effect that cannot be seen. */
 const coreGeo = new THREE.IcosahedronGeometry(2.1, 2);
 const coreMat = new THREE.MeshPhysicalMaterial({
   color: JARVIS_SCENE.coreBase,
@@ -2317,9 +2338,11 @@ const coreMat = new THREE.MeshPhysicalMaterial({
   roughness: 0.25,
   transparent: true,
   opacity: 0.28,
-  transmission: 0.4,
+  transmission: IS_DESKTOP ? 0 : 0.4,
   clearcoat: 0.6,
-  side: THREE.DoubleSide
+  side: THREE.DoubleSide,
+  blending: IS_DESKTOP ? THREE.AdditiveBlending : THREE.NormalBlending,
+  depthWrite: !IS_DESKTOP
 });
 const coreMesh = new THREE.Mesh(coreGeo, coreMat);
 coreGroup.add(coreMesh);
@@ -4112,6 +4135,67 @@ const VAD_SILENCE_MS   = 1500;
    if you were finished, the answer is usually already back the moment the
    1500ms elapses. */
 const VAD_SPECULATE_MS = 500;
+/* 1500ms is the ceiling now, not the rule. Two things decide how much of it
+   is actually spent, and both of them only ever SHORTEN the wait — the
+   asymmetry above still holds, so neither is allowed to make a cut-off more
+   likely than it was.
+
+   First, how long you spoke. Nobody trails off in the middle of "תפתח
+   יוטיוב"; pauses for thought happen inside long sentences, not one-second
+   commands. So a short utterance gets a short window and a long one keeps the
+   full 1500ms, scaled between the two rather than switched.
+
+   Second, what you said. The speculative transcript above usually lands
+   around 900ms — well inside the window — and until now it sat there unread
+   while the clock ran down. If it reads as a finished thought, there is
+   nothing left to wait for. If it ends on a word nobody stops on ("אבל",
+   "כי", "and", "because") the wait stands, because that is precisely the
+   mid-thought pause the window exists to protect. */
+const VAD_SILENCE_MIN_MS = 700;    // a one-breath command
+const VAD_SHORT_SPEECH_MS = 1200;  // at or under this, the window is at its floor
+const VAD_LONG_SPEECH_MS  = 3500;  // at or over this, the full 1500ms
+/* Never end sooner than this after the last sound, whatever the transcript
+   says. Speech has gaps between words that are shorter than people think. */
+const VAD_EARLY_MIN_MS = 600;
+
+function silenceWindowFor(spokenMs){
+  if(!spokenMs || spokenMs <= VAD_SHORT_SPEECH_MS) return VAD_SILENCE_MIN_MS;
+  if(spokenMs >= VAD_LONG_SPEECH_MS) return VAD_SILENCE_MS;
+  const k = (spokenMs - VAD_SHORT_SPEECH_MS) / (VAD_LONG_SPEECH_MS - VAD_SHORT_SPEECH_MS);
+  return Math.round(VAD_SILENCE_MIN_MS + k * (VAD_SILENCE_MS - VAD_SILENCE_MIN_MS));
+}
+
+/* Words you do not stop on. A sentence ending here is a sentence still being
+   built, whatever the silence meter thinks. Listed rather than inferred
+   because the list is short, both languages need it, and a wrong guess here
+   costs a cut-off — so only words that are unambiguously mid-clause. */
+const TRAILING_CONNECTIVE = new Set([
+  'and','but','so','or','to','the','a','an','of','with','that','because','if',
+  'when','while','for','is','are','was','my','your','his','her','its','their','than','like',
+  'של','את','עם','כי','אבל','אז','גם','או','אם','כדי','בגלל','לפני','אחרי',
+  'בשביל','כשה','שה','על','אל','מה','איזה','כמה','יותר','פחות','כמו',
+  /* Hebrew prefixes are written joined, but Whisper regularly splits one off
+     as its own word — "אני רוצה ש" is a sentence cut in half, not a sentence. */
+  'ש','ל','ב','ה','ו','מ','כ',
+  /* Copulas and pronouns, which in Hebrew sit mid-clause far more often than
+     they end one. Listing a word here only ever buys more patience, never a
+     cut-off, so the doubtful cases belong on this side. */
+  'הוא','היא','הם','הן','אני','אתה','אנחנו','זה','זאת','אלה','יהיה','היה'
+]);
+
+/* Confident that the sentence is over. Deliberately conservative: anything it
+   is unsure about falls through to the full window, because being early is
+   the expensive mistake and being late is the cheap one. */
+function looksFinished(text){
+  const t = normaliseHeard(text);
+  if(!t) return false;
+  const words = t.split(' ').filter(Boolean);
+  /* One word is usually half of something. It also does not need this path:
+     a one-word utterance is short, so the length rule has already given it
+     the shortest window there is. */
+  if(words.length < 2) return false;
+  return !TRAILING_CONNECTIVE.has(words[words.length - 1]);
+}
 /* A deliberate press of MIC on the website is a short, complete sentence, and
    waiting the full ceiling before sending it reads as the app having frozen.
    The orb gets the longer window because there nothing was pressed and the
@@ -4242,6 +4326,7 @@ async function startWhisperCapture(){
   const started = Date.now();
   let lastLoud = 0, everSpoke = false, loudSince = 0, noiseFloor = 0, bargeSince = 0;
   let speculated = false, speculativeText = null, speculativeAt = 0;
+  let firstLoudAt = 0, speculativeJudged = false;
   let floorSum = 0, floorCount = 0, threshold = 0;
 
   /* setInterval, deliberately NOT requestAnimationFrame. Browsers throttle
@@ -4383,7 +4468,10 @@ async function startWhisperCapture(){
          cancellation has already removed his voice from this signal, so
          what is left really is you. */
 
-      if(now - loudSince > 120) everSpoke = true;
+      if(now - loudSince > 120){
+        if(!everSpoke) firstLoudAt = loudSince;   // when the sentence actually began
+        everSpoke = true;
+      }
     } else {
       loudSince = 0;
     }
@@ -4409,10 +4497,24 @@ async function startWhisperCapture(){
     if(speculated && rms > threshold && now - speculativeAt > 150){
       speculated = false;
       speculativeText = null;
+      speculativeJudged = false;   // whatever it said, it was about half a sentence
       speculativePromise = null;   // it only covers half the sentence now
     }
 
-    const quietLongEnough = everSpoke && lastLoud && (now - lastLoud > VAD_SILENCE_MS);
+    /* The window, sized to the sentence rather than fixed. */
+    const spokenMs = (everSpoke && firstLoudAt) ? Math.max(0, lastLoud - firstLoudAt) : 0;
+    let quietLongEnough = everSpoke && lastLoud && (now - lastLoud > silenceWindowFor(spokenMs));
+
+    /* The speculative transcript came back and reads as a complete thought, so
+       the rest of the window is time spent waiting for something that already
+       happened. Judged once — not every 50ms — and never before
+       VAD_EARLY_MIN_MS, so a fast transcription cannot end a turn inside the
+       ordinary gap between two words. */
+    if(!quietLongEnough && everSpoke && lastLoud && speculativeText && !speculativeJudged &&
+       now - lastLoud > VAD_EARLY_MIN_MS){
+      speculativeJudged = true;
+      if(looksFinished(speculativeText)) quietLongEnough = true;
+    }
     const ranTooLong = now - started > (IS_DESKTOP ? VAD_MAX_MS : VAD_MAX_MS_MANUAL);
     if(quietLongEnough || ranTooLong){
       clearInterval(meterTimer);

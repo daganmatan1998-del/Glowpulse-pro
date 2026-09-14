@@ -135,8 +135,16 @@ instead.
 
 ## Serious Mode is not in the orb
 
-In the orb, ULTRON and JARVIS are just the two languages under another name —
-same tools, same limits, different name and palette. Saying "become Ultron"
+In the orb, ULTRON is a palette and nothing else. It is the English half of
+the language switch: the same assistant, the same tools, the same limits, in
+orange. Saying "become Ultron" switches to English; "become Jarvis" switches
+back to Hebrew. Every such phrase needs a verb, because a bare "Jarvis" is the
+wake word and must not change anything.
+
+That separation is enforced in code rather than asked for. `seriousMode()` is
+what every capability reads — the identity in the system prompt, the token
+budgets, and which tools are sent — and it is false on the desktop whatever
+the palette says. Only the painting reads the raw mode flag. Saying "become Ultron"
 switches to English; "become Jarvis" switches back to Hebrew. Every such
 phrase needs a verb, because a bare "Jarvis" is the wake word and must not
 change anything.

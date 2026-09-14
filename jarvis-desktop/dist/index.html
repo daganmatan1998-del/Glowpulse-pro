@@ -3081,6 +3081,24 @@ function detectModeCommand(text){
   return ultron ? 1 : -1;
 }
 
+/* Serious Mode as a CAPABILITY, which is not the same question as what
+   colour the hologram is.
+
+   On the website the two coincide: modeState.mode is ULTRON because he asked
+   for Serious Mode, and that grants the bigger budget and the heavy tools.
+   In the orb the same flag is set by the language switch — orange is English
+   — so reading it directly handed the orb everything Serious Mode carries
+   every time he said "speak English": 3-D generation, image generation and
+   project packaging, all of which produce things you need a screen to look
+   at, plus a twenty-thousand-token budget on an assistant whose replies are
+   read aloud. The README says Serious Mode is deliberately unreachable from
+   the orb; this is the line that makes that true.
+
+   Everything that grants a tool or a budget asks this. Everything that only
+   paints — the body class, the palette transform — still reads the flag,
+   because there the flag is exactly right. */
+function seriousMode(){ return modeState.mode === 'ultron' && !IS_DESKTOP; }
+
 function startModeTransform(direction){
   if(modeState.transforming) return;         // ignore a second trigger mid-flight
   if(direction > 0 && modeState.mode === 'ultron') return;
@@ -3445,7 +3463,7 @@ function getSystemPrompt(calendarAvailable){
      spoken. Reading the mode here instead handed the orb a second character
      that nobody asked for, with a manner of its own, every time the language
      changed. */
-  const ultron = modeState.mode === 'ultron' && !IS_DESKTOP;
+  const ultron = seriousMode();
   let prompt = ultron
     ? (currentLang === 'he' ? ULTRON_PROMPT_HE : ULTRON_PROMPT_EN)
     : (currentLang === 'he' ? SYSTEM_PROMPT_HE : SYSTEM_PROMPT_EN);
@@ -4924,7 +4942,12 @@ async function setLangMode(mode){
      nothing else competing for the colour and no guard needed. */
   document.body.classList.toggle('lang-en', langMode === 'en');
   startModeTransform(langMode === 'en' ? 1 : -1);
-  speak(langMode === 'en' ? 'ULTRON online.' : 'ג\'רוויס מקוון.');
+  /* Confirms the switch without claiming to be someone else. The palette
+     is ULTRON's and stays that way; the assistant saying "ULTRON online"
+     is not design, it is an identity claim, and in the orb there is only
+     one assistant. Saying it in the language being switched TO also
+     proves the switch landed, which the old line did not. */
+  speak(langMode === 'en' ? 'English it is.' : 'עברית, בבקשה.');
   warnIfHintUnsupported();
 }
 
@@ -6530,8 +6553,8 @@ const MAX_BUILD_TOKENS = 6000;
    the user chooses deliberately rather than applied to everything. */
 const ULTRON_REPLY_TOKENS = 10000;
 const ULTRON_BUILD_TOKENS = 20000;
-function replyBudget(){ return modeState.mode === 'ultron' ? ULTRON_REPLY_TOKENS : MAX_REPLY_TOKENS; }
-function buildBudget(){ return modeState.mode === 'ultron' ? ULTRON_BUILD_TOKENS : MAX_BUILD_TOKENS; }
+function replyBudget(){ return seriousMode() ? ULTRON_REPLY_TOKENS : MAX_REPLY_TOKENS; }
+function buildBudget(){ return seriousMode() ? ULTRON_BUILD_TOKENS : MAX_BUILD_TOKENS; }
 const MAX_TOOL_ROUNDS = 10;
 
 /* Which engine actually answered, from the worker's own header. When a reply
@@ -8230,7 +8253,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     /* These run in the page itself, no backend needed — but the mode boundary
        still applies here, or the limit would simply leak out of the other
        connection route. Same split as below: packaging and 3-D are ULTRON's. */
-    requestBody.tools = modeState.mode === 'ultron'
+    requestBody.tools = seriousMode()
       ? [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL, MAKE_ZIP_TOOL, BUILD3D_TOOL]
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
     if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL);
@@ -8252,7 +8275,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
        all, so offering it there would only invite a promise it cannot keep. */
     if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL);
     const advancedTools = [BUILD3D_TOOL, MODEL3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
-    requestBody.tools = modeState.mode === 'ultron'
+    requestBody.tools = seriousMode()
       ? everydayTools.concat(advancedTools)
       : everydayTools;
     if(mcpServers.length) requestBody.mcp_servers = mcpServers;
@@ -8474,7 +8497,7 @@ async function askJarvis(userText, images, onText){
            it says what to tell the user, so the turn ends in a clean handoff
            instead of an apology about a tool error. */
         const ADVANCED_ONLY = ['build_3d_model','generate_3d_model','generate_image','make_zip'];
-        if(modeState.mode !== 'ultron' && ADVANCED_ONLY.indexOf(tu.name) >= 0){
+        if(!seriousMode() && ADVANCED_ONLY.indexOf(tu.name) >= 0){
           payload = {
             error: 'not available in Normal Mode',
             available_in: 'Serious Mode (ULTRON)',

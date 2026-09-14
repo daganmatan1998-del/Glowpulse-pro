@@ -1416,6 +1416,10 @@ const I18N = {
     reason_no_such_model: 'no such model on that account',
     reason_provider_down: 'the provider is down',
     reason_unreachable: 'unreachable',
+    /* failureReason() in the worker falls through to 'other' for anything it
+       cannot name, and t() returns the key itself when one is missing — so
+       without this line the sentence read "...unavailable (reason_other)". */
+    reason_other: 'no reason given',
     fallbackHint: 'J.A.R.V.I.S. tries each engine in order until one answers. Put a free-tier key in PRIMARY_API_KEY and paid models become the safety net rather than the meter; add FALLBACK_API_KEY_2 and _3 so one daily quota running out is not the end of the day. Press TEST ENGINES — better to find out here than mid-sentence.',
     fallbackTesting: 'asking the standby…',
     fallbackNone: 'no standby set — add FALLBACK_API_KEY as a worker secret',
@@ -1572,6 +1576,7 @@ const I18N = {
     reason_no_such_model: 'אין מודל כזה בחשבון',
     reason_provider_down: 'הספק נפל',
     reason_unreachable: 'לא ניתן להגיע',
+    reason_other: 'ללא סיבה מפורטת',
     fallbackHint: 'ג\'רוויס מנסה כל מנוע לפי הסדר עד שאחד עונה. מפתח חינמי ב-PRIMARY_API_KEY הופך את המודלים בתשלום לרשת ביטחון במקום למונה; FALLBACK_API_KEY_2 ו-_3 דואגים שמכסה יומית שנגמרת לא תסיים לך את היום. לחץ בדוק מנועים — עדיף לגלות כאן מאשר באמצע משפט.',
     fallbackTesting: 'שואל את הגיבוי…',
     fallbackNone: 'לא מוגדר גיבוי — הוסף FALLBACK_API_KEY כ-Secret ב-worker',
@@ -4449,9 +4454,18 @@ async function startWhisperCapture(){
 
        So: still fixed at the bottom, so barge-in never depends on a
        calibration his own voice can drag upward, but never allowed to sit
-       under the room itself. 2.2x the floor is above steady noise and still
-       far below a voice raised to interrupt. */
-    const BARGE_BAR = Math.max(0.020, noiseFloor * 2.2);
+       under the room itself.
+
+       And capped at the top, which the first version of this fix forgot.
+       noiseFloor has no ceiling of its own — only the speech threshold above
+       is capped — so scaling it without a bound traded one failure for its
+       mirror image: in a loud enough room the bar climbed past any realistic
+       voice and he could not be interrupted at all. 1.6x clears steady noise
+       with margin, and 0.055 is the highest the bar may ever sit, a little
+       above VAD_MAX_LEVEL, which is itself held below a normal speaking
+       level. A room louder than that defeats speech detection outright, so
+       there is nothing left for barge-in alone to rescue. */
+    const BARGE_BAR = Math.min(0.055, Math.max(0.020, noiseFloor * 1.6));
     /* Checked on its own bar, before the calibrated logic below, so cutting
        him off works regardless of how the room was measured. */
     if(isSpeaking && rms > BARGE_BAR){
@@ -4977,6 +4991,32 @@ async function handleTranscript(rawText){
        "try again" after an error, and every short answer like "yes". The
        window is what makes the guard safe; without it, it is just a filter
        that deletes the words you are most likely to say. */
+    /* His name, said while he is talking, stops him — full stop. The level
+       meter is the fast path and catches most interruptions, but it can still
+       be too conservative in a noisy room or against a loud reply. This is
+       the guarantee: whatever the audio looked like, if the words that came
+       back include his name and he was mid-sentence, he was being interrupted.
+
+       It has to sit ABOVE the echo guard, and it did not. Its own comment
+       claimed it ran "before every other branch so nothing can consume the
+       transcript first" — but the echo check was first and returns outright,
+       and his name is a word he says constantly: in the greeting, on every
+       mode switch, in any reply about himself. So "ג'רוויס" arriving while he
+       spoke matched something in spokenRecently, was written off as his own
+       voice coming back, and the interrupt below never ran. Precisely the
+       report: saying his name over him does nothing.
+
+       Being wrong in this direction is cheap. The worst case is that his own
+       voice says his name, he stops, and you say it again. The worst case the
+       other way is an assistant you cannot interrupt. */
+    if(IS_DESKTOP && isSpeaking && text){
+      const norm = normaliseHeard(text);
+      if(norm.split(' ').some(wordIsName)){
+        interruptSpeech();
+        lastWakeAt = Date.now();   // he addressed you; the turn is open
+      }
+    }
+
     const echoPossible = (typeof isSpeaking !== 'undefined' && isSpeaking) ||
                          (Date.now() - lastSpokeEndedAt < 1500);
     if(echoPossible && text && typeof looksLikeEcho === 'function' && looksLikeEcho(text)){
@@ -4994,21 +5034,6 @@ async function handleTranscript(rawText){
 
        In the orb the microphone is open with nobody touching anything, so
        there the name is what separates a request from the room. */
-    /* His name, said while he is talking, stops him — full stop. The level
-       meter above is the fast path and catches most interruptions, but it can
-       still be too conservative in a noisy room or against a loud reply. This
-       is the guarantee: whatever the audio looked like, if the words that
-       came back include his name and he was mid-sentence, he was being
-       interrupted. Runs before every other branch so nothing can consume the
-       transcript first. */
-    if(IS_DESKTOP && isSpeaking){
-      const norm = normaliseHeard(text);
-      if(norm.split(' ').some(wordIsName)){
-        interruptSpeech();
-        lastWakeAt = Date.now();   // he addressed you; the turn is open
-      }
-    }
-
     /* Language switch, before anything else is done with the transcript. */
     if(IS_DESKTOP && typeof detectLangCommand === 'function'){
       const want = detectLangCommand(text);
@@ -5087,9 +5112,18 @@ async function handleTranscript(rawText){
 function startListening(){
   /* isSpeaking is deliberately no longer a blocker — the microphone staying
      open while he talks is exactly what makes interrupting him possible.
-     isThinking still is: there is nothing to interrupt yet, and the reply is
-     about to start streaming anyway. */
-  if(isThinking) return;
+     isThinking still is, but ONLY while he is silent: there is nothing to
+     interrupt before he starts, and the reply is about to stream anyway.
+
+     The "only while he is silent" half was missing, and it cost the whole
+     feature. isThinking stays true for the entire stream, and he begins
+     speaking the first sentence long before the stream ends — so through the
+     opening sentences of every single reply, the two flags were true at once
+     and this line shut the microphone exactly when there was finally
+     something worth interrupting. Neither barge-in path could fire, because
+     nothing was capturing: not the level meter, not his name in the
+     transcript. From the outside, "he does not stop when I talk over him". */
+  if(isThinking && !isSpeaking) return;
   stopAmbient(); // nothing else may hold the microphone
   /* Prefer the worker's transcription when it is available; the browser's own
      recogniser stays as the fallback for an older worker or a missing AI
@@ -6332,8 +6366,11 @@ async function runSpeechQueue(){
   isSpeaking = true;
   updateStopBtnVisibility();
   /* In continuous conversation the microphone stays live through his answer,
-     which is the whole point: you can stop him without touching anything. */
-  if(conversationMode && !isThinking) startListening();
+     which is the whole point: you can stop him without touching anything.
+     isSpeaking is set just above, so this is the moment the exception in
+     startListening applies — during a stream it is the only call that opens
+     the microphone at all. */
+  if(conversationMode) startListening();
   try{
     while(speechQueue.length && !userInterrupted && !silentMode){
       const item = speechQueue.shift();
@@ -9751,7 +9788,11 @@ adjustLayout();
       return;
     }
 
-    if(isThinking || isSpeaking) return;
+    /* Thinking with nothing being said yet is the one state worth waiting
+       out. While he SPEAKS the microphone has to be open, so if capture has
+       been lost mid-reply this is what puts it back — otherwise you cannot
+       interrupt him for the rest of the answer and nothing says why. */
+    if(isThinking && !isSpeaking) return;
     const capturing = (typeof whisperActive !== 'undefined' && whisperActive) ||
                       (micBtn && micBtn.classList.contains('listening'));
     if(!capturing) beginListening();

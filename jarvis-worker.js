@@ -97,6 +97,7 @@ export default {
       if (path === '/image')                       return await handleImage(request, env);
       if (path === '/stt')                         return await handleStt(request, env);
       if (path === '/fetch')                       return await handleFetch(request, env);
+      if (path === '/search')                      return await handleSearch(request, env);
       if (path.indexOf('/mcp/') === 0)             return await handleMcpProxy(request, env, path);
       if (path === '/calendar/upcoming')           return await handleCalendarUpcoming(request, env, url);
       if (path === '/calendar/create')             return await handleCalendarCreate(request, env);
@@ -227,6 +228,7 @@ async function health(env) {
     images: !!env.AI,
     stt: !!env.AI,
     read_page: true,          // present only on workers that carry /fetch
+    search: true,             // /search — engine-agnostic, needs no Anthropic key
     stt_language_hint: true,   // present only on workers that accept ?language=
     fallback: chain.length > 1 ? chain[1].model : false,
     fallback_via: chain.length > 1 ? chain[1].vendor : false,
@@ -1413,6 +1415,101 @@ async function handleStt(request, env) {
   }
   // Silence is a legitimate outcome, not a failure — the caller just ignores it.
   return json({ ok: true, text: '', tried: tried }, 200, env, request);
+}
+
+/* Searching, without needing Anthropic.
+
+   The page already had a search tool, but it was Anthropic's server-side one:
+   the worker notices a server tool in the request, puts an Anthropic engine
+   first, and if there is no ANTHROPIC_API_KEY the tool is dropped from the
+   request on its way to Google or Groq. Nothing errors. He simply answers
+   from memory as though he had searched, which is worse than having no search
+   at all, because there is no sign it did not happen.
+
+   This is an ordinary endpoint, so a tool built on it survives on every
+   engine in the chain. DuckDuckGo's HTML endpoint is used because it needs no
+   key and no account — the cost is that it is markup meant for a browser
+   rather than an API, so when the parse finds nothing the honest answer is
+   "search returned nothing usable", never an empty list dressed up as "no
+   results", which the model would report to him as fact. */
+const SEARCH_TIMEOUT_MS = 10000;
+const SEARCH_MAX_RESULTS = 8;
+
+function decodeEntities(s) {
+  return String(s || '')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"').replace(/&#0?39;|&#x27;/gi, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+function stripTags(s) { return decodeEntities(String(s || '').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim(); }
+
+/* DuckDuckGo wraps every hit in a redirect of its own, with the real address
+   in uddg=. Unwrapped here rather than handed over as-is, so the model reads
+   and quotes the actual domain instead of a duckduckgo.com link. */
+function unwrapDuck(href) {
+  try {
+    const u = new URL(href, 'https://duckduckgo.com');
+    const real = u.searchParams.get('uddg');
+    if (real) return real;
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : null;
+  } catch (e) { return null; }
+}
+
+async function handleSearch(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const query = String((body && body.query) || '').trim().slice(0, 400);
+  if (!query) return json({ error: 'no query' }, 400, env, request);
+
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), SEARCH_TIMEOUT_MS);
+  let html = '';
+  try {
+    const upstream = await fetch('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), {
+      method: 'GET',
+      signal: stop.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en,he;q=0.9'
+      }
+    });
+    clearTimeout(timer);
+    if (!upstream.ok) {
+      return json({ error: 'search is unavailable right now (' + upstream.status + ')' }, 502, env, request);
+    }
+    html = await upstream.text();
+  } catch (err) {
+    clearTimeout(timer);
+    const aborted = String((err && err.name) || '') === 'AbortError';
+    return json({ error: aborted ? 'the search timed out' : 'could not reach the search service' },
+                502, env, request);
+  }
+
+  const results = [];
+  const re = /<a[^>]+class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(html)) && results.length < SEARCH_MAX_RESULTS) {
+    const url = unwrapDuck(decodeEntities(m[1]));
+    const title = stripTags(m[2]);
+    if (!url || !title) continue;
+    if (results.some(r => r.url === url)) continue;
+    results.push({ title, url, snippet: '' });
+  }
+
+  /* Snippets are in their own elements, in the same order as the links. */
+  const snips = [...html.matchAll(/<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)]
+    .map(x => stripTags(x[1]));
+  results.forEach((r, i) => { if (snips[i]) r.snippet = snips[i].slice(0, 400); });
+
+  if (!results.length) {
+    /* Said plainly. An empty list would be reported to him as "nothing exists
+       about that", which is a different and false claim. */
+    return json({ ok: false, query: query, results: [],
+                  error: 'the search returned nothing this worker could read — treat it as search being unavailable, not as the topic having no results' },
+                200, env, request);
+  }
+  return json({ ok: true, query: query, count: results.length, results: results }, 200, env, request);
 }
 
 /* Reading one page, as opposed to searching. web_search answers "what is out

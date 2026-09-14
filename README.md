@@ -57,6 +57,15 @@ answers from memory as though he had searched. If search matters to you, set
 `ANTHROPIC_API_KEY`, and check `GET /health` — `engines` lists what the chain
 actually holds.
 
+`search_web` is the way round that. It is an ordinary tool backed by the
+worker's own `/search`, which queries DuckDuckGo's HTML endpoint and needs no
+key of its own, so it works on Google, Groq, Cerebras, xAI and Workers AI
+alike. The page offers exactly one search tool, chosen from what `/health`
+reports: Anthropic's when an Anthropic engine is in the chain, otherwise this
+one, and neither when the worker is too old to have `/search` — in which case
+the system prompt tells him outright that he cannot search, rather than
+leaving him to answer from memory believing he did.
+
 `read_page` has no such dependency. It is an ordinary tool backed by the
 worker's own `/fetch`, so it survives on Google, Groq, Cerebras, xAI and
 Workers AI alike. It fetches one page server-side and returns its text, which

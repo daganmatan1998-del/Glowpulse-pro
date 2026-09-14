@@ -26,3 +26,23 @@ ones came up.
 
 Voice input needs `/stt`, which this worker has. WebView2 carries no Web Speech
 API, so on the desktop app transcription has nowhere else to come from.
+
+## One thing to know before you set `ALLOWED_ORIGIN`
+
+It defaults to `*`, which reflects whatever origin asked — so both the website
+and the desktop orb work. Pinning it to your site's URL locks the orb out: its
+page is served from `tauri://localhost` (`http://tauri.localhost` on Windows),
+not from your domain, so the browser drops every reply as a CORS failure. The
+symptom is not an error message but an app that appears to have lost its
+backend entirely.
+
+If you want the lock, make `ALLOWED_ORIGIN` accept both — the site and
+`http://tauri.localhost` — rather than one of them.
+
+## Known: the orb needs the network to draw itself
+
+`dist/index.html` pulls three.js and eleven of its addons from jsdelivr at
+runtime. The hologram *is* three.js, so with no connection (or a blocked CDN)
+the desktop app opens to the `no-webgl` fallback glow rather than the orb.
+Vendoring those files into `dist/` alongside the page would make the app start
+offline and faster; it has not been done yet.

@@ -91,6 +91,10 @@
    them against the thresholds below would be meaningless. */
 const VAD_MIN_LEVEL = 0.009;
 const VAD_MAX_LEVEL = 0.038;
+/* Also copied rather than approximated: these two decide how much of the room
+   he actually gets to hear before he has to commit to a threshold. */
+const VAD_CALIBRATE_MS = 350;
+const VAD_METER_MS     = 50;
 
 function thresholdFor(floor){
   const mult   = floor < 0.010 ? 1.45 : floor < 0.025 ? 1.40 : 1.25;
@@ -101,7 +105,7 @@ const toDb = rms => rms > 0 ? (20 * Math.log10(rms)).toFixed(1) : '-inf';
 
 let ctx, analyser, buf, stream, running = false;
 let latest = 0, currentThreshold = VAD_MIN_LEVEL;
-let roomFloor = null, voiceLevel = null;
+let roomFloor = null, voiceLevel = null, roomSpread = null;
 
 const $ = id => document.getElementById(id);
 
@@ -155,7 +159,7 @@ function tick(){
    catch, so that is what is reported. */
 function collect(seconds, onDone){
   const samples = [];
-  const id = setInterval(()=> samples.push(latest), 50);
+  const id = setInterval(()=> samples.push(latest), VAD_METER_MS);
   let left = seconds;
   const countdown = setInterval(()=>{
     left--;
@@ -163,14 +167,42 @@ function collect(seconds, onDone){
   }, 1000);
   setTimeout(()=>{
     clearInterval(id); clearInterval(countdown);
+    const raw = samples.slice();          // time order, before sorting loses it
     samples.sort((a,b)=> a-b);
     onDone({
       median: samples[Math.floor(samples.length / 2)],
       quiet:  samples[Math.floor(samples.length * 0.2)],
       loud:   samples[Math.floor(samples.length * 0.75)],
-      peak:   samples[samples.length - 1]
+      peak:   samples[samples.length - 1],
+      raw:    raw
     });
   }, seconds * 1000);
+}
+
+/* Five seconds of room is a much better measurement than JARVIS ever gets.
+   He calibrates for VAD_CALIBRATE_MS from the moment the microphone opens —
+   350ms, which at one sample every 50ms is seven readings — and takes their
+   MEAN, not a median over a hundred. So a number averaged over five seconds
+   answers a question he is never asked, and this page was quietly flattering
+   itself: a steady five-second median hides exactly the variance that decides
+   whether a given turn is heard.
+
+   This replays the recording as he would see it: every consecutive
+   seven-sample window, each one a calibration that could have been the one
+   he ran, and the threshold each would have produced. The spread between
+   them is the real answer to "why does it hear me sometimes". */
+function shortWindowThresholds(raw){
+  const size = Math.max(1, Math.round(VAD_CALIBRATE_MS / VAD_METER_MS));
+  if(!raw || raw.length < size) return null;
+  const out = [];
+  for(let i = 0; i + size <= raw.length; i++){
+    let sum = 0;
+    for(let j = i; j < i + size; j++) sum += raw[j];
+    out.push(thresholdFor(sum / size));
+  }
+  out.sort((a,b)=> a-b);
+  return { size: size, lowest: out[0], highest: out[out.length - 1],
+           typical: out[Math.floor(out.length / 2)] };
 }
 
 $('startBtn').addEventListener('click', start);
@@ -180,6 +212,7 @@ $('roomBtn').addEventListener('click', ()=>{
   $('status').textContent = 'Stay quiet… 5s';
   collect(5, r=>{
     roomFloor = r.median;
+    roomSpread = shortWindowThresholds(r.raw);
     currentThreshold = thresholdFor(roomFloor);
     $('status').textContent = 'Room measured. Step 2: speak normally for 5 seconds.';
     $('voiceBtn').disabled = false;
@@ -203,13 +236,23 @@ function render(){
   if(roomFloor === null) return;
   const thr = thresholdFor(roomFloor);
   currentThreshold = thr;
+  /* The worst calibration he could land on, not the average one. A turn is
+     heard or missed on the threshold he happened to compute when that
+     recording opened, so the highest one is what has to be cleared. */
+  const worst = roomSpread ? Math.max(thr, roomSpread.highest) : thr;
   const rows = [
-    ['Room noise floor', roomFloor.toFixed(4) + '  (' + toDb(roomFloor) + ' dBFS)'],
-    ['Threshold JARVIS will use', thr.toFixed(4) + '  (' + toDb(thr) + ' dBFS)']
+    ['Room noise floor (5s median)', roomFloor.toFixed(4) + '  (' + toDb(roomFloor) + ' dBFS)'],
+    ['Threshold from that floor', thr.toFixed(4) + '  (' + toDb(thr) + ' dBFS)']
   ];
+  if(roomSpread){
+    rows.push(['Threshold he actually computes<br><span style="color:var(--dim);font-size:10px">' +
+               VAD_CALIBRATE_MS + 'ms of room, ' + roomSpread.size + ' samples — every window in the recording</span>',
+               roomSpread.lowest.toFixed(4) + ' … ' + roomSpread.highest.toFixed(4) +
+               '<br><span style="color:var(--dim);font-size:10px">typically ' + roomSpread.typical.toFixed(4) + '</span>']);
+  }
   if(voiceLevel !== null){
     rows.push(['Your speaking level', voiceLevel.toFixed(4) + '  (' + toDb(voiceLevel) + ' dBFS)']);
-    rows.push(['Margin above threshold', (voiceLevel / thr).toFixed(2) + '×']);
+    rows.push(['Margin above the worst threshold', (voiceLevel / worst).toFixed(2) + '×']);
   }
   $('table').innerHTML = rows.map(r=> '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>').join('');
   $('results').classList.add('show');
@@ -221,7 +264,7 @@ function render(){
     a.textContent = '';
     return;
   }
-  const margin = voiceLevel / thr;
+  const margin = voiceLevel / worst;
   if(margin >= 2){
     v.className = 'verdict ok';
     v.textContent = 'Good separation. Your voice sits ' + margin.toFixed(1) + '× above the threshold, so speech and room noise are clearly distinguishable.';

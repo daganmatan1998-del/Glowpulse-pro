@@ -22,7 +22,7 @@ Same file, same brain, same memory; a different job.
 | While it is away | the microphone is closed; nothing listens in the background |
 | The orb | just the hologram, nothing else — no HUD, no chat, no buttons |
 | No frame | no border, no ring — the hologram itself shows state, brightening and spinning up with your voice |
-| Moving it | drag the outer rim |
+| Moving it | drag the outer rim — the middle stays clickable |
 | Click the orb | starts a turn straight away, no name needed — also cuts him off |
 | The dot | only in the expanded view: filled and pulsing = listening, amber = working, hollow red = standby or failed. Click it to toggle |
 | Right-click | mute: stops listening and answering, stays on screen, dims. Remembered |
@@ -164,8 +164,14 @@ He also cannot see what loads. It opens on your screen, not in his context.
 ## Adding commands later
 
 Deliberately absent. `src-tauri/capabilities/default.json` grants the window
-the ability to show, hide and move itself — nothing more. No filesystem, no
-shell.
+the ability to show, hide and move itself, plus `opener` for http/https links —
+nothing more. No filesystem plugin, no shell.
+
+One caveat on "no filesystem": `take_screenshot` writes a PNG into your
+Pictures/Screenshots folder from Rust, so it does touch the disk. It is not
+reachable from the page as a general file API — the command takes no path and
+can only ever write that one file to that one place — but the flat claim above
+was not accurate, and this is the exception.
 
 When we add commands, the shape is **one Rust function per capability**, not a
 general shell. "Open this folder", "take a screenshot", "mute the system" —

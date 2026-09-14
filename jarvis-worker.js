@@ -264,20 +264,25 @@ async function handleMessages(request, env) {
 
   const skipped = [];
   let lastError = null;
-  let restedAny = false;
 
-  for (let pass = 0; pass < 2; pass++) {
-    if (pass === 1 && !restedAny) break;
-    for (let i = 0; i < chain.length; i++) {
-      const engine = chain[i];
-      if (pass === 0 && cooling(engine)) {
-        restedAny = true;
-        skipped.push(engine.label + ' (resting)');
-        continue;
-      }
-      if (pass === 1 && !cooling(engine)) continue;
+  /* Two passes: everything that is awake, then — only if something was
+     skipped — the ones that were resting, because a five-minute cooldown is
+     a guess about a provider's state, not a fact, and being wrong about it
+     is worse than one extra call when nothing else answered.
 
-      const attempt = await callEngine(engine, body, env, request, i > 0);
+     Which engines pass 2 revisits has to be decided HERE, before any of them
+     runs. Selecting them with cooling() at the time meant a failure in pass 1
+     put that engine on cooldown and pass 2 then read the cooldown it had just
+     set as "was resting, try it" — so every engine that failed was called a
+     second time, back to back, in the same request. Twice the latency and
+     twice the quota, at exactly the moment the user is already waiting. */
+  const resting = chain.filter(engine => cooling(engine));
+  const awake = chain.filter(engine => !cooling(engine));
+
+  for (const group of [awake, resting]) {
+    for (let i = 0; i < group.length; i++) {
+      const engine = group[i];
+      const attempt = await callEngine(engine, body, env, request, group !== awake || i > 0);
       if (attempt.ok) { clearCooldown(engine); return attempt.response; }
 
       if (!attempt.retriable) return attempt.response;
@@ -699,10 +704,6 @@ function engineChain(env) {
 function fallbackProvider(env) {
   return openAIEngine(env.FALLBACK_API_KEY, env.FALLBACK_MODEL, env.FALLBACK_API_URL,
                       'FALLBACK', 'FALLBACK_MODEL');
-}
-
-function fallbackReady(env) {
-  return !!fallbackProvider(env);
 }
 
 const cooldowns = new Map();
@@ -1412,6 +1413,29 @@ async function handleStt(request, env) {
   return json({ ok: true, text: '', tried: tried }, 200, env, request);
 }
 
+/* The read-only guard, and it has to be exact: this endpoint holds an Admin
+   API token with write scope, so whatever slips past here runs against a real
+   store. The previous pair of patterns — /(^|\s)mutation\s/ and /^\s*mutation/ —
+   required either a space after the keyword or the keyword at the very start
+   of the string, and a parameterised mutation has neither:
+
+     # anything\nmutation($id:ID!){ productDelete(input:{id:$id}){ ... } }
+
+   The "(" defeats the first pattern and the leading comment defeats the
+   second, so a destructive document was accepted as a read.
+
+   Comments and strings are stripped first, because both can carry the word
+   "mutation" harmlessly and both can hide one. Then any `mutation` token at
+   the top level of the document is rejected, whatever follows it — a name, a
+   variable list, a directive or the selection set itself. */
+function containsMutation(query) {
+  const stripped = String(query || '')
+    .replace(/"""[\s\S]*?"""/g, ' ')   // block strings
+    .replace(/"(?:\\.|[^"\\])*"/g, ' ')  // ordinary strings
+    .replace(/#[^\n]*/g, ' ');         // comments
+  return /\bmutation\b/i.test(stripped);
+}
+
 async function handleShopify(request, env) {
   const stores = shopifyStores(env);
   if (!stores.length) {
@@ -1420,7 +1444,7 @@ async function handleShopify(request, env) {
   const body = await request.json().catch(() => ({}));
   const query = String((body && body.query) || '');
   if (!query.trim()) return json({ error: 'empty query' }, 400, env, request);
-  if (/(^|\s)mutation\s/i.test(query) || /^\s*mutation/i.test(query)) {
+  if (containsMutation(query)) {
     return json({ error: 'mutations are not allowed through this endpoint' }, 400, env, request);
   }
 

@@ -250,21 +250,119 @@
   html.tauri #cursorDot, html.tauri #cursorRing{
     display:none !important;
   }
-  /* The orb is the window: grab it anywhere to move it. There is nothing to
-     click, so claiming the whole surface for dragging costs nothing. */
-  /* Dragging moved to the outer ring only. With the whole body as a drag
-     region the window swallows clicks before the page sees them, so
-     click-to-talk would never fire — the one control this window has. The
-     centre is now clickable and the rim still moves it. */
+  /* Dragging is the outer ring only: with the whole body as a drag region the
+     window swallows clicks before the page sees them, so click-to-talk would
+     never fire — the one control this window has.
+
+     This used to be a body::after carrying `-webkit-app-region:drag` and a
+     radial mask. Neither half worked. app-region is Electron's mechanism and
+     Tauri does not implement it, so the ring was inert and the orb could not
+     be moved at all — and with `decorations:false` there is no title bar to
+     fall back on. A mask is also the wrong tool for a hole: it changes only
+     what is painted, so the "cut out" middle still swallowed every click.
+
+     Tauri's own mechanism is the data-tauri-drag-region attribute, which is
+     why capabilities/default.json grants window:allow-start-dragging — the
+     permission was there all along, waiting for a caller. The hole is made
+     by stacking rather than clipping: #orbHit sits on top of the centre and
+     carries no attribute, so the topmost element under the pointer decides,
+     and its events still bubble to the document handlers below. */
   html.tauri body{ cursor:default !important; }
-  html.tauri body::after{
-    content:''; position:fixed; inset:0; border-radius:50%;
-    -webkit-app-region:drag; app-region:drag;
-    /* A ring, not a disc: the middle is cut out so clicks land on the orb. */
-    -webkit-mask:radial-gradient(circle at 50% 50%, transparent 0 62%, #000 63%);
-    mask:radial-gradient(circle at 50% 50%, transparent 0 62%, #000 63%);
-    pointer-events:auto;
+  /* Both exist only in the desktop orb; on the website they are two empty
+     divs that must not take part in the layout. */
+  #orbDrag, #orbHit{ display:none; }
+  /* Above the canvas, below everything with its own controls: #livePane is
+     z-index 60 and the menu and the mic dot sit higher still, so a full-window
+     drag layer at 70 would have quietly swallowed every click on all three. */
+  html.tauri #orbDrag{
+    display:block; position:fixed; inset:0; z-index:40;
+    cursor:grab;
   }
+  html.tauri #orbDrag:active{ cursor:grabbing; }
+  /* Expanded, the whole screen is the view — a fullscreen drag handle would
+     make every click reposition the window. */
+  html.tauri.orb-expanded #orbDrag{ display:none; }
+  html.tauri #orbHit{
+    display:block; position:fixed; left:19%; top:19%; width:62%; height:62%;
+    border-radius:50%; z-index:41; cursor:pointer;
+  }
+
+  /* The orb's state, made visible.
+
+     paintMic() and paintMute() have been toggling .mic-open, .mic-busy,
+     .mic-stalled, .orb-muted and .orb-asleep on <html> every 200ms, and
+     writing #micDot's tooltip and #micLabel's text, against a stylesheet that
+     defined none of them and gave neither element so much as a size. The
+     indicator the code calls "the entire reason this exists" was an empty
+     invisible div, and standby — documented as "stays on screen, dims" —
+     dimmed nothing at all. The behaviour was all there; only the paint was
+     missing. */
+
+  /* Standby has to LOOK stopped, because the whole point of it is being able
+     to trust that he is not listening. */
+  html.tauri.orb-muted  #scene-canvas{ opacity:0.26; filter:saturate(0.25); }
+  html.tauri.orb-asleep #scene-canvas{ opacity:0.14; filter:saturate(0.12); }
+  html.tauri #scene-canvas{ transition:opacity .4s ease, filter .4s ease; }
+
+  /* The dot lives in the expanded view only: at 180px it is visual noise on
+     top of the hologram, and the expanded view is exactly where you go when
+     you want to check whether he is actually hearing you. */
+  #micDot, #micLabel{ display:none; }
+  html.tauri.orb-expanded #micDot{
+    display:block; position:fixed; left:20px; bottom:20px;
+    width:11px; height:11px; border-radius:50%;
+    background:transparent; border:1.5px solid var(--cyan);
+    z-index:96; cursor:pointer;
+  }
+  html.tauri.orb-expanded #micLabel{
+    display:block; position:fixed; left:42px; bottom:15px;
+    font-family:'Courier New', Consolas, monospace;
+    font-size:10px; letter-spacing:2px; text-transform:uppercase;
+    color:rgba(127,168,184,0.85); z-index:96; pointer-events:none;
+  }
+  /* Filled and pulsing only while capture is genuinely open. */
+  html.tauri.mic-open #micDot{
+    background:var(--cyan);
+    box-shadow:0 0 8px var(--cyan);
+    animation:micPulse 1.4s ease-in-out infinite;
+  }
+  html.tauri.mic-busy #micDot{
+    background:#ffb020; border-color:#ffb020; box-shadow:0 0 8px #ffb020;
+    animation:none;
+  }
+  html.tauri.mic-busy #micLabel{ color:#ffb020; }
+  /* Hollow red: standby, or a capture that said it was starting and never did. */
+  html.tauri.mic-stalled #micDot,
+  html.tauri.orb-muted   #micDot{
+    background:transparent; border-color:#ff5a5a; box-shadow:none; animation:none;
+  }
+  html.tauri.mic-stalled #micLabel,
+  html.tauri.orb-muted   #micLabel{ color:#ff5a5a; }
+  @keyframes micPulse{
+    0%, 100%{ opacity:1;    transform:scale(1); }
+    50%     { opacity:0.45; transform:scale(0.75); }
+  }
+
+  /* The right-click menu had no stylesheet at all: the script set .style.left
+     and .style.top on a statically positioned div, where both are ignored, and
+     nothing gave it a background or a z-index. It rendered unstyled in normal
+     flow, underneath the fullscreen canvas — so the "real menu" that replaced
+     the silent toggle was itself invisible. */
+  html.tauri #orbMenu, #orbMenu{
+    position:fixed; z-index:95; display:none;
+    background:rgba(0,10,20,0.94);
+    border:1px solid rgba(0,229,255,0.45);
+    border-radius:4px; padding:4px; min-width:150px;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    box-shadow:0 6px 24px rgba(0,0,0,0.55);
+  }
+  #orbMenu button{
+    display:block; width:100%; text-align:left;
+    background:none; border:0; cursor:pointer;
+    color:#00e5ff; font-family:inherit; font-size:12px;
+    letter-spacing:1px; padding:8px 10px; border-radius:3px;
+  }
+  #orbMenu button:hover{ background:rgba(0,229,255,0.16); }
 
   /* A thin ring that reports state at a glance, since there is no text here:
      dim when idle, brighter and pulsing while listening, steady while he
@@ -995,6 +1093,8 @@
 <canvas id="scene-canvas"></canvas>
 <div id="micDot" title="Microphone"></div>
 <div id="micLabel"></div>
+<div id="orbDrag" data-tauri-drag-region></div>
+<div id="orbHit"></div>
 <div id="orbMenu"></div>
 <div id="vignette"></div>
 <div id="grain"></div>
@@ -4027,7 +4127,6 @@ const BARGE_SUSTAIN_MS = 220;    // and this long to count as interrupting him
    The first moments of each recording measure the noise floor, and the
    threshold is set above it — which also adapts to a noisy room. */
 const VAD_CALIBRATE_MS = 350;    // listen to the room before judging it
-const VAD_FLOOR_MULT   = 1.8;    // speech must stand this far above the floor
 /* Raised from 0.008. That was low enough to catch a whisper and also low
    enough that a fan, a keyboard or a room's hum never fell below it, so the
    end of a turn was never detected. Paired with the hysteresis above, this
@@ -4256,7 +4355,18 @@ async function startWhisperCapture(){
        stop him — the opposite of what is wanted. Echo cancellation already
        removes most of his voice, so anything at normal speaking level while
        he talks is you. */
-    const BARGE_BAR = 0.020;
+    /* A fixed 0.020 was wrong in one direction that matters: it sits BELOW
+       the noise floor of a genuinely noisy room. This room measured 0.0252
+       (the same measurement the threshold cap above was raised for), so the
+       room's own hum cleared the barge bar continuously — 220ms into every
+       reply he concluded he was being interrupted and cut himself off. He
+       could not finish a sentence, and nothing on screen said why.
+
+       So: still fixed at the bottom, so barge-in never depends on a
+       calibration his own voice can drag upward, but never allowed to sit
+       under the room itself. 2.2x the floor is above steady noise and still
+       far below a voice raised to interrupt. */
+    const BARGE_BAR = Math.max(0.020, noiseFloor * 2.2);
     /* Checked on its own bar, before the calibrated logic below, so cutting
        him off works regardless of how the room was measured. */
     if(isSpeaking && rms > BARGE_BAR){
@@ -9666,6 +9776,13 @@ adjustLayout();
     setTimeout(()=>{ if(asleep) startListening(); }, 400);
   };
   window.__orbAsleep = () => asleep;
+  /* Read in three places above — the click handler and both wake paths —
+     and never defined, so every one of those guards was permanently
+     false. The visibility paths survived it because beginListening()
+     re-checks orbMuted itself, but click-to-talk did not: clicking a
+     muted orb still stamped lastWakeAt, re-opening the 30-second
+     follow-up window that setOrbMuted had just deliberately closed. */
+  window.__orbMuted = () => orbMuted;
   window.__orbWake = async function(){
     if(!asleep) return;
     asleep = false;

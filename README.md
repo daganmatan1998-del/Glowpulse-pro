@@ -41,7 +41,7 @@ If you want the lock, make `ALLOWED_ORIGIN` accept both — the site and
 
 ## Known: the orb needs the network to draw itself
 
-`dist/index.html` pulls three.js and eleven of its addons from jsdelivr at
+`dist/index.html` pulls three.js and twelve of its addons from jsdelivr at
 runtime. The hologram *is* three.js, so with no connection (or a blocked CDN)
 the desktop app opens to the `no-webgl` fallback glow rather than the orb.
 Vendoring those files into `dist/` alongside the page would make the app start

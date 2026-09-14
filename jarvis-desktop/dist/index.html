@@ -2,8 +2,23 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
+
+<!-- Installed to a phone's home screen, this is what makes it an app rather
+     than a tab: no browser chrome, its own icon, and the notch area painted
+     the same colour as the page instead of white. The desktop build ignores
+     every line of it. -->
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#00060e">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="JARVIS">
+<!-- black-translucent lets the hologram run under the status bar; anything
+     else leaves an opaque band across the top of a full-bleed dark app. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%0A%3Cdefs%3E%0A%3CradialGradient%20id%3D%22g%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%0A%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23eaffff%22/%3E%0A%3Cstop%20offset%3D%2230%25%22%20stop-color%3D%22%234dfcff%22/%3E%0A%3Cstop%20offset%3D%2265%25%22%20stop-color%3D%22%230099cc%22/%3E%0A%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23001018%22/%3E%0A%3C/radialGradient%3E%0A%3C/defs%3E%0A%3Crect%20width%3D%2264%22%20height%3D%2264%22%20fill%3D%22%23000814%22/%3E%0A%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2226%22%20fill%3D%22url%28%23g%29%22/%3E%0A%3Cellipse%20cx%3D%2232%22%20cy%3D%2232%22%20rx%3D%2229%22%20ry%3D%2211%22%20fill%3D%22none%22%20stroke%3D%22%23aefeff%22%20stroke-width%3D%221.6%22%20opacity%3D%220.85%22%20transform%3D%22rotate%28-24%2032%2032%29%22/%3E%0A%3Cellipse%20cx%3D%2232%22%20cy%3D%2232%22%20rx%3D%2223%22%20ry%3D%228%22%20fill%3D%22none%22%20stroke%3D%22%23aefeff%22%20stroke-width%3D%221.2%22%20opacity%3D%220.6%22%20transform%3D%22rotate%2838%2032%2032%29%22/%3E%0A%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%227%22%20fill%3D%22%23f2ffff%22%20opacity%3D%220.9%22/%3E%0A%3C/svg%3E">
 <style>
   :root{
@@ -2167,6 +2182,33 @@ function applyModeColors(){
    first frame. This is what lets the orb float over the desktop instead of
    sitting on a dark disc. */
 const IS_DESKTOP = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+/* A phone, as opposed to a small desktop window. Both the screen and the
+   pointer are checked because either alone is wrong: a narrow window on a
+   laptop is not a phone, and a tablet is not a narrow screen. */
+const IS_PHONE = !IS_DESKTOP &&
+  (window.matchMedia ? window.matchMedia('(max-width: 900px) and (pointer: coarse)').matches : false);
+/* Installed to the home screen rather than opened in a tab. Worth knowing
+   because that is the only state in which the app owns the whole screen. */
+const IS_INSTALLED = !IS_DESKTOP && (
+  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+  window.navigator.standalone === true);
+
+/* The service worker is what turns the page into something that opens
+   instantly instead of pulling 500KB over a phone connection every time, and
+   it caches the three.js files the hologram needs so the orb still draws with
+   no signal. Never registered in the desktop build: there the page is already
+   local, and a worker on tauri://localhost would only add a cache between the
+   app and its own files. */
+if(!IS_DESKTOP && 'serviceWorker' in navigator && location.protocol !== 'file:'){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(err => {
+      /* Not fatal in any way — the app works without it, it just starts
+         slower. Logged rather than shown, because there is nothing the user
+         could do about it. */
+      console.info('JARVIS: offline cache unavailable —', err && err.message);
+    });
+  });
+}
 if(IS_DESKTOP) document.documentElement.classList.add('tauri');
 
 const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2179,7 +2221,11 @@ const canvas = document.getElementById('scene-canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:IS_DESKTOP,
                                            premultipliedAlpha:false, powerPreference:'high-performance' });
 if(IS_DESKTOP) renderer.setClearColor(0x000000, 0);   // nothing behind the hologram
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+/* Capped harder on a phone. Device pixel ratio is commonly 3 there, which is
+   nine times the fragments of a 1x display for a hologram nobody inspects at
+   that distance — and it is the single biggest reason a WebGL app turns a
+   phone warm. 1.5 still looks clean on a small screen. */
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, IS_PHONE ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -2609,8 +2655,13 @@ function spawnPulse(){
 --------------------------------------------------------------------- */
 const composer = new THREE.EffectComposer(renderer);
 composer.addPass(new THREE.RenderPass(scene, camera));
+/* Bloom is a blur, so it does not need full resolution to look right —
+   computing it in a quarter of the pixels is close to invisible and is the
+   difference between a phone that stays cool and one that does not. The look
+   is kept; only the buffer it is computed in shrinks. */
+const BLOOM_SCALE = IS_PHONE ? 0.5 : 1;
 const bloomPass = new THREE.UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  new THREE.Vector2(window.innerWidth * BLOOM_SCALE, window.innerHeight * BLOOM_SCALE),
   1.35,   // strength
   0.85,   // radius
   0.12    // threshold
@@ -2642,7 +2693,7 @@ function onResize(){
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
   composer.setSize(w, h);
-  bloomPass.setSize(w, h);
+  bloomPass.setSize(w * BLOOM_SCALE, h * BLOOM_SCALE);
 }
 window.addEventListener('resize', onResize);
 

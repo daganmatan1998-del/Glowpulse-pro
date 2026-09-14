@@ -98,3 +98,32 @@ answered. Only the newest is kept now; the rest are replaced by a line saying
 a frame was there, so referring back to what you showed him still makes sense.
 Photographs attached deliberately are never touched — those are the
 conversation.
+
+## Installing it on a phone
+
+`dist/` is now also a progressive web app, so the same `index.html` is the
+website, the desktop orb and the phone app — one file, three targets, no
+second copy to keep in sync.
+
+Upload these alongside it, all in the same folder, and serve them over https
+(a service worker will not register otherwise):
+
+    index.html   manifest.webmanifest   sw.js
+    icon-192.png   icon-512.png   apple-touch-icon.png
+
+Then open the site on the phone and add it to the home screen — Share → Add to
+Home Screen on iOS, the install prompt on Android. It opens without browser
+chrome, with its own icon, and the second launch is near-instant because the
+worker serves the page from cache.
+
+The worker also caches the three.js files the hologram is built from, which is
+the mobile half of the CDN problem noted above: after one load the orb draws
+with no signal at all.
+
+**Bump `SHELL_VERSION` in `sw.js` whenever `index.html` changes**, or phones
+will keep serving the copy they already installed.
+
+Nothing about the backend changes. Every feature the page has — search, page
+reading, code execution, Shopify, calendar, camera, voice — runs on the phone
+exactly as it does on the desktop, because the page is the client and it
+brought its own tool loop with it.

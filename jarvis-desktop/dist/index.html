@@ -1509,7 +1509,7 @@ const I18N = {
     makingImage: '\u25B8 making the image\u2026',
     packaging: '\u25B8 packaging the files\u2026',
     workingLabel: '\u25B8 working\u2026', runningCode: '\u25B8 running code\u2026',
-    searchingWeb: '\u25B8 searching the web\u2026', buildingPage: '\u25B8 building the page\u2026',
+    searchingWeb: '\u25B8 searching the web\u2026', readingPage: '\u25B8 reading the page\u2026', buildingPage: '\u25B8 building the page\u2026',
     saving: '\u25B8 saving to memory\u2026', readingCalendar: '\u25B8 checking the calendar\u2026',
     bookingEvent: '\u25B8 booking it\u2026', queryingStore: '\u25B8 querying the store\u2026',
     openingSite: '\u25B8 opening it\u2026',
@@ -1665,7 +1665,7 @@ const I18N = {
     makingImage: '\u25B8 מייצר תמונה\u2026',
     packaging: '\u25B8 אורז את הקבצים\u2026',
     workingLabel: '\u25B8 עובד\u2026', runningCode: '\u25B8 מריץ קוד\u2026',
-    searchingWeb: '\u25B8 מחפש באינטרנט\u2026', buildingPage: '\u25B8 בונה את הדף\u2026',
+    searchingWeb: '\u25B8 מחפש באינטרנט\u2026', readingPage: '\u25B8 קורא את הדף\u2026', buildingPage: '\u25B8 בונה את הדף\u2026',
     saving: '\u25B8 שומר בזיכרון\u2026', readingCalendar: '\u25B8 בודק ביומן\u2026',
     bookingEvent: '\u25B8 קובע\u2026', queryingStore: '\u25B8 שולף מהחנות\u2026',
     openingSite: '\u25B8 פותח\u2026',
@@ -3382,8 +3382,8 @@ function getSystemPrompt(calendarAvailable){
     ? backendCapabilities.shopify : [];
   if(calendarAvailable){
     const searchNote = currentLang === 'he'
-      ? ' יש לך כלי חיפוש באינטרנט (web_search) — השתמש בו בלי לשאול רשות בכל פעם שנדרש מידע עדכני, מחירים, חדשות, מתחרים, זמינות מוצרים, או כל דבר שעלול היה להשתנות מאז האימון שלך. אל תנחש כשאתה יכול לבדוק. אזכר בקצרה במקור כשזה רלוונטי.'
-      : ' You have a web search tool (web_search) — use it without asking permission whenever the answer depends on current information: prices, news, competitors, product availability, or anything that may have changed since your training. Do not guess when you can check. Mention the source briefly when it matters.';
+      ? ' יש לך שני כלי אינטרנט ולא אחד. web_search מוצא איזה דפים קיימים; read_page קורא את הטקסט של דף מסוים. השתמש בשניהם בלי לשאול רשות בכל פעם שנדרש מידע עדכני, מחירים, חדשות, מתחרים או זמינות מוצרים. התבנית הרגילה היא חיפוש ואז קריאה: תוצאת חיפוש היא שתי שורות ולעתים קרובות מיושנת, אז כשהתשובה נמצאת בדף עצמו — עמוד מוצר, דף מחירים של מתחרה, ספק, תיעוד — תקרא אותו לפני שאתה עונה. לשאלה שדורשת עומק תקרא כמה דפים ותשווה ביניהם, ותגיד במפורש כשמקורות סותרים. אל תנחש כשאתה יכול לבדוק. אזכר בקצרה במקור כשזה רלוונטי.'
+      : ' You have two web tools, not one. web_search finds which pages exist; read_page reads the text of a particular one. Use both without asking permission whenever the answer depends on current information: prices, news, competitors, product availability, or anything that may have changed since your training. The normal pattern is search then read — a search result is two lines and is frequently out of date, so when the answer lives on the page itself (a product listing, a competitor\'s pricing, a supplier, documentation) read it before you answer. For a question that needs depth, read several pages and compare them, and say plainly when sources disagree. Do not guess when you can check. Mention the source briefly when it matters.';
     prompt += searchNote;
     const calendarNote = currentLang === 'he'
       ? ' יש לך גם גישה ליומן Google של המשתמש — get_calendar_events לקריאת הלו"ז, ו-create_calendar_event לקביעת אירוע חדש. כשהוא מבקש לקבוע משהו, קבע בפועל ואז אשר לו מה נקבע ומתי, במקום להציע שיעשה זאת בעצמו.'
@@ -4647,32 +4647,86 @@ let langMode = 'he';   // Hebrew is the default
    Note every ULTRON/JARVIS pattern below requires a VERB. A bare "jarvis" is
    the wake word, and if it also switched language then addressing him would
    silently change modes every time you said his name. */
-const TO_ENGLISH = [
-  /\benglish\s*mode\b/i, /\bgo\s*to\s*english\b/i, /\bswitch\s*to\s*english\b/i,
-  /\bspeak\s*english\b/i, /מצב\s*אנגלית/, /תעבור\s*ל?מצב\s*אנגלית/, /תדבר\s*אנגלית/,
-  /\b(become|be|go|switch|change|turn)\s*(in)?to\s*ultron\b/i,
-  /\bultron\s*mode\b/i, /\bbecome\s*ultron\b/i, /\bi\s*need\s*ultron\b/i,
-  /\bgive\s*me\s*ultron\b/i, /\bwake\s*ultron\b/i,
-  /תהפוך\s*ל?אולטרון/, /תהיה\s*אולטרון/, /מצב\s*אולטרון/, /תעבור\s*ל?אולטרון/,
-  /אני\s*צריך\s*את\s*אולטרון/, /תן\s*לי\s*את\s*אולטרון/, /תביא\s*את\s*אולטרון/,
-  /תחליף\s*ל?אולטרון/, /קרא\s*לאולטרון/, /באנגלית/, /דבר\s*אנגלית/
-];
-const TO_HEBREW = [
-  /\bhebrew\s*mode\b/i, /\bgo\s*to\s*hebrew\b/i, /\bswitch\s*to\s*hebrew\b/i,
-  /\bspeak\s*hebrew\b/i, /מצב\s*עברית/, /תעבור\s*ל?מצב\s*עברית/, /תדבר\s*עברית/,
-  /\b(become|be|go|switch|change|turn)\s*(back\s*)?(in)?to\s*jarvis\b/i,
-  /\bjarvis\s*mode\b/i, /\bbecome\s*jarvis\b/i, /\bback\s*to\s*jarvis\b/i,
-  /תהפוך\s*ל?ג['’׳]?רוויס/, /תהיה\s*ג['’׳]?רוויס/, /מצב\s*ג['’׳]?רוויס/,
-  /תחזור\s*ל?ג['’׳]?רוויס/, /תחליף\s*ל?ג['’׳]?רוויס/, /תן\s*לי\s*את\s*ג['’׳]?רוויס/,
-  /בעברית/, /דבר\s*עברית/, /חזור\s*לעברית/
-];
+/* Switching language used to be a list of complete phrases, each one
+   anticipating an exact wording — /דבר\s*עברית/, /מצב\s*אנגלית/, and so on.
+   That works for the phrasings somebody thought of and fails silently for
+   every other one, which in practice meant the most natural Hebrew of all:
+   "תעבור לאנגלית", "עבור לעברית" and "אנגלית בבקשה" all did nothing, because
+   the list happened to carry "באנגלית" and not "לאנגלית".
+
+   Taken apart instead into the two things a switch is actually made of — the
+   language being asked for, and some sign that he is asking rather than
+   mentioning — so any combination of the two works without being listed. */
+
+/* A language named outright. This may stand alone: "אנגלית" is not the name
+   of anything else, so saying it in a short sentence is a request. */
+const LANG_EN = /\benglish\b|אנגלית/i;
+const LANG_HE = /\bhebrew\b|עברית/i;
+
+/* An identity is different: "ג'רוויס" is also the wake word, so it can never
+   switch anything on its own or every single address would flip the mode. It
+   counts only alongside a verb or the word "mode". */
+const IDENT_EN = /\bultron\b|אולטרון/i;
+const IDENT_HE = /\bjarvis\b|ג['’׳]?רוויס/i;
+
+const MODE_WORD = /\bmode\b|(^|\s)מצב(\s|$)/i;
+
+/* Hebrew gets (^|\s) rather than \b, which only knows ASCII word characters
+   and would therefore match anywhere inside a Hebrew word: without the
+   anchor, "לדבר" contains "דבר" and "I want to talk about English" becomes a
+   command. Anchoring to a word start costs nothing and removes the whole
+   class of false positives. */
+const SWITCH_VERB = new RegExp(
+  '\\b(become|be|go|switch|change|turn|speak|talk|use|back)\\b' +
+  '|(^|\\s)(תעבור|עבור|נעבור|תחליף|החלף|תהפוך|תהיה|תדבר|דבר|תחזור|חזור|תתחיל)', 'i');
+
+const LANG_COURTESY = new Set([
+  'please','now','thanks','thank','you','me','to','in','the','a',
+  'בבקשה','עכשיו','תודה','לי','אותי','איתי','רק','נא'
+]);
 
 function detectLangCommand(text){
-  const t = normaliseHeard(text);
-  if(!t || t.split(' ').length > 6) return null;
-  if(TO_ENGLISH.some(re => re.test(t))) return 'en';
-  if(TO_HEBREW.some(re => re.test(t))) return 'he';
-  return null;
+  const norm = normaliseHeard(text);
+  if(!norm) return null;
+  let words = norm.split(' ').filter(Boolean);
+  /* A long sentence is a task that mentions a language, not a request to
+     change one. */
+  if(!words.length || words.length > 6) return null;
+
+  /* "ג'רוויס תעבור לאנגלית" opens by addressing him, and the name there is
+     not the target — read as one it would contradict the English he went on
+     to ask for, and the whole thing would be discarded as ambiguous. */
+  let vocative = null;
+  while(words.length > 1 && (wordIsName(words[0]) || WAKE_FILLER.indexOf(words[0]) >= 0)){
+    if(wordIsName(words[0])) vocative = words[0];
+    words = words.slice(1);
+  }
+  let rest = words.join(' ');
+
+  /* Unless what follows is "mode", in which case the name WAS the target all
+     along: "jarvis mode", "מצב אולטרון". */
+  if(vocative && MODE_WORD.test(rest) && !LANG_EN.test(rest) && !LANG_HE.test(rest)){
+    words = [vocative].concat(words);
+    rest = words.join(' ');
+  }
+  if(!rest) return null;
+
+  const en = LANG_EN.test(rest), he = LANG_HE.test(rest);
+  const identEn = IDENT_EN.test(rest), identHe = IDENT_HE.test(rest);
+  const wantsEn = en || identEn, wantsHe = he || identHe;
+  if(!wantsEn && !wantsHe) return null;
+  if(wantsEn && wantsHe) return null;        // both named: genuinely ambiguous
+
+  const asking = SWITCH_VERB.test(rest) || MODE_WORD.test(rest);
+
+  if(en || he){
+    /* Bare, with nothing but courtesy around it, is still a request:
+       "אנגלית בבקשה", "english". Requiring almost nothing else to have been
+       said is what keeps "send that email in English" from being one. */
+    const substantive = words.filter(w => !LANG_COURTESY.has(w)).length;
+    return (asking || substantive <= 2) ? (en ? 'en' : 'he') : null;
+  }
+  return asking ? (identEn ? 'en' : 'he') : null;
 }
 
 /* Defined here, beside its only caller. It previously lived inside the
@@ -6346,7 +6400,7 @@ let toolStatusEl = null;
 
 function toolStatusLabel(tu, round){
   const names = {
-    run_code: 'runningCode', web_search: 'searchingWeb', show_html: 'buildingPage',
+    run_code: 'runningCode', web_search: 'searchingWeb', read_page: 'readingPage', show_html: 'buildingPage',
     generate_image: 'makingImage', make_zip: 'packaging',
     remember: 'saving', get_calendar_events: 'readingCalendar',
     create_calendar_event: 'bookingEvent', shopify_admin_query: 'queryingStore',
@@ -7563,6 +7617,50 @@ async function callCloseTabTool(input){
   }
 }
 
+/* Reading a page, which is the half of "search" that was missing. web_search
+   answers "what is out there" out of an index; it cannot answer "what does
+   THIS page actually say", and that is most of what gets asked — a
+   competitor's product page, a supplier listing, a spec sheet, a thread he
+   linked. open_url puts a page on his screen and tells the model nothing
+   about it by design, so between the two there was no way to look inside a
+   named site at all. */
+const READ_PAGE_TOOL = {
+  name: 'read_page',
+  description: "Read the actual text of one web page and get it back to work with. This is how you look INSIDE a site, as opposed to web_search, which only tells you a page exists.\n\nUse it whenever the answer is on a specific page rather than in a search result: a product's own listing (price, specs, materials, shipping, reviews), a competitor's pricing or about page, documentation, a news article he linked, a supplier page on AliExpress or Alibaba, a Shopify theme or app listing. If web_search gives you a promising link, READ IT before answering — a result snippet is two lines and is frequently out of date.\n\nFor a question that needs real depth, read several pages and compare them, rather than answering off one. Say plainly when two sources disagree.\n\nPass one full https address. You cannot log in, so anything behind a password, a paywall or a checkout will come back thin or refused — say so rather than filling the gap from memory. Very long pages come back cut off, and `truncated` tells you when that happened.\n\nThis reads the page server-side; it does NOT open anything on his screen. If he wants to SEE it, that is open_url, and you can do both.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      url: { type: 'string', description: 'The full http or https address of the page to read.' }
+    },
+    required: ['url']
+  }
+};
+
+async function callReadPageTool(input){
+  const url = String((input && input.url) || '').trim();
+  if(!url) return { error: 'no address given' };
+  if(!backendUrl) return { error: 'reading pages needs the worker backend connected' };
+  try{
+    const res = await fetch(backendUrl + '/fetch', {
+      method: 'POST',
+      headers: jarvisHeaders(),
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json().catch(()=> ({}));
+    if(!res.ok){
+      /* A worker deployed before /fetch existed answers 404 here. Saying so
+         beats "could not reach that page", which would send him looking at
+         the site instead of at his own deployment. */
+      if(res.status === 404) return { error: 'this worker has no /fetch yet — redeploy jarvis-worker.js to read pages' };
+      return { error: (data && data.error) || ('the page could not be read (' + res.status + ')') };
+    }
+    addMessage('system', '▸ read ' + (data.title || url).slice(0, 70));
+    return data;
+  }catch(err){
+    return { error: String((err && err.message) || err) };
+  }
+}
+
 const CAMERA_TOOL = {
   name: 'open_camera',
   description: "Turn on the webcam. A small panel opens on his screen showing the live feed — he sees himself, and from that moment a fresh frame reaches YOU with every message he sends, so you can look at whatever he holds up and answer about it continuously. It is a live view, not a single photo.\n\nUse it for any phrasing in either language: \"open my camera\", \"turn on the camera\", \"can you see me\", \"look at this\", \"watch this\", \"תפתח את המצלמה\", \"תדליק מצלמה\", \"אתה רואה אותי\", \"תסתכל על זה\", \"תראה מה יש לי\". Do not ask permission — he asked.\n\nOnce it is on, do NOT call this again to look again: you already receive every frame. Just answer. Call it with close:true when he asks to turn the camera off.\n\nDescribe what is actually in the picture. If the frame is dark or empty, say so rather than inventing something."
@@ -7886,7 +7984,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
        Capability cannot be interpreted. JARVIS does not decline to build a 3-D
        model; he has no tool that builds one, which is what makes Serious Mode
        mean something instead of being a colour scheme. */
-    const everydayTools = [WEB_SEARCH_TOOL, RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL,
+    const everydayTools = [WEB_SEARCH_TOOL, READ_PAGE_TOOL, RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL,
                            CALENDAR_TOOL, CALENDAR_CREATE_TOOL, buildShopifyTool()];
     /* Desktop only, and not gated behind ULTRON: opening a link is an everyday
        errand, not heavy work. In the browser the capability does not exist at
@@ -8142,7 +8240,12 @@ async function askJarvis(userText, images, onText){
         } else if(tu.name === 'generate_image'){
           payload = await callGenerateImageTool(tu.input);
         } else if(tu.name === 'open_camera'){
-          payload = await callCameraTool();
+          /* tu.input, not nothing. callCameraTool reads input.close to switch
+             the camera OFF, and this was the one call in the chain that threw
+             its arguments away — so "close the camera" arrived as a bare
+             open_camera and turned it back ON. The camera could be opened by
+             voice and never closed by voice. */
+          payload = await callCameraTool(tu.input);
         } else if(tu.name === 'take_screenshot'){
           payload = await callScreenshotTool();
         } else if(tu.name === 'close_browser_tab'){
@@ -8151,6 +8254,8 @@ async function askJarvis(userText, images, onText){
           payload = await callCloseNamedTool(tu.input);
         } else if(tu.name === 'close_this_window'){
           payload = await callCloseWindowTool();
+        } else if(tu.name === 'read_page'){
+          payload = await callReadPageTool(tu.input);
         } else if(tu.name === 'open_url'){
           payload = await callOpenUrlTool(tu.input);
         } else if(tu.name === 'make_zip'){

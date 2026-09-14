@@ -96,6 +96,7 @@ export default {
       if (path === '/model3d/status')              return await handleModel3dStatus(request, env);
       if (path === '/image')                       return await handleImage(request, env);
       if (path === '/stt')                         return await handleStt(request, env);
+      if (path === '/fetch')                       return await handleFetch(request, env);
       if (path.indexOf('/mcp/') === 0)             return await handleMcpProxy(request, env, path);
       if (path === '/calendar/upcoming')           return await handleCalendarUpcoming(request, env, url);
       if (path === '/calendar/create')             return await handleCalendarCreate(request, env);
@@ -225,6 +226,7 @@ async function health(env) {
     model3d: !!env.MESHY_API_KEY,
     images: !!env.AI,
     stt: !!env.AI,
+    read_page: true,          // present only on workers that carry /fetch
     stt_language_hint: true,   // present only on workers that accept ?language=
     fallback: chain.length > 1 ? chain[1].model : false,
     fallback_via: chain.length > 1 ? chain[1].vendor : false,
@@ -1411,6 +1413,143 @@ async function handleStt(request, env) {
   }
   // Silence is a legitimate outcome, not a failure — the caller just ignores it.
   return json({ ok: true, text: '', tried: tried }, 200, env, request);
+}
+
+/* Reading one page, as opposed to searching. web_search answers "what is out
+   there" from an index; it cannot answer "what does THIS page say", which is
+   what actually gets asked — a competitor's product page, a spec sheet, a
+   supplier listing, a thread somebody linked. open_url puts such a page on
+   his screen and deliberately tells the model nothing about it, so until now
+   there was no way for him to read inside a site at all.
+
+   Everything here is a guard, because this endpoint takes a URL from a model
+   and fetches it with the worker's own network position:
+
+   - http and https only. Anything else is a scheme with local reach.
+   - No private, loopback or link-local host. A worker has no route to a home
+     LAN, but "probably cannot" is not a security boundary, and the check is
+     three lines.
+   - Redirects are followed by fetch, so the FINAL url is re-checked before
+     its body is used — an open redirect to 169.254.169.254 is the standard
+     way this endpoint gets turned into a metadata reader.
+   - A timeout and a byte cap, so one enormous or one hanging page cannot
+     occupy the worker.
+
+   HTML comes back as text, not markup: the model is reading prose, and tags
+   would spend its context without adding anything. */
+const FETCH_TIMEOUT_MS = 12000;
+const FETCH_MAX_BYTES   = 3 * 1024 * 1024;
+const FETCH_MAX_CHARS   = 18000;
+
+function blockedHost(hostname) {
+  const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (!h) return true;
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') ||
+      h.endsWith('.internal') || h === '::1' || h === '0.0.0.0') return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;          // cloud metadata
+    if (a >= 224) return true;                        // multicast and above
+  }
+  if (/^(fc|fd|fe80)/.test(h)) return true;           // IPv6 private / link-local
+  return false;
+}
+
+function safeUrl(raw) {
+  let u;
+  try { u = new URL(String(raw || '').trim()); } catch (e) { return null; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  if (blockedHost(u.hostname)) return null;
+  return u;
+}
+
+function htmlToText(html) {
+  return String(html || '')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(script|style|noscript|svg|canvas|template)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<\/(p|div|section|article|li|tr|h[1-6]|br)\s*>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"').replace(/&#39;/gi, "'")
+    .replace(/[ \t ]+/g, ' ')
+    .replace(/\n\s*\n\s*\n+/g, '\n\n')
+    .trim();
+}
+
+async function handleFetch(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const target = safeUrl(body && body.url);
+  if (!target) {
+    return json({ error: 'give a full http or https address to a public page' }, 400, env, request);
+  }
+
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), FETCH_TIMEOUT_MS);
+  let upstream;
+  try {
+    upstream = await fetch(target.toString(), {
+      signal: stop.signal,
+      redirect: 'follow',
+      headers: {
+        /* Announced as a browser because a bare fetch is refused outright by
+           a good share of the web, which would read here as "the page is
+           empty" rather than "we were turned away". */
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
+        'Accept-Language': 'en,he;q=0.9'
+      }
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    const aborted = String((err && err.name) || '') === 'AbortError';
+    return json({ error: aborted ? 'the page took too long to answer' : 'could not reach that page' },
+                502, env, request);
+  }
+  clearTimeout(timer);
+
+  // Redirects have already been followed, so this is where the body came from.
+  const landed = safeUrl(upstream.url || target.toString());
+  if (!landed) return json({ error: 'that address redirected somewhere not allowed' }, 400, env, request);
+
+  if (!upstream.ok) {
+    return json({ error: 'the site answered ' + upstream.status, status: upstream.status,
+                  url: landed.toString() }, 502, env, request);
+  }
+
+  const type = (upstream.headers.get('Content-Type') || '').toLowerCase();
+  if (!/text\/html|text\/plain|application\/(xhtml|json|xml)|text\/xml/.test(type)) {
+    return json({ error: 'that link is ' + (type.split(';')[0] || 'a file') + ', not a readable page',
+                  url: landed.toString() }, 415, env, request);
+  }
+
+  const declared = Number(upstream.headers.get('Content-Length') || 0);
+  if (declared && declared > FETCH_MAX_BYTES) {
+    return json({ error: 'that page is too large to read', url: landed.toString() }, 413, env, request);
+  }
+
+  const raw = await upstream.text().catch(() => '');
+  if (raw.length > FETCH_MAX_BYTES) {
+    return json({ error: 'that page is too large to read', url: landed.toString() }, 413, env, request);
+  }
+
+  const titleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(raw);
+  const text = /json|xml/.test(type) ? raw.trim() : htmlToText(raw);
+  const clipped = text.length > FETCH_MAX_CHARS;
+
+  return json({
+    ok: true,
+    url: landed.toString(),
+    title: titleMatch ? htmlToText(titleMatch[1]).slice(0, 300) : '',
+    text: clipped ? text.slice(0, FETCH_MAX_CHARS) : text,
+    truncated: clipped,
+    chars: text.length
+  }, 200, env, request);
 }
 
 /* The read-only guard, and it has to be exact: this endpoint holds an Admin

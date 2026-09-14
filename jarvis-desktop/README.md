@@ -16,7 +16,7 @@ Same file, same brain, same memory; a different job.
 | **Ctrl+Shift+Space** | summons the orb, and the microphone opens on its own |
 | While it is up | continuous conversation, always — no button to press, ever |
 | Addressing him | say his name in any natural way — "Hey Jarvis", "Jarvis", "שומע ג'רוויס", or at the end of a sentence. Follow-ups need no name for 30s |
-| Languages | Hebrew by default. Say "english mode" / "מצב אנגלית" to switch |
+| Languages | Hebrew by default. Any way of asking works — "english mode", "תעבור לאנגלית", "speak english", "אנגלית בבקשה", "become Ultron" — and the same in reverse to come back |
 | The colour | cyan = JARVIS/Hebrew, orange = ULTRON/English |
 | Switching | "become Ultron" / "ultron mode" / "english mode" → orange English. "become Jarvis" / "hebrew mode" → cyan Hebrew |
 | While it is away | the microphone is closed; nothing listens in the background |
@@ -33,6 +33,8 @@ Same file, same brain, same memory; a different job.
 | "Close Chrome" | closes a whole window found by its title (Windows only) |
 | "Close this tab" | closes one tab, leaving the window open (Windows only) |
 | "What's on my screen" | captures the primary monitor and reads it |
+| "Open the camera" / "תפתח את המצלמה" | live view, and every message after it carries a fresh frame. "Close the camera" switches it off |
+| "What does this page say" | reads the text of a named site, not just search results — product listings, competitor pricing, docs |
 | Double-click | expands to full screen and back; the microphone indicator lives there |
 | Tray icon | Show / Hide / Quit — the way back if the hotkey is taken |
 

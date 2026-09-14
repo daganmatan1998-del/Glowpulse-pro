@@ -46,3 +46,24 @@ runtime. The hologram *is* three.js, so with no connection (or a blocked CDN)
 the desktop app opens to the `no-webgl` fallback glow rather than the orb.
 Vendoring those files into `dist/` alongside the page would make the app start
 offline and faster; it has not been done yet.
+
+## Two web tools, and only one of them needs Anthropic
+
+`web_search` is Anthropic's own server-side tool. The worker notices a server
+tool in the request and puts an Anthropic engine first — but if no
+`ANTHROPIC_API_KEY` is set, the request goes to whatever engine is configured
+and the tool is **dropped from it silently**. Nothing errors; JARVIS simply
+answers from memory as though he had searched. If search matters to you, set
+`ANTHROPIC_API_KEY`, and check `GET /health` — `engines` lists what the chain
+actually holds.
+
+`read_page` has no such dependency. It is an ordinary tool backed by the
+worker's own `/fetch`, so it survives on Google, Groq, Cerebras, xAI and
+Workers AI alike. It fetches one page server-side and returns its text, which
+is what lets him answer about a specific product listing or competitor page
+rather than about search results.
+
+`/fetch` only reaches public http and https addresses: loopback, private
+ranges, link-local (including cloud metadata at 169.254.169.254) and non-http
+schemes are refused, and because redirects can point anywhere, the final URL
+is re-checked after they are followed rather than only the one submitted.

@@ -1,0 +1,58 @@
+{%- render 'gp-assets' -%}
+
+<section class="gp-section gp-section--muted" style="padding-block: 40px;">
+  <div class="gp-wrap">
+    <div class="gp-trust">
+      {%- for block in section.blocks -%}
+        <div class="gp-trust__item gp-reveal" data-gp-delay="{{ forloop.index0 | times: 60 }}" {{ block.shopify_attributes }}>
+          {%- render 'gp-icon', icon: block.settings.icon, class: 'gp-trust__icon' -%}
+          <span class="gp-trust__label">{{ block.settings.label | escape }}</span>
+          <span class="gp-trust__sub">{{ block.settings.sublabel | escape }}</span>
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "GP Trust bar",
+  "tag": "section",
+  "max_blocks": 4,
+  "blocks": [
+    {
+      "type": "item",
+      "name": "Trust item",
+      "settings": [
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            { "value": "truck", "label": "Shipping" },
+            { "value": "undo", "label": "Returns" },
+            { "value": "shield", "label": "Warranty" },
+            { "value": "award", "label": "Certification" },
+            { "value": "leaf", "label": "Skin safe" },
+            { "value": "battery", "label": "Battery" }
+          ],
+          "default": "truck"
+        },
+        { "type": "text", "id": "label", "label": "Label", "default": "Free shipping" },
+        { "type": "text", "id": "sublabel", "label": "Sub-label", "default": "Dispatched in 24h" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "GP Trust bar",
+      "blocks": [
+        { "type": "item" },
+        { "type": "item" },
+        { "type": "item" },
+        { "type": "item" }
+      ]
+    }
+  ]
+}
+{% endschema %}

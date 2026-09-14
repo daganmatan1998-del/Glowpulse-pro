@@ -1,0 +1,89 @@
+{%- render 'gp-assets' -%}
+{%- assign gp_product = section.settings.product -%}
+
+<section class="gp-section gp-section--dark" id="gp-offer" style="padding-block: {{ section.settings.padding_top }}px {{ section.settings.padding_bottom }}px;">
+  <div class="gp-wrap">
+    <div class="gp-offer">
+      <div class="gp-reveal">
+        {%- if section.settings.eyebrow != blank -%}
+          <p class="gp-eyebrow">{{ section.settings.eyebrow | escape }}</p>
+        {%- endif -%}
+        <h2 class="gp-h2">{{ section.settings.heading | escape }}</h2>
+        <p class="gp-lede">{{ section.settings.subheading | escape }}</p>
+
+        <ul class="gp-guarantee-list">
+          {%- for block in section.blocks -%}
+            <li {{ block.shopify_attributes }}>
+              {%- render 'gp-icon', icon: 'check' -%}
+              <span>{{ block.settings.text | escape }}</span>
+            </li>
+          {%- endfor -%}
+        </ul>
+      </div>
+
+      <div class="gp-card gp-reveal" data-gp-delay="100" style="background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18);color:#fff">
+        {%- if gp_product != blank -%}
+          <div class="gp-price">
+            <span class="gp-price__now">{{ gp_product.price | money }}</span>
+            {%- if gp_product.compare_at_price > gp_product.price -%}
+              <span class="gp-price__was">{{ gp_product.compare_at_price | money }}</span>
+            {%- endif -%}
+          </div>
+          {%- if gp_product.available -%}
+            {%- form 'product', gp_product, id: 'gp-offer-form' -%}
+              <input type="hidden" name="id" value="{{ gp_product.selected_or_first_available_variant.id }}">
+              <button type="submit" name="add" class="gp-btn gp-btn--primary gp-btn--block">
+                {{ section.settings.cta_label | escape }}
+              </button>
+            {%- endform -%}
+          {%- else -%}
+            <button type="button" class="gp-btn gp-btn--ghost gp-btn--block" disabled>Sold out</button>
+          {%- endif -%}
+        {%- else -%}
+          <p class="gp-body" style="margin-bottom:var(--gp-space-3)">{{ section.settings.empty_text | escape }}</p>
+          <a class="gp-btn gp-btn--primary gp-btn--block" href="{{ routes.all_products_collection_url }}">
+            {{ section.settings.cta_label | escape }}
+          </a>
+        {%- endif -%}
+
+        <p class="gp-hero__note" style="margin-top:var(--gp-space-2);text-align:center">
+          {{ section.settings.note | escape }}
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "GP Offer",
+  "tag": "section",
+  "max_blocks": 6,
+  "settings": [
+    { "type": "product", "id": "product", "label": "Product" },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Risk-free" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Try it for 60 nights" },
+    { "type": "textarea", "id": "subheading", "label": "Subheading", "default": "Use it every evening for two months. If your skin hasn't changed, send it back and we refund the full amount — return shipping included." },
+    { "type": "text", "id": "cta_label", "label": "Button label", "default": "Add to cart" },
+    { "type": "text", "id": "note", "label": "Note under button", "default": "Free shipping · Ships within 24 hours" },
+    { "type": "text", "id": "empty_text", "label": "Text when no product is selected", "default": "Pick a product for this section in the theme editor." },
+    { "type": "range", "id": "padding_top", "label": "Padding top", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 },
+    { "type": "range", "id": "padding_bottom", "label": "Padding bottom", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 }
+  ],
+  "blocks": [
+    {
+      "type": "point",
+      "name": "Guarantee point",
+      "settings": [
+        { "type": "text", "id": "text", "label": "Text", "default": "60-night money-back trial" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "GP Offer",
+      "blocks": [{ "type": "point" }, { "type": "point" }, { "type": "point" }, { "type": "point" }]
+    }
+  ]
+}
+{% endschema %}

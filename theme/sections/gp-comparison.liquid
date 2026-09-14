@@ -1,0 +1,87 @@
+{%- render 'gp-assets' -%}
+
+<section class="gp-section gp-section--muted" style="padding-block: {{ section.settings.padding_top }}px {{ section.settings.padding_bottom }}px;">
+  <div class="gp-wrap">
+    <div class="gp-head gp-reveal">
+      {%- if section.settings.eyebrow != blank -%}
+        <p class="gp-eyebrow">{{ section.settings.eyebrow | escape }}</p>
+      {%- endif -%}
+      <h2 class="gp-h2">{{ section.settings.heading | escape }}</h2>
+      {%- if section.settings.subheading != blank -%}
+        <p class="gp-lede">{{ section.settings.subheading | escape }}</p>
+      {%- endif -%}
+    </div>
+
+    <div class="gp-table-scroll gp-reveal">
+      <table class="gp-table">
+        <caption class="visually-hidden" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">
+          {{ section.settings.heading | escape }}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ section.settings.col_feature | escape }}</th>
+            <th scope="col">{{ section.settings.col_us | escape }}</th>
+            <th scope="col">{{ section.settings.col_them_1 | escape }}</th>
+            <th scope="col">{{ section.settings.col_them_2 | escape }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {%- for block in section.blocks -%}
+            <tr {{ block.shopify_attributes }}>
+              <th scope="row" style="font-weight:600">{{ block.settings.feature | escape }}</th>
+              {%- assign gp_cells = block.settings.us | append: '||' | append: block.settings.them_1 | append: '||' | append: block.settings.them_2 | split: '||' -%}
+              {%- for cell in gp_cells -%}
+                <td>
+                  {%- if cell == 'yes' -%}
+                    <span class="gp-table__mark gp-table__mark--yes">{%- render 'gp-icon', icon: 'check' -%}Yes</span>
+                  {%- elsif cell == 'no' -%}
+                    <span class="gp-table__mark gp-table__mark--no">{%- render 'gp-icon', icon: 'cross' -%}No</span>
+                  {%- else -%}
+                    {{ cell | escape }}
+                  {%- endif -%}
+                </td>
+              {%- endfor -%}
+            </tr>
+          {%- endfor -%}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "GP Comparison",
+  "tag": "section",
+  "max_blocks": 8,
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Compare" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "What you'd otherwise be paying for" },
+    { "type": "textarea", "id": "subheading", "label": "Subheading", "default": "One device, owned outright, against the two things it replaces." },
+    { "type": "text", "id": "col_feature", "label": "Column 1 header", "default": "" },
+    { "type": "text", "id": "col_us", "label": "Column 2 header", "default": "GlowPulse Pro" },
+    { "type": "text", "id": "col_them_1", "label": "Column 3 header", "default": "Clinic facials" },
+    { "type": "text", "id": "col_them_2", "label": "Column 4 header", "default": "Handheld wands" },
+    { "type": "range", "id": "padding_top", "label": "Padding top", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 },
+    { "type": "range", "id": "padding_bottom", "label": "Padding bottom", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 }
+  ],
+  "blocks": [
+    {
+      "type": "row",
+      "name": "Row",
+      "settings": [
+        { "type": "text", "id": "feature", "label": "Feature", "default": "Full-face coverage" },
+        { "type": "text", "id": "us", "label": "GlowPulse Pro", "info": "Type yes or no for an icon, or any text.", "default": "yes" },
+        { "type": "text", "id": "them_1", "label": "Column 3", "default": "yes" },
+        { "type": "text", "id": "them_2", "label": "Column 4", "default": "no" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "GP Comparison",
+      "blocks": [{ "type": "row" }, { "type": "row" }, { "type": "row" }, { "type": "row" }, { "type": "row" }]
+    }
+  ]
+}
+{% endschema %}

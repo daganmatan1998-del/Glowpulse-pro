@@ -1,0 +1,77 @@
+{%- render 'gp-assets' -%}
+
+<section class="gp-section" id="gp-benefits" style="padding-block: {{ section.settings.padding_top }}px {{ section.settings.padding_bottom }}px;">
+  <div class="gp-wrap">
+    <div class="gp-head gp-reveal">
+      {%- if section.settings.eyebrow != blank -%}
+        <p class="gp-eyebrow">{{ section.settings.eyebrow | escape }}</p>
+      {%- endif -%}
+      <h2 class="gp-h2">{{ section.settings.heading | escape }}</h2>
+      {%- if section.settings.subheading != blank -%}
+        <p class="gp-lede">{{ section.settings.subheading | escape }}</p>
+      {%- endif -%}
+    </div>
+
+    <div class="gp-grid">
+      {%- for block in section.blocks -%}
+        <article class="gp-card gp-benefit gp-reveal" data-gp-delay="{{ forloop.index0 | times: 60 }}" {{ block.shopify_attributes }}>
+          {%- render 'gp-icon', icon: block.settings.icon, class: 'gp-benefit__icon' -%}
+          <h3 class="gp-h3">{{ block.settings.title | escape }}</h3>
+          <p class="gp-body">{{ block.settings.text | escape }}</p>
+        </article>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "GP Benefits",
+  "tag": "section",
+  "max_blocks": 6,
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Why it works" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "The science, not the skincare aisle" },
+    { "type": "textarea", "id": "subheading", "label": "Subheading", "default": "Red light at 633nm and near-infrared at 830nm reach the dermis, where collagen is actually made. Creams stop at the surface." },
+    { "type": "range", "id": "padding_top", "label": "Padding top", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 },
+    { "type": "range", "id": "padding_bottom", "label": "Padding bottom", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 }
+  ],
+  "blocks": [
+    {
+      "type": "benefit",
+      "name": "Benefit",
+      "settings": [
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            { "value": "sparkles", "label": "Sparkles" },
+            { "value": "clock", "label": "Clock" },
+            { "value": "shield", "label": "Shield" },
+            { "value": "leaf", "label": "Leaf" },
+            { "value": "battery", "label": "Battery" },
+            { "value": "award", "label": "Award" }
+          ],
+          "default": "sparkles"
+        },
+        { "type": "text", "id": "title", "label": "Title", "default": "Visibly firmer skin" },
+        { "type": "textarea", "id": "text", "label": "Text", "default": "Stimulates fibroblast activity so your skin rebuilds its own collagen." }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "GP Benefits",
+      "blocks": [
+        { "type": "benefit" },
+        { "type": "benefit" },
+        { "type": "benefit" },
+        { "type": "benefit" },
+        { "type": "benefit" },
+        { "type": "benefit" }
+      ]
+    }
+  ]
+}
+{% endschema %}

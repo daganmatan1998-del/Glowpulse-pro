@@ -1,0 +1,93 @@
+{%- render 'gp-assets' -%}
+{%- assign gp_product = section.settings.product -%}
+
+<section class="gp-section gp-section--dark gp-hero" style="padding-block: {{ section.settings.padding_top }}px {{ section.settings.padding_bottom }}px;">
+  <div class="gp-wrap">
+    <div class="gp-hero__inner">
+      <div>
+        {%- if section.settings.eyebrow != blank -%}
+          <p class="gp-eyebrow">{{ section.settings.eyebrow | escape }}</p>
+        {%- endif -%}
+
+        <h1 class="gp-h1">{{ section.settings.heading | escape }}</h1>
+
+        <div class="gp-rating">
+          {%- render 'gp-stars', rating: 5, label: '4.8 out of 5 stars' -%}
+          <span>{{ section.settings.rating_text | escape }}</span>
+        </div>
+
+        <p class="gp-lede">{{ section.settings.subheading | escape }}</p>
+
+        {%- if gp_product != blank -%}
+          <div class="gp-price">
+            <span class="gp-price__now">{{ gp_product.price | money }}</span>
+            {%- if gp_product.compare_at_price > gp_product.price -%}
+              <span class="gp-price__was">{{ gp_product.compare_at_price | money }}</span>
+              {%- assign gp_off = gp_product.compare_at_price | minus: gp_product.price | times: 100.0 | divided_by: gp_product.compare_at_price | round -%}
+              <span class="gp-badge">Save {{ gp_off }}%</span>
+            {%- endif -%}
+          </div>
+        {%- endif -%}
+
+        <div class="gp-hero__actions">
+          {%- if gp_product != blank -%}
+            <a class="gp-btn gp-btn--primary" href="{{ gp_product.url }}">{{ section.settings.cta_label | escape }}</a>
+          {%- else -%}
+            <a class="gp-btn gp-btn--primary" href="{{ routes.all_products_collection_url }}">{{ section.settings.cta_label | escape }}</a>
+          {%- endif -%}
+          {%- if section.settings.cta2_label != blank -%}
+            <a class="gp-btn gp-btn--ghost" href="{{ section.settings.cta2_link | default: '#gp-how' }}">{{ section.settings.cta2_label | escape }}</a>
+          {%- endif -%}
+        </div>
+
+        <p class="gp-hero__note">{{ section.settings.note | escape }}</p>
+      </div>
+
+      <div>
+        <div class="gp-media">
+          {%- if section.settings.image != blank -%}
+            {%- assign gp_alt = section.settings.image.alt | default: section.settings.heading -%}
+            {{ section.settings.image | image_url: width: 1100 | image_tag:
+                 widths: '400, 600, 800, 1100',
+                 sizes: '(min-width: 900px) 46vw, 92vw',
+                 loading: 'eager',
+                 fetchpriority: 'high',
+                 alt: gp_alt }}
+          {%- elsif gp_product.featured_image != blank -%}
+            {%- assign gp_alt = gp_product.featured_image.alt | default: gp_product.title -%}
+            {{ gp_product.featured_image | image_url: width: 1100 | image_tag:
+                 widths: '400, 600, 800, 1100',
+                 sizes: '(min-width: 900px) 46vw, 92vw',
+                 loading: 'eager',
+                 fetchpriority: 'high',
+                 alt: gp_alt }}
+          {%- else -%}
+            {{ 'product-apparel-1' | placeholder_svg_tag }}
+          {%- endif -%}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "GP Hero",
+  "tag": "section",
+  "settings": [
+    { "type": "product", "id": "product", "label": "Featured product" },
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Clinical-grade red light therapy" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Smoother, firmer skin in 10 minutes a day" },
+    { "type": "textarea", "id": "subheading", "label": "Subheading", "default": "GlowPulse Pro pairs 633nm red and 830nm near-infrared LEDs in a flexible silicone mask that treats your whole face at once — no appointments, no downtime." },
+    { "type": "text", "id": "rating_text", "label": "Rating text", "default": "4.8 / 5 from 2,317 verified reviews" },
+    { "type": "text", "id": "cta_label", "label": "Primary button", "default": "Shop GlowPulse Pro" },
+    { "type": "text", "id": "cta2_label", "label": "Secondary button", "default": "See how it works" },
+    { "type": "url", "id": "cta2_link", "label": "Secondary button link" },
+    { "type": "text", "id": "note", "label": "Reassurance note", "default": "Free shipping · 60-night trial · 2-year warranty" },
+    { "type": "image_picker", "id": "image", "label": "Hero image" },
+    { "type": "range", "id": "padding_top", "label": "Padding top", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 },
+    { "type": "range", "id": "padding_bottom", "label": "Padding bottom", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 }
+  ],
+  "presets": [{ "name": "GP Hero" }]
+}
+{% endschema %}

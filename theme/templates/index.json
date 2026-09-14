@@ -1,0 +1,149 @@
+{
+  "sections": {
+    "gp_hero": {
+      "type": "gp-hero",
+      "settings": {
+        "eyebrow": "Clinical-grade red light therapy",
+        "heading": "Smoother, firmer skin in 10 minutes a day",
+        "subheading": "GlowPulse Pro pairs 633nm red and 830nm near-infrared LEDs in a flexible silicone mask that treats your whole face at once — no appointments, no downtime.",
+        "rating_text": "4.8 / 5 from 2,317 verified reviews",
+        "cta_label": "Shop GlowPulse Pro",
+        "cta2_label": "See how it works",
+        "cta2_link": "#gp-how",
+        "note": "Free shipping · 60-night trial · 2-year warranty",
+        "padding_top": 96,
+        "padding_bottom": 96
+      }
+    },
+    "gp_trustbar": {
+      "type": "gp-trustbar",
+      "blocks": {
+        "t1": { "type": "item", "settings": { "icon": "truck", "label": "Free shipping", "sublabel": "Dispatched within 24 hours" } },
+        "t2": { "type": "item", "settings": { "icon": "undo", "label": "60-night trial", "sublabel": "Full refund, we pay return post" } },
+        "t3": { "type": "item", "settings": { "icon": "shield", "label": "2-year warranty", "sublabel": "Covers the LED array and controller" } },
+        "t4": { "type": "item", "settings": { "icon": "award", "label": "FDA-cleared class II", "sublabel": "Independently safety tested" } }
+      },
+      "block_order": ["t1", "t2", "t3", "t4"]
+    },
+    "gp_benefits": {
+      "type": "gp-benefits",
+      "settings": {
+        "eyebrow": "Why it works",
+        "heading": "The science, not the skincare aisle",
+        "subheading": "Red light at 633nm and near-infrared at 830nm reach the dermis, where collagen is actually made. Creams stop at the surface.",
+        "padding_top": 96,
+        "padding_bottom": 96
+      },
+      "blocks": {
+        "b1": { "type": "benefit", "settings": { "icon": "sparkles", "title": "Visibly firmer skin", "text": "Stimulates fibroblast activity so your skin rebuilds its own collagen instead of borrowing plumpness from a serum." } },
+        "b2": { "type": "benefit", "settings": { "icon": "clock", "title": "Ten minutes, hands free", "text": "One session per evening. The mask is cordless and flexible, so you can keep reading while it runs." } },
+        "b3": { "type": "benefit", "settings": { "icon": "leaf", "title": "No downtime, no irritation", "text": "No acids, no needles, no peeling. Safe on sensitive and rosacea-prone skin, and on every Fitzpatrick type." } },
+        "b4": { "type": "benefit", "settings": { "icon": "award", "title": "132 medical-grade LEDs", "text": "Even coverage from forehead to jaw at a measured 40mW/cm² irradiance — the dose used in published trials." } },
+        "b5": { "type": "benefit", "settings": { "icon": "battery", "title": "Three weeks per charge", "text": "USB-C, 90-minute recharge, and a session counter so you can see whether you've actually been consistent." } },
+        "b6": { "type": "benefit", "settings": { "icon": "shield", "title": "Eye-safe by design", "text": "Recessed optics and integrated opaque shields mean you never need separate goggles." } }
+      },
+      "block_order": ["b1", "b2", "b3", "b4", "b5", "b6"]
+    },
+    "gp_how": {
+      "type": "gp-how-it-works",
+      "settings": {
+        "eyebrow": "How it works",
+        "heading": "Three steps, ten minutes",
+        "subheading": "Hands-free and cordless, so a session fits into whatever you were already doing.",
+        "padding_top": 96,
+        "padding_bottom": 96
+      },
+      "blocks": {
+        "s1": { "type": "step", "settings": { "title": "Cleanse and dry", "text": "Start on bare skin. Makeup and SPF scatter the light before it reaches the dermis." } },
+        "s2": { "type": "step", "settings": { "title": "Wear it for ten minutes", "text": "Press once to start. The mask holds its own shape against your face and shuts off on its own." } },
+        "s3": { "type": "step", "settings": { "title": "Carry on with your routine", "text": "Apply your serum straight after — circulation is raised, so it absorbs better. Repeat five nights a week." } }
+      },
+      "block_order": ["s1", "s2", "s3"]
+    },
+    "gp_reviews": {
+      "type": "gp-reviews",
+      "settings": {
+        "eyebrow": "Social proof",
+        "heading": "2,317 people stopped booking facials",
+        "aggregate": "4.8 average from 2,317 verified reviews",
+        "padding_top": 96,
+        "padding_bottom": 96
+      },
+      "blocks": {
+        "r1": { "type": "review", "settings": { "rating": 5, "quote": "Eight weeks in and the lines around my mouth have genuinely softened. I was sceptical — I'd written off every device like this.", "name": "Maya R.", "meta": "Tel Aviv", "verified": true } },
+        "r2": { "type": "review", "settings": { "rating": 5, "quote": "I bought it for fine lines and the thing that actually changed was my redness. Three weeks and my cheeks calmed right down.", "name": "Daniel K.", "meta": "Manchester", "verified": true } },
+        "r3": { "type": "review", "settings": { "rating": 4, "quote": "Results are real but slow — don't expect week one. What sold me is that it's comfortable enough that I actually use it.", "name": "Priya S.", "meta": "Toronto", "verified": true } }
+      },
+      "block_order": ["r1", "r2", "r3"]
+    },
+    "gp_comparison": {
+      "type": "gp-comparison",
+      "settings": {
+        "eyebrow": "Compare",
+        "heading": "What you'd otherwise be paying for",
+        "subheading": "One device, owned outright, against the two things it replaces.",
+        "col_feature": "",
+        "col_us": "GlowPulse Pro",
+        "col_them_1": "Clinic facials",
+        "col_them_2": "Handheld wands",
+        "padding_top": 96,
+        "padding_bottom": 96
+      },
+      "blocks": {
+        "c1": { "type": "row", "settings": { "feature": "Full-face coverage", "us": "yes", "them_1": "yes", "them_2": "no" } },
+        "c2": { "type": "row", "settings": { "feature": "Cost per year", "us": "$0 after purchase", "them_1": "$1,800+", "them_2": "$0 after purchase" } },
+        "c3": { "type": "row", "settings": { "feature": "Time per session", "us": "10 min at home", "them_1": "60 min + travel", "them_2": "25-30 min" } },
+        "c4": { "type": "row", "settings": { "feature": "Near-infrared 830nm", "us": "yes", "them_1": "yes", "them_2": "no" } },
+        "c5": { "type": "row", "settings": { "feature": "Hands free", "us": "yes", "them_1": "yes", "them_2": "no" } }
+      },
+      "block_order": ["c1", "c2", "c3", "c4", "c5"]
+    },
+    "gp_faq": {
+      "type": "gp-faq",
+      "settings": {
+        "eyebrow": "Questions",
+        "heading": "Everything people ask before buying",
+        "padding_top": 96,
+        "padding_bottom": 96
+      },
+      "blocks": {
+        "f1": { "type": "faq", "settings": { "question": "How soon will I see a difference?", "answer": "<p>Most people notice better tone and hydration within two to three weeks. Collagen changes are slower — plan on eight to twelve weeks of consistent use before judging it. That is why the trial runs 60 nights rather than 30.</p>" } },
+        "f2": { "type": "faq", "settings": { "question": "Is it safe for sensitive or darker skin?", "answer": "<p>Yes. Red and near-infrared light carry no UV and generate almost no heat, so there is no melanin-related risk — it is safe across all Fitzpatrick types. If you are on photosensitising medication such as isotretinoin or doxycycline, check with your doctor first.</p>" } },
+        "f3": { "type": "faq", "settings": { "question": "How often should I use it?", "answer": "<p>Five sessions a week, ten minutes each. More than one session a day does not speed anything up — the tissue response saturates, and consistency matters far more than intensity.</p>" } },
+        "f4": { "type": "faq", "settings": { "question": "Do I need goggles?", "answer": "<p>No. The eye openings use recessed optics and built-in opaque shields, so no light reaches the eye directly. Keep your eyes closed during a session anyway, out of habit.</p>" } },
+        "f5": { "type": "faq", "settings": { "question": "What if it does not work for me?", "answer": "<p>Send it back within 60 nights for a full refund, and we cover the return postage. No photographs, no form to argue your case — one email.</p>" } }
+      },
+      "block_order": ["f1", "f2", "f3", "f4", "f5"]
+    },
+    "gp_offer": {
+      "type": "gp-offer",
+      "settings": {
+        "eyebrow": "Risk-free",
+        "heading": "Try it for 60 nights",
+        "subheading": "Use it every evening for two months. If your skin hasn't changed, send it back and we refund the full amount — return shipping included.",
+        "cta_label": "Add to cart",
+        "note": "Free shipping · Ships within 24 hours",
+        "empty_text": "Pick a product for this section in the theme editor.",
+        "padding_top": 96,
+        "padding_bottom": 96
+      },
+      "blocks": {
+        "g1": { "type": "point", "settings": { "text": "60-night money-back trial, return postage paid" } },
+        "g2": { "type": "point", "settings": { "text": "2-year warranty on the LED array and controller" } },
+        "g3": { "type": "point", "settings": { "text": "Free tracked shipping, dispatched within 24 hours" } },
+        "g4": { "type": "point", "settings": { "text": "Support from a real person, replies within one working day" } }
+      },
+      "block_order": ["g1", "g2", "g3", "g4"]
+    }
+  },
+  "order": [
+    "gp_hero",
+    "gp_trustbar",
+    "gp_benefits",
+    "gp_how",
+    "gp_reviews",
+    "gp_comparison",
+    "gp_faq",
+    "gp_offer"
+  ]
+}

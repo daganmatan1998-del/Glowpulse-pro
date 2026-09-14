@@ -1,0 +1,85 @@
+{%- render 'gp-assets' -%}
+
+<section class="gp-section" id="gp-faq" style="padding-block: {{ section.settings.padding_top }}px {{ section.settings.padding_bottom }}px;">
+  <div class="gp-wrap gp-wrap--narrow">
+    <div class="gp-head gp-reveal">
+      {%- if section.settings.eyebrow != blank -%}
+        <p class="gp-eyebrow">{{ section.settings.eyebrow | escape }}</p>
+      {%- endif -%}
+      <h2 class="gp-h2">{{ section.settings.heading | escape }}</h2>
+    </div>
+
+    <div class="gp-faq gp-reveal">
+      {%- for block in section.blocks -%}
+        {%- assign gp_q_id = section.id | append: '-q-' | append: block.id -%}
+        {%- assign gp_a_id = section.id | append: '-a-' | append: block.id -%}
+        <div class="gp-faq__item" {{ block.shopify_attributes }}>
+          <h3 style="margin:0">
+            <button
+              class="gp-faq__q"
+              type="button"
+              id="{{ gp_q_id }}"
+              aria-expanded="false"
+              aria-controls="{{ gp_a_id }}">
+              <span>{{ block.settings.question | escape }}</span>
+              {%- render 'gp-icon', icon: 'chevron', class: 'gp-faq__chevron' -%}
+            </button>
+          </h3>
+          <div class="gp-faq__a" id="{{ gp_a_id }}" role="region" aria-labelledby="{{ gp_q_id }}" hidden>
+            {{ block.settings.answer }}
+          </div>
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{%- capture gp_faq_ld -%}
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {%- for block in section.blocks -%}
+      {
+        "@type": "Question",
+        "name": {{ block.settings.question | json }},
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": {{ block.settings.answer | strip_html | strip | json }}
+        }
+      }{% unless forloop.last %},{% endunless %}
+    {%- endfor -%}
+  ]
+}
+{%- endcapture -%}
+<script type="application/ld+json">{{ gp_faq_ld }}</script>
+
+{% schema %}
+{
+  "name": "GP FAQ",
+  "tag": "section",
+  "max_blocks": 10,
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Questions" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Everything people ask before buying" },
+    { "type": "range", "id": "padding_top", "label": "Padding top", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 },
+    { "type": "range", "id": "padding_bottom", "label": "Padding bottom", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 }
+  ],
+  "blocks": [
+    {
+      "type": "faq",
+      "name": "Question",
+      "settings": [
+        { "type": "text", "id": "question", "label": "Question", "default": "How soon will I see a difference?" },
+        { "type": "richtext", "id": "answer", "label": "Answer", "default": "<p>Most people notice better tone and hydration within two to three weeks. Collagen changes are slower — plan on eight to twelve weeks of consistent use.</p>" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "GP FAQ",
+      "blocks": [{ "type": "faq" }, { "type": "faq" }, { "type": "faq" }, { "type": "faq" }]
+    }
+  ]
+}
+{% endschema %}

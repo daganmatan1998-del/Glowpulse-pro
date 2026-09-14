@@ -1,0 +1,80 @@
+{%- render 'gp-assets' -%}
+
+<section class="gp-section" id="gp-reviews" style="padding-block: {{ section.settings.padding_top }}px {{ section.settings.padding_bottom }}px;">
+  <div class="gp-wrap">
+    <div class="gp-head gp-reveal">
+      {%- if section.settings.eyebrow != blank -%}
+        <p class="gp-eyebrow">{{ section.settings.eyebrow | escape }}</p>
+      {%- endif -%}
+      <h2 class="gp-h2">{{ section.settings.heading | escape }}</h2>
+      <div class="gp-rating" style="justify-content:center">
+        {%- render 'gp-stars', rating: 5, label: section.settings.aggregate -%}
+        <span>{{ section.settings.aggregate | escape }}</span>
+      </div>
+    </div>
+
+    <div class="gp-grid">
+      {%- for block in section.blocks -%}
+        <figure class="gp-card gp-review gp-reveal" data-gp-delay="{{ forloop.index0 | times: 60 }}" style="margin:0" {{ block.shopify_attributes }}>
+          {%- render 'gp-stars', rating: block.settings.rating -%}
+          <blockquote class="gp-review__text" style="margin:var(--gp-space-2) 0;border:0;padding:0">{{ block.settings.quote | escape }}</blockquote>
+          <figcaption class="gp-review__who">
+            {%- if block.settings.avatar != blank -%}
+              {%- assign gp_alt = block.settings.avatar.alt | default: block.settings.name -%}
+              {{ block.settings.avatar | image_url: width: 120 | image_tag:
+                   class: 'gp-review__avatar', widths: '40, 80, 120', sizes: '40px',
+                   loading: 'lazy', alt: gp_alt }}
+            {%- else -%}
+              <span class="gp-review__avatar" aria-hidden="true"></span>
+            {%- endif -%}
+            <span>
+              <span class="gp-review__name">{{ block.settings.name | escape }}</span><br>
+              {%- if block.settings.verified -%}
+                <span class="gp-review__verified">
+                  {%- render 'gp-icon', icon: 'check' -%}Verified purchase
+                </span>
+              {%- else -%}
+                <span style="color:var(--gp-secondary)">{{ block.settings.meta | escape }}</span>
+              {%- endif -%}
+            </span>
+          </figcaption>
+        </figure>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "GP Reviews",
+  "tag": "section",
+  "max_blocks": 6,
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Social proof" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "2,317 people stopped booking facials" },
+    { "type": "text", "id": "aggregate", "label": "Aggregate rating text", "default": "4.8 average from 2,317 verified reviews" },
+    { "type": "range", "id": "padding_top", "label": "Padding top", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 },
+    { "type": "range", "id": "padding_bottom", "label": "Padding bottom", "min": 24, "max": 160, "step": 8, "unit": "px", "default": 96 }
+  ],
+  "blocks": [
+    {
+      "type": "review",
+      "name": "Review",
+      "settings": [
+        { "type": "range", "id": "rating", "label": "Rating", "min": 1, "max": 5, "step": 1, "default": 5 },
+        { "type": "textarea", "id": "quote", "label": "Quote", "default": "Eight weeks in and the lines around my mouth have genuinely softened. I was sceptical." },
+        { "type": "text", "id": "name", "label": "Name", "default": "Maya R." },
+        { "type": "text", "id": "meta", "label": "Meta text", "default": "Tel Aviv" },
+        { "type": "checkbox", "id": "verified", "label": "Show verified purchase badge", "default": true },
+        { "type": "image_picker", "id": "avatar", "label": "Avatar" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "GP Reviews",
+      "blocks": [{ "type": "review" }, { "type": "review" }, { "type": "review" }]
+    }
+  ]
+}
+{% endschema %}

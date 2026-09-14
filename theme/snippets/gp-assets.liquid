@@ -1,0 +1,11 @@
+{%- comment -%}
+  Loads the GlowPulse design system. Rendered by every gp-* section so the
+  page styles correctly no matter which sections the merchant keeps or
+  reorders. Repeated tags resolve to the same URL, so the browser fetches
+  each file once.
+{%- endcomment -%}
+{{ 'glowpulse.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'glowpulse.js' | asset_url }}" defer="defer"></script>
+<noscript>
+  <style>.gp-reveal { opacity: 1 !important; transform: none !important; }</style>
+</noscript>

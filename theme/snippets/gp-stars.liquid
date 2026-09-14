@@ -1,0 +1,14 @@
+{%- comment -%}
+  Star rating.
+  Accepts: rating (number, 0-5), label (string, optional visually hidden text)
+{%- endcomment -%}
+{%- assign gp_rating = rating | default: 5 | round -%}
+<span class="gp-stars" role="img" aria-label="{{ label | default: gp_rating | append: ' out of 5 stars' }}">
+  {%- for i in (1..5) -%}
+    {%- if i <= gp_rating -%}
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 14.9l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9z"/></svg>
+    {%- else -%}
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false" style="fill:none;stroke:currentColor;stroke-width:1.4;opacity:.45"><path d="M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 14.9l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9z"/></svg>
+    {%- endif -%}
+  {%- endfor -%}
+</span>

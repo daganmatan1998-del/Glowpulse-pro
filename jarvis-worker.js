@@ -646,6 +646,34 @@ let googleRejectsReasoningEffort = false;
 
 const MESHY_BASE = 'https://api.meshy.ai/openapi/v2/text-to-3d';
 
+/* Meshy's text-to-3D is two jobs, not one. `preview` produces the mesh: the
+   right shape, but bare geometry with no surface on it. `refine` takes that
+   finished preview and paints it — base colour, and with enable_pbr the
+   metalness, roughness and normal maps that make a render look like a
+   photograph rather than a clay study.
+   Only the first half was ever run here, which is why generated models arrived
+   looking like grey sculpture. The second half costs another credit and about
+   another minute, and it is the whole difference.
+   Chaining is done here rather than in the page because the page must not hold
+   a Meshy task id's meaning: it polls one endpoint and is told what to poll
+   next. The worker stays stateless — the stage travels in the query string. */
+async function startMeshyTask(payload, env) {
+  const res = await fetch(MESHY_BASE, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + env.MESHY_API_KEY
+    },
+    body: JSON.stringify(payload)
+  });
+  const text = await res.text();
+  if (!res.ok) return { error: 'meshy ' + res.status + ': ' + text.slice(0, 300) };
+  let data; try { data = JSON.parse(text); } catch (err) { data = {}; }
+  const taskId = data.result || data.id;
+  if (!taskId) return { error: 'meshy did not return a task id: ' + text.slice(0, 200) };
+  return { taskId: taskId };
+}
+
 async function handleModel3d(request, env) {
   if (request.method !== 'POST') return json({ error: 'POST only' }, 405, env, request);
   if (!env.MESHY_API_KEY) {
@@ -655,56 +683,94 @@ async function handleModel3d(request, env) {
   const prompt = String((body && body.prompt) || '').trim().slice(0, 600);
   if (!prompt) return json({ error: 'no prompt' }, 400, env, request);
 
-  const res = await fetch(MESHY_BASE, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + env.MESHY_API_KEY
-    },
-    body: JSON.stringify({
-      mode: 'preview',
-      prompt: prompt,
-      art_style: body.style === 'sculpture' ? 'sculpture' : 'realistic',
-      should_remesh: true
-    })
-  });
+  const started = await startMeshyTask({
+    mode: 'preview',
+    prompt: prompt,
+    art_style: body.style === 'sculpture' ? 'sculpture' : 'realistic',
+    should_remesh: true
+  }, env);
+  if (started.error) return json({ error: started.error }, 502, env, request);
 
+  return json({ taskId: started.taskId, stage: 'preview' }, 200, env, request);
+}
+
+async function readMeshyTask(id, env) {
+  const res = await fetch(MESHY_BASE + '/' + encodeURIComponent(id), {
+    headers: { 'Authorization': 'Bearer ' + env.MESHY_API_KEY }
+  });
   const text = await res.text();
-  if (!res.ok) {
-    return json({ error: 'meshy ' + res.status + ': ' + text.slice(0, 300) }, 502, env, request);
-  }
+  if (!res.ok) return { httpError: 'meshy ' + res.status + ': ' + text.slice(0, 300) };
   let data; try { data = JSON.parse(text); } catch (err) { data = {}; }
-  const taskId = data.result || data.id;
-  if (!taskId) return json({ error: 'meshy did not return a task id: ' + text.slice(0, 200) }, 502, env, request);
-  return json({ taskId: taskId }, 200, env, request);
+  return { data: data };
 }
 
 async function handleModel3dStatus(request, env) {
   if (!env.MESHY_API_KEY) {
     return json({ error: '3D generation is not configured' }, 503, env, request);
   }
-  const id = new URL(request.url).searchParams.get('id');
+  const params = new URL(request.url).searchParams;
+  const id = params.get('id');
   if (!id) return json({ error: 'missing id' }, 400, env, request);
 
-  const res = await fetch(MESHY_BASE + '/' + encodeURIComponent(id), {
-    headers: { 'Authorization': 'Bearer ' + env.MESHY_API_KEY }
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    return json({ error: 'meshy ' + res.status + ': ' + text.slice(0, 300) }, 502, env, request);
-  }
-  let data; try { data = JSON.parse(text); } catch (err) { data = {}; }
+  const stage = params.get('stage') === 'refine' ? 'refine' : 'preview';
+  const wantsTexture = params.get('refine') !== '0';
+
+  const read = await readMeshyTask(id, env);
+  if (read.httpError) return json({ error: read.httpError }, 502, env, request);
+  const data = read.data;
 
   const status = String(data.status || '').toUpperCase();
   const urls = data.model_urls || {};
+  const raw = typeof data.progress === 'number' ? data.progress : 0;
+
+  /* Two jobs run back to back, so raw progress would count 0-100 twice. Each
+     stage owns half the bar, and it only ever moves forwards. */
+  const progress = (stage === 'refine' || !wantsTexture)
+    ? (wantsTexture ? 50 + Math.round(raw / 2) : raw)
+    : Math.round(raw / 2);
+
+  if (status === 'FAILED') {
+    return json({
+      status: 'FAILED', stage: stage, progress: progress, glb: null,
+      error: (data.task_error && data.task_error.message) || 'generation failed'
+    }, 200, env, request);
+  }
+
+  if (status !== 'SUCCEEDED') {
+    return json({ status: status, stage: stage, progress: progress, glb: null, error: null }, 200, env, request);
+  }
+
+  // The untextured mesh, either as the answer or as the thing to paint next.
+  const previewGlb = urls.glb || null;
+
+  if (stage === 'preview' && wantsTexture) {
+    /* enable_pbr is what buys the metal/roughness maps rather than a flat
+       colour. If this build of the API will not take it, texturing still
+       matters far more than PBR does — so try again plainly before giving up,
+       and if even that fails hand back the mesh we already paid for rather
+       than losing the whole job to an optional flag. */
+    let refine = await startMeshyTask({ mode: 'refine', preview_task_id: id, enable_pbr: true }, env);
+    if (refine.error) refine = await startMeshyTask({ mode: 'refine', preview_task_id: id }, env);
+    if (refine.error) {
+      return json({
+        status: 'SUCCEEDED', stage: 'preview', progress: 100,
+        glb: previewGlb, textured: false,
+        thumbnail: data.thumbnail_url || null,
+        note: 'texturing could not be started (' + refine.error + '); this is the untextured mesh',
+        error: null
+      }, 200, env, request);
+    }
+    return json({
+      status: 'TEXTURING', stage: 'refine', taskId: refine.taskId,
+      progress: 50, glb: null, previewGlb: previewGlb,
+      thumbnail: data.thumbnail_url || null, error: null
+    }, 200, env, request);
+  }
+
   return json({
-    status: status,
-    progress: typeof data.progress === 'number' ? data.progress : 0,
-    glb: status === 'SUCCEEDED' ? (urls.glb || null) : null,
-    thumbnail: data.thumbnail_url || null,
-    error: status === 'FAILED'
-      ? ((data.task_error && data.task_error.message) || 'generation failed')
-      : null
+    status: 'SUCCEEDED', stage: stage, progress: 100,
+    glb: previewGlb, textured: stage === 'refine',
+    thumbnail: data.thumbnail_url || null, error: null
   }, 200, env, request);
 }
 

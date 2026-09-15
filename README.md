@@ -127,3 +127,73 @@ Nothing about the backend changes. Every feature the page has — search, page
 reading, code execution, Shopify, calendar, camera, voice — runs on the phone
 exactly as it does on the desktop, because the page is the client and it
 brought its own tool loop with it.
+
+## Telling him something once, and having it hold
+
+The Memory tab summarizes your conversations, which is useful and also a
+rebuild: every refresh regenerates the whole picture from the transcripts, so
+anything it did not infer that round is simply gone. That is the wrong shape
+for a standing instruction — "always quote prices in shekels" is not something
+to be re-derived and possibly missed.
+
+The tab now has an **Add** box. What you type there goes into `profile.pinned`,
+which the summarizer is explicitly forbidden to touch, and it is handed to him
+at the top of every request as a standing instruction that outranks anything
+inferred. It reaches the system prompt on the very next message, in every
+conversation, old and new, and survives closing the tab because it is written
+to `localStorage` rather than held in the page.
+
+Each note has an ✕ next to it, because a note that cannot be removed is a
+setting you are stuck with. Notes he saved himself (the `remember_this` tool)
+and notes you typed land in the same list and behave identically — one code
+path, so there is no second kind of memory to reason about.
+
+It is per browser and per device, like everything else this page stores. The
+phone and the desktop keep separate lists; there is no account syncing them.
+
+## The 3D generator was only running half of itself
+
+Meshy's text-to-3D is two jobs. `preview` produces the mesh — the right shape,
+but bare geometry with nothing on its surface. `refine` takes that finished
+preview and paints it: base colour, and with `enable_pbr` the metalness,
+roughness and normal maps that are the difference between a render and a clay
+study. Only the first was ever run, which is why generated models arrived grey.
+
+Both now run, chained in the worker rather than the page: the page polls one
+endpoint and is told which task to poll next, so the worker stays stateless and
+an older deployed copy of it still answers the page correctly. The progress bar
+gives each stage half its range.
+
+It costs a second credit and about another minute. If the texture pass cannot
+start, or fails, or times out, the mesh that was already generated and paid for
+is shown instead and the result says `textured:false` — so he says it is a bare
+mesh rather than describing colours it does not have. If `enable_pbr` is
+refused, texturing is retried without it before anything is given up, because a
+textured model without PBR maps still beats a grey one.
+
+Prompts matter more than they did, and the tool now says so: the texture pass
+reads the same prompt, so naming the finish and material of each part ("matte
+black anodised aluminium, brushed steel cap, thin copper band") gives it
+something to paint where "a bottle" gives it nothing.
+
+## What the model viewer was doing to every model
+
+Two things, both visible in a screenshot.
+
+The camera sat at a fixed `(0, 0.6, 3)` whatever arrived in front of it. At the
+stage's real 260px height that is a 2:1 frame, and a model normalised to 1.8
+units reached 86% of the way to the bottom edge — so wide objects clipped the
+moment you turned them. The camera is now fitted to the model's bounding
+**sphere**, which is the same size from every angle, so a framed model cannot
+grow out of frame however it is rotated. Measured across a full rotation sweep
+(every 15° of azimuth, six elevations) on a tall bottle, a flat wide box and a
+sphere, at both desktop and phone aspect: worst case 0.966 of the way to the
+edge, on all of them.
+
+And there was nothing under the model, so it floated, and a floating object
+reads as a preview rather than as a thing. There is now a soft contact shadow
+on the ground beneath it, sized to that model's own footprint. It is a painted
+gradient rather than a shadow map: a real one needs per-model bias tuning and
+streaks across half of them when it is wrong, and this cannot fail that way.
+It is back-face culled, so turning the model underneath does not reveal a dark
+disc floating in front of it.

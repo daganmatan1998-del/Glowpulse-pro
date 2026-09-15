@@ -515,6 +515,33 @@
   }
   .planSection p, .planSection li{ font-size:12px; color:#eafcff; line-height:1.5; }
   .planSection ul{ padding-left:16px; margin:0; }
+  /* The add row is the one control in here that writes memory by hand, so it
+     sits above the list rather than under it: you type, it is remembered, and
+     the thing you just wrote appears directly below. */
+  #planAddRow{ display:flex; gap:6px; }
+  #planAddInput{
+    flex:1; min-width:0; background:rgba(0,0,0,0.35); border:1px solid rgba(var(--cyan-rgb), 0.3);
+    color:#eafcff; font-family:inherit; font-size:12px; padding:7px 9px;
+  }
+  #planAddInput:focus{ outline:none; border-color:rgba(var(--cyan-rgb), 0.7); }
+  #planAddInput::placeholder{ color:rgba(var(--dim-rgb), 0.45); }
+  #planAddBtn{
+    background:rgba(var(--cyan-rgb), 0.08); border:1px solid rgba(var(--cyan-rgb), 0.4);
+    color:var(--cyan); font-family:inherit; font-size:11px; padding:7px 12px; cursor:pointer; white-space:nowrap;
+  }
+  #planAddBtn:hover{ background:rgba(var(--cyan-rgb), 0.2); }
+  #planAddBtn:disabled{ opacity:0.5; cursor:default; }
+  #planAddNote{ font-size:10px; color:rgba(var(--dim-rgb), 0.5); line-height:1.5; }
+  /* A hand-written note outranks the summarizer and is never rebuilt away, so
+     the only way back out of it is an explicit delete. Without this the panel
+     would be write-only. */
+  .planNote{ display:flex; align-items:flex-start; gap:6px; }
+  .planNote > span{ flex:1; min-width:0; }
+  .planForget{
+    flex:none; background:none; border:none; color:rgba(var(--dim-rgb), 0.5);
+    font-family:inherit; font-size:12px; line-height:1.5; padding:0 2px; cursor:pointer;
+  }
+  .planForget:hover{ color:#ff8080; }
   #planUpdateBtn{
     align-self:flex-start; background:rgba(var(--cyan-rgb), 0.08); border:1px solid rgba(var(--cyan-rgb), 0.4);
     color:var(--cyan); font-family:inherit; font-size:11px; padding:7px 12px; cursor:pointer;
@@ -1149,6 +1176,11 @@
     <button id="languageBtn" title="Language">LANGUAGE</button>
   </div>
   <div id="planPanel">
+    <div id="planAddRow">
+      <input id="planAddInput" type="text" enterkeyhint="done" maxlength="240" autocomplete="off" placeholder="Something he should always remember about you…">
+      <button id="planAddBtn" type="button">+ ADD</button>
+    </div>
+    <div id="planAddNote">Kept forever, in every conversation.</div>
     <div id="planBody">
       <div class="planEmpty" id="planEmptyText">No plan yet — talk it through with J.A.R.V.I.S., then hit "Update Plan" to have him summarize where things stand.</div>
     </div>
@@ -1405,6 +1437,15 @@ const I18N = {
     planBtn: 'MEMORY', historyBtn: 'HISTORY', brainSettingsBtn: 'BRAIN', voiceSettingsBtn: 'VOICE ID', languageBtn: 'LANGUAGE',
     planEmptyText: 'Nothing remembered yet — talk to J.A.R.V.I.S. for a while, then hit "Refresh memory" and he will summarize what he has learned about you and where your work stands.',
     planUpdateBtn: '↻ REFRESH MEMORY FROM CONVERSATIONS',
+    planAddBtn: '+ ADD',
+    planAddPlaceholder: 'Something he should always remember about you…',
+    planAddNote: 'Kept forever, in every conversation — and never overwritten by the automatic summary.',
+    planForget: 'Forget this',
+    planSecAbout: 'ABOUT YOU', planSecPinned: 'YOU ASKED ME TO REMEMBER',
+    planSecPreferences: 'HOW YOU LIKE TO WORK', planSecProjects: 'ONGOING PROJECTS',
+    planSecOpenLoops: 'OPEN LOOPS', planSecNiche: 'NICHE', planSecAudience: 'TARGET AUDIENCE',
+    planSecIdeas: 'PRODUCT IDEAS', planSecPositioning: 'POSITIONING',
+    planSecQuestions: 'OPEN QUESTIONS', planSecNextSteps: 'NEXT STEPS',
     newChatBtn: '+ NEW CHAT',
     historyEmpty: 'No previous conversations yet.',
     historyUntitled: '(untitled conversation)',
@@ -1515,7 +1556,9 @@ const I18N = {
     modelDownload: 'Download .glb',
     modelExporting: 'exporting\u2026',
     modelExportFailed: 'export failed',
-    modelWorking: 'Building the 3D model — about a minute…',
+    modelWorking: 'Shaping the 3D model…',
+    modelTexturing: 'Texturing it — colour, metal and roughness…',
+    modelUntextured: 'The shape came out, but texturing failed — this is the bare mesh.',
     imgTooMany: 'Four attachments per message is the limit.',
     imgFailed: 'Could not attach that file',
     videoProcessing: 'Reading the video — sampling frames…',
@@ -1565,6 +1608,15 @@ const I18N = {
     planBtn: 'זיכרון', historyBtn: 'היסטוריה', brainSettingsBtn: 'מוח', voiceSettingsBtn: 'קול', languageBtn: 'שפה',
     planEmptyText: 'עדיין אין זיכרון — דברו עם ג\'רוויס קצת, ואז לחצו על "רענן זיכרון" כדי שיסכם מה למד עליכם ואיפה הדברים עומדים.',
     planUpdateBtn: '↻ רענן זיכרון מהשיחות',
+    planAddBtn: '+ הוסף',
+    planAddPlaceholder: 'משהו שהוא תמיד יזכור עליך…',
+    planAddNote: 'נשמר לתמיד, בכל שיחה — והסיכום האוטומטי לעולם לא דורס אותו.',
+    planForget: 'לשכוח את זה',
+    planSecAbout: 'עליך', planSecPinned: 'ביקשת ממני לזכור',
+    planSecPreferences: 'איך אתה אוהב לעבוד', planSecProjects: 'פרויקטים פעילים',
+    planSecOpenLoops: 'קצוות פתוחים', planSecNiche: 'נישה', planSecAudience: 'קהל יעד',
+    planSecIdeas: 'רעיונות למוצרים', planSecPositioning: 'מיצוב',
+    planSecQuestions: 'שאלות פתוחות', planSecNextSteps: 'הצעדים הבאים',
     newChatBtn: '+ שיחה חדשה',
     historyEmpty: 'אין עדיין שיחות קודמות.',
     historyUntitled: '(שיחה ללא כותרת)',
@@ -1672,7 +1724,9 @@ const I18N = {
     modelDownload: 'הורדת ‎.glb',
     modelExporting: 'מייצא\u2026',
     modelExportFailed: 'הייצוא נכשל',
-    modelWorking: 'בונה את המודל התלת-ממדי — כדקה…',
+    modelWorking: 'בונה את הצורה התלת-ממדית…',
+    modelTexturing: 'מושח טקסטורות — צבע, מתכת וחוסרפים…',
+    modelUntextured: 'הצורה יצאה, אבל הטקסטורות נכשלו — זה המש החשוף.',
     imgTooMany: 'עד 4 קבצים בהודעה אחת.',
     imgFailed: 'לא הצלחתי לצרף את הקובץ',
     videoProcessing: 'קורא את הסרטון — דוגם פריימים…',
@@ -1723,7 +1777,8 @@ function applyLanguage(lang){
     syncLabel:'syncLabel', frameLabel:'frameLabel', subsystemLine:'subsystemLine', posLabel:'posLabel',
     optionsTitle:'optionsTitle', planBtn:'planBtn', historyBtn:'historyBtn', brainSettingsBtn:'brainSettingsBtn',
     voiceSettingsBtn:'voiceSettingsBtn', languageBtn:'languageBtn', planEmptyText:'planEmptyText',
-    planUpdateBtn:'planUpdateBtn', newChatBtn:'newChatBtn', brainUrlLabel:'brainUrlLabel',
+    planUpdateBtn:'planUpdateBtn', planAddBtn:'planAddBtn', planAddNote:'planAddNote',
+    newChatBtn:'newChatBtn', brainUrlLabel:'brainUrlLabel',
     backendSaveBtn:'backendSaveBtn', backendClearBtn:'backendClearBtn', brainHint:'brainHint',
     mcpLabel:'mcpLabel', mcpSaveBtn:'mcpSaveBtn', mcpHint:'mcpHint',
     fallbackTestBtn:'fallbackTestBtn', fallbackHint:'fallbackHint', sessionCheckBtn:'sessionCheckBtn',
@@ -1748,7 +1803,8 @@ function applyLanguage(lang){
 
   const placeholderMap = {
     backendUrlInput:'backendUrlPlaceholder', cartesiaVoiceIdInput:'cartesiaVoiceIdPlaceholder',
-    chatInput:'chatInputPlaceholder', authEmailInput:'authEmailPlaceholder', decoyInput:'decoyPlaceholder'
+    chatInput:'chatInputPlaceholder', authEmailInput:'authEmailPlaceholder', decoyInput:'decoyPlaceholder',
+    planAddInput:'planAddPlaceholder'
   };
   Object.keys(placeholderMap).forEach(id=>{
     const el = document.getElementById(id);
@@ -1781,7 +1837,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.4.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -3474,7 +3530,10 @@ function planToMemoryText(memory){
   if(!mem) return '';
   const parts = [];
   const p = mem.profile || {};
-  if(p.pinned && p.pinned.length)           parts.push('He explicitly asked you to remember: ' + p.pinned.join('; '));
+  if(p.pinned && p.pinned.length)           parts.push(
+    'STANDING INSTRUCTIONS — he wrote these down himself so that you would hold them in every conversation, ' +
+    'and they outrank anything inferred below. Follow them and adapt to them without being reminded, ' +
+    'and never ask him to repeat something that is already on this list: ' + p.pinned.join('; '));
   if(p.about && p.about.length)             parts.push('About him: ' + p.about.join('; '));
   if(p.preferences && p.preferences.length) parts.push('How he likes to work: ' + p.preferences.join('; '));
   if(p.projects && p.projects.length)       parts.push('Ongoing projects: ' + p.projects.join('; '));
@@ -5993,31 +6052,41 @@ const languageBtn = document.getElementById('languageBtn');
 const languagePanel = document.getElementById('languagePanel');
 languageBtn.addEventListener('click', ()=> toggleSubPanel(languagePanel, languageBtn));
 
+/* Headings are i18n keys rather than literals: the tab is titled זיכרון in Hebrew,
+   and English section headers underneath a Hebrew Add button read as half-built. */
 const PROFILE_SECTIONS = [
-  ['pinned', 'YOU ASKED ME TO REMEMBER'],
-  ['about', 'ABOUT YOU'],
-  ['preferences', 'HOW YOU LIKE TO WORK'],
-  ['projects', 'ONGOING PROJECTS'],
-  ['open_loops', 'OPEN LOOPS']
+  ['pinned', 'planSecPinned'],
+  ['about', 'planSecAbout'],
+  ['preferences', 'planSecPreferences'],
+  ['projects', 'planSecProjects'],
+  ['open_loops', 'planSecOpenLoops']
 ];
 const STORE_SECTIONS = [
-  ['niche', 'NICHE'],
-  ['target_audience', 'TARGET AUDIENCE'],
-  ['product_ideas', 'PRODUCT IDEAS'],
-  ['positioning', 'POSITIONING'],
-  ['open_questions', 'OPEN QUESTIONS'],
-  ['next_steps', 'NEXT STEPS']
+  ['niche', 'planSecNiche'],
+  ['target_audience', 'planSecAudience'],
+  ['product_ideas', 'planSecIdeas'],
+  ['positioning', 'planSecPositioning'],
+  ['open_questions', 'planSecQuestions'],
+  ['next_steps', 'planSecNextSteps']
 ];
+
+/* Only 'pinned' gets a delete: everything else is regenerated from the
+   transcripts on the next refresh, so removing one there would come straight
+   back and the button would be a lie. */
+const REMOVABLE_SECTIONS = ['pinned'];
 
 function renderSections(obj, sections){
   let html = '';
   if(!obj) return html;
-  for(const [key, label] of sections){
+  for(const [key, labelKey] of sections){
     const val = obj[key];
     if(!val || (Array.isArray(val) && val.length === 0)) continue;
-    html += `<div class="planSection"><h4>${label}</h4>`;
+    html += `<div class="planSection"><h4>${escapeHtml(t(labelKey))}</h4>`;
     if(Array.isArray(val)){
-      html += '<ul>' + val.map(v=>`<li>${escapeHtml(v)}</li>`).join('') + '</ul>';
+      const removable = REMOVABLE_SECTIONS.indexOf(key) >= 0;
+      html += '<ul>' + val.map((v, i)=> removable
+        ? `<li class="planNote"><span>${escapeHtml(v)}</span><button type="button" class="planForget" data-cat="${escapeHtml(key)}" data-idx="${i}" title="${escapeHtml(t('planForget'))}" aria-label="${escapeHtml(t('planForget'))}">✕</button></li>`
+        : `<li>${escapeHtml(v)}</li>`).join('') + '</ul>';
     } else {
       html += `<p>${escapeHtml(val)}</p>`;
     }
@@ -6033,8 +6102,99 @@ function renderPlan(memory){
     return;
   }
   const html = renderSections(mem.profile, PROFILE_SECTIONS) + renderSections(mem.store, STORE_SECTIONS);
-  planBody.innerHTML = html || '<div class="planEmpty">Nothing concrete yet — keep talking it through.</div>';
+  planBody.innerHTML = html || '<div class="planEmpty">' + escapeHtml(t('planEmptyText')) + '</div>';
 }
+
+/* The list is rebuilt from scratch on every change, so the delete buttons are
+   new DOM each time — one delegated listener on the container outlives them. */
+planBody.addEventListener('click', async (e)=>{
+  const btn = e.target.closest && e.target.closest('.planForget');
+  if(!btn) return;
+  await forgetNote(btn.dataset.cat, parseInt(btn.dataset.idx, 10));
+});
+
+const MAX_NOTES_PER_LIST = 40;
+
+/* The one place memory is written. The remember_this tool and the Add button
+   in this panel both come through here, so a note typed by hand and a note
+   J.A.R.V.I.S. saved himself are the same thing and behave identically. */
+async function rememberNotes(notes, category){
+  const clean = (Array.isArray(notes) ? notes : [notes])
+    .map(n => String(n || '').trim())
+    .filter(Boolean);
+  if(!clean.length) return { error: 'nothing to remember' };
+
+  const allowed = ['pinned', 'about', 'preferences', 'projects', 'open_loops'];
+  const cat = allowed.indexOf(category) >= 0 ? category : 'pinned';
+
+  const memory = normalizeMemory(currentPlanCache) || { store: null, profile: null };
+  memory.profile = memory.profile || {};
+  const existing = Array.isArray(memory.profile[cat]) ? memory.profile[cat] : [];
+
+  // Case-insensitive dedupe, newest wins, oldest trimmed off the front.
+  const seen = new Set(existing.map(n => String(n).toLowerCase()));
+  const added = [];
+  for(const note of clean){
+    if(seen.has(note.toLowerCase())) continue;
+    seen.add(note.toLowerCase());
+    added.push(note);
+  }
+  memory.profile[cat] = existing.concat(added).slice(-MAX_NOTES_PER_LIST);
+
+  currentPlanCache = memory;
+  try{ await Store.set(PLAN_KEY, JSON.stringify(memory), false); }
+  catch(err){ return { error: 'could not write to storage: ' + err.message }; }
+  renderPlan(memory);
+  return {
+    ok: true,
+    stored: added.length,
+    duplicates: clean.length - added.length,
+    category: cat,
+    total_in_category: memory.profile[cat].length
+  };
+}
+
+async function forgetNote(category, index){
+  const mem = normalizeMemory(currentPlanCache);
+  if(!mem || !mem.profile) return;
+  const list = mem.profile[category];
+  if(!Array.isArray(list) || !(index >= 0) || index >= list.length) return;
+  list.splice(index, 1);
+  currentPlanCache = mem;
+  try{ await Store.set(PLAN_KEY, JSON.stringify(mem), false); }
+  catch(err){ addMessage('system', 'Could not update memory (' + err.message + ').'); return; }
+  renderPlan(mem);
+}
+
+const planAddInput = document.getElementById('planAddInput');
+const planAddBtn = document.getElementById('planAddBtn');
+
+async function submitPlanNote(){
+  const text = (planAddInput.value || '').trim();
+  if(!text) return;
+  planAddBtn.disabled = true;
+  const result = await rememberNotes([text], 'pinned');
+  planAddBtn.disabled = false;
+  if(result && result.error){
+    addMessage('system', 'Could not save that to memory (' + result.error + ').');
+    return;
+  }
+  planAddInput.value = '';
+  planAddInput.focus();
+}
+
+planAddBtn.addEventListener('click', submitPlanNote);
+planAddInput.addEventListener('keydown', (e)=>{
+  // Enter saves. The panel sits inside the page, not a form, so nothing submits on its own.
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); submitPlanNote(); }
+});
+
+/* Headings, the empty-state line and the delete tooltips are all translated,
+   and the panel is often already open when the language is switched. */
+document.addEventListener('jarvis:languagechange', ()=>{
+  if(currentPlanCache) renderPlan(currentPlanCache);
+  else renderPlan(null);
+});
 
 function escapeHtml(str){
   const d = document.createElement('div');
@@ -7348,6 +7508,7 @@ function disposeViewers(){
       cancelAnimationFrame(v.raf);
       v.controls && v.controls.dispose();
       v.envRT && v.envRT.dispose();
+      v.shadowTex && v.shadowTex.dispose();
       v.renderer.dispose();
       v.renderer.forceContextLoss && v.renderer.forceContextLoss();
     }catch(err){}
@@ -7428,8 +7589,47 @@ function mountModelViewer(container, source, onReady){
 
   // envRT is held so teardown can release it: a PMREM render target per model
   // is real GPU memory, and clearing a long chat would otherwise leak all of it.
-  const viewer = { renderer, controls, raf: 0, envRT: envRT, model: null };
+  const viewer = { renderer, controls, raf: 0, envRT: envRT, model: null, shadowTex: null };
   liveViewers.push(viewer);
+
+  /* Nothing under a model is what makes it float, and a floating object reads
+     as a preview rather than as a thing. A real shadow map would need per-model
+     bias tuning and streaks across half of them when it is wrong; a painted
+     gradient on the ground plane cannot fail that way and does most of the same
+     work — it is what model-viewer shipped for years. Sized to the model's own
+     footprint so a tall bottle and a flat box each get their own. */
+  function addContactShadow(model){
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const centre = box.getCenter(new THREE.Vector3());
+    const span = Math.max(size.x, size.z);
+    if(!isFinite(span) || span <= 0) return;
+
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const ctx = c.getContext('2d');
+    if(!ctx) return;
+    const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0,    'rgba(0,0,0,0.5)');
+    grad.addColorStop(0.45, 'rgba(0,0,0,0.2)');
+    grad.addColorStop(1,    'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+
+    const tex = new THREE.CanvasTexture(c);
+    if(THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+    viewer.shadowTex = tex;
+
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(span * 1.9, span * 1.9),
+      // depthWrite off so it never punches a hole in anything drawn after it.
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+    );
+    plane.rotation.x = -Math.PI / 2;
+    plane.position.set(centre.x, box.min.y - span * 0.01, centre.z);
+    plane.renderOrder = -1;
+    scene.add(plane);
+  }
 
   // Normalise size and centre it, so every model arrives framed the same way
   // regardless of the units it was built or generated in.
@@ -7442,7 +7642,39 @@ function mountModelViewer(container, source, onReady){
     model.position.sub(centre.multiplyScalar(scale));
     scene.add(model);
     viewer.model = model;
+    // After scaling and centring, so the shadow is measured in final units.
+    try{ addContactShadow(model); }catch(err){ /* a model is worth more than its shadow */ }
+    frameCamera(model);
     if(onReady) onReady(model);
+  }
+
+  /* The camera used to sit at a fixed (0, 0.6, 3) regardless of what arrived in
+     front of it. At the stage's real 260px height that is a 2:1 frame, and a
+     model normalised to 1.8 units filled it top to bottom with nothing to
+     spare — measured at 86% of the way to the bottom edge, so a wide object
+     clipped as soon as you turned it, and the contact shadow landed off-screen
+     entirely.
+     Fitting to the model's bounding SPHERE rather than its box is what makes
+     that hold while the user drags: a sphere is the same size from every angle,
+     so a model framed this way cannot grow out of frame no matter how it is
+     rotated. Whichever of the two fields of view is the tighter one decides the
+     distance — at a wide aspect that is the vertical, at a narrow phone-width
+     one it is the horizontal. */
+  function frameCamera(model){
+    const sphere = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
+    if(!isFinite(sphere.radius) || sphere.radius <= 0) return;
+
+    const vFov = camera.fov * Math.PI / 180;
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+    const dist = (sphere.radius / Math.sin(Math.min(vFov, hFov) / 2)) * 1.12;
+
+    // Aimed a little below centre so the ground and the shadow on it are in
+    // shot, and lifted so the object is read slightly from above like a product.
+    const look = sphere.center.clone();
+    look.y -= sphere.radius * 0.12;
+    camera.position.set(0, look.y + sphere.radius * 0.34, dist);
+    camera.lookAt(look);
+    if(controls){ controls.target.copy(look); controls.update(); }
   }
 
   if(builder){
@@ -7601,7 +7833,7 @@ async function callBuild3dTool(input){
 
 const MODEL3D_TOOL = {
   name: 'generate_3d_model',
-  description: "Generate a photorealistic 3D model through an external service. This COSTS CREDITS and takes about a minute, so use build_3d_model instead unless the user has explicitly asked for high quality, photorealism, or a real mesh they can download — or unless the subject is organic (a face, an animal, a plant) which cannot be built from primitives. Describe the object plainly and concretely — its shape, material and colour — since that is what the generator works from. Takes about a minute. Do not use it for logos, flat images, scenes or people; it makes single objects.",
+  description: "Generate a photorealistic 3D model through an external service. It runs in two passes — first the mesh, then a texture pass that paints on the colour, metalness and roughness — so it COSTS CREDITS FOR BOTH and takes roughly two minutes. Use build_3d_model instead unless the user has explicitly asked for high quality, photorealism, or a real mesh they can download — or unless the subject is organic (a face, an animal, a plant) which cannot be built from primitives.\n\nThe texture pass works from the same prompt, so name the MATERIALS and the COLOURS, not just the shape: \"a matte black anodised aluminium water bottle with a brushed steel screw cap and a thin copper band at the base\" gives it something to paint, where \"a bottle\" gives it nothing and comes back grey. Say the finish (matte, gloss, brushed, anodised, frosted, woven), the material, and the colour, for each distinct part.\n\nIf the texture pass fails the bare mesh is shown instead and the result says textured:false — when that happens, say so plainly and do not describe colours the model does not have. Do not use it for logos, flat images, scenes or people; it makes single objects.",
   input_schema: {
     type:'object',
     properties:{
@@ -7626,32 +7858,74 @@ async function callModel3dTool(input){
 
     const note = addMessage('system', t('modelWorking'));
 
-    // Generation runs about a minute; poll rather than hold a request open.
-    const deadline = Date.now() + 4 * 60 * 1000;
+    /* Two jobs run back to back now — the mesh, then the texture pass over it
+       — and the worker says which one is being polled. The page's only job is
+       to follow the task id it is handed and to keep hold of the bare mesh, so
+       that a texture pass failing at the last moment costs the texture rather
+       than the whole model. An older deployed worker answers SUCCEEDED on the
+       first poll with no stage at all, and that path still works untouched. */
+    let taskId = started.taskId;
+    let stage = started.stage === 'refine' ? 'refine' : 'preview';
+    let previewGlb = null;
+
+    // Mesh plus texture pass: roughly two minutes in the normal case.
+    const deadline = Date.now() + 8 * 60 * 1000;
     while(Date.now() < deadline){
       if(userInterrupted){ note.remove(); return { error:'cancelled' }; }
       await new Promise(r => setTimeout(r, 4000));
-      const pollRes = await fetch(backendUrl + '/model3d/status?id=' + encodeURIComponent(started.taskId), {
+      const pollRes = await fetch(backendUrl + '/model3d/status?id=' + encodeURIComponent(taskId)
+                                  + '&stage=' + stage + '&refine=1', {
         headers: jarvisHeaders()
       });
       if(pollRes.status === 401){ note.remove(); await forceReauth(); return { error:'session expired' }; }
       const st = await pollRes.json();
       if(!pollRes.ok){ note.remove(); return { error: st.error || 'status check failed' }; }
 
-      if(typeof st.progress === 'number' && st.progress > 0){
-        note.textContent = t('modelWorking') + ' ' + st.progress + '%';
+      // The mesh is done and the texture pass has started on a new task id.
+      if(st.status === 'TEXTURING' && st.taskId){
+        taskId = st.taskId;
+        stage = 'refine';
+        previewGlb = st.previewGlb || previewGlb;
+        note.textContent = t('modelTexturing');
+        continue;
       }
+
+      const label = stage === 'refine' ? t('modelTexturing') : t('modelWorking');
+      if(typeof st.progress === 'number' && st.progress > 0){
+        note.textContent = label + ' ' + st.progress + '%';
+      } else {
+        note.textContent = label;
+      }
+
       if(st.status === 'SUCCEEDED' && st.glb){
         note.remove();
         addModelBubble(st.glb, prompt);
-        return { ok:true, shown:true, note:'The model is now displayed in the chat and the user can rotate it.' };
+        if(st.textured === false && st.note) addMessage('system', t('modelUntextured'));
+        return { ok:true, shown:true, textured: st.textured !== false,
+                 note: st.textured === false
+                   ? 'The model is displayed but texturing failed, so it is a bare mesh (' + st.note + '). Say so plainly.'
+                   : 'The textured model is now displayed in the chat and the user can rotate it.' };
       }
       if(st.status === 'FAILED'){
         note.remove();
+        /* The mesh was already generated and paid for. Losing it because the
+           paint job failed would be the worst of both. */
+        if(previewGlb){
+          addModelBubble(previewGlb, prompt);
+          addMessage('system', t('modelUntextured'));
+          return { ok:true, shown:true, textured:false,
+                   note:'The shape generated but texturing failed, so what is shown is the untextured mesh. Say that plainly rather than describing colours it does not have.' };
+        }
         return { error: st.error || 'generation failed' };
       }
     }
     note.remove();
+    if(previewGlb){
+      addModelBubble(previewGlb, prompt);
+      addMessage('system', t('modelUntextured'));
+      return { ok:true, shown:true, textured:false,
+               note:'Texturing timed out, so what is shown is the untextured mesh. Say that plainly.' };
+    }
     return { error:'timed out waiting for the model' };
   }catch(err){
     return { error:'could not reach the 3D service: ' + err.message };
@@ -8112,42 +8386,9 @@ async function callCalendarTool(input){
   }
 }
 
-const MAX_NOTES_PER_LIST = 40;
-
 async function callRememberTool(input){
-  const notes = (input && Array.isArray(input.notes) ? input.notes : [])
-    .map(n => String(n || '').trim())
-    .filter(Boolean);
-  if(!notes.length) return { error: 'nothing to remember' };
-
-  const allowed = ['pinned', 'about', 'preferences', 'projects', 'open_loops'];
-  const category = allowed.indexOf(input && input.category) >= 0 ? input.category : 'pinned';
-
-  const memory = normalizeMemory(currentPlanCache) || { store: null, profile: null };
-  memory.profile = memory.profile || {};
-  const existing = Array.isArray(memory.profile[category]) ? memory.profile[category] : [];
-
-  // Case-insensitive dedupe, newest wins, oldest trimmed off the front.
-  const seen = new Set(existing.map(n => n.toLowerCase()));
-  const added = [];
-  for(const note of notes){
-    if(seen.has(note.toLowerCase())) continue;
-    seen.add(note.toLowerCase());
-    added.push(note);
-  }
-  memory.profile[category] = existing.concat(added).slice(-MAX_NOTES_PER_LIST);
-
-  currentPlanCache = memory;
-  try{ await Store.set(PLAN_KEY, JSON.stringify(memory), false); }
-  catch(err){ return { error: 'could not write to storage: ' + err.message }; }
-  renderPlan(memory);
-  return {
-    ok: true,
-    stored: added.length,
-    duplicates: notes.length - added.length,
-    category: category,
-    total_in_category: memory.profile[category].length
-  };
+  const notes = (input && Array.isArray(input.notes)) ? input.notes : [];
+  return await rememberNotes(notes, input && input.category);
 }
 
 async function callShowHtmlTool(input){

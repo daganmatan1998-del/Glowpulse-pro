@@ -21,7 +21,7 @@
    serving the copy they already have.
    ===================================================================== */
 
-const SHELL_VERSION = 'jarvis-shell-v1';
+const SHELL_VERSION = 'jarvis-shell-v2';
 const CDN_VERSION   = 'jarvis-cdn-v1';
 
 /* Only what the app cannot start without. Icons are left out on purpose:

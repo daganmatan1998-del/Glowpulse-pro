@@ -62,3 +62,17 @@ The page's CSS can be checked in the pre-installed Chromium via Playwright
 (`/opt/node22/lib/node_modules/playwright`), forcing state by setting
 `document.documentElement.className`. Wait out any transition before reading
 `getComputedStyle`, or you read the value at the start of the animation.
+
+Serve `dist/` over http for anything touching storage — `localStorage` throws on
+`file://`. The auth gate can be set aside with
+`document.getElementById('authGate').style.display='none'`; everything behind it
+is ordinary DOM and drives normally.
+
+**The 3D viewer CAN be rendered here, despite the CDN being blocked.** jsdelivr
+is refused by the egress proxy but npm is not: `npm pack three@0.128.0`, unpack
+it, and serve `build/three.min.js` plus the `examples/js/` addons locally.
+Launch Chromium with `--use-gl=swiftshader --enable-unsafe-swiftshader` and
+WebGL works. Slice `mountModelViewer` straight out of `index.html` by string
+index into a harness rather than retyping it, so what runs is the real function.
+Framing and clipping are then measurable: project a model's bounding-box corners
+with `vec.project(camera)` and check the result stays inside NDC -1..1.

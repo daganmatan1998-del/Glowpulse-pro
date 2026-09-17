@@ -1600,6 +1600,7 @@ const I18N = {
     imgFailed: 'Could not attach that file',
     videoProcessing: 'Reading the video — sampling frames…',
     replyCappedByBackend: 'Cut off after only {n} tokens, though {max} were requested \u2014 so the limit is being imposed by your backend, not by him. Redeploy jarvis-worker.js: the current one is rewriting the request instead of passing it through.',
+    imageNotSeen: 'That image never reached him — {engine} has no vision, so the worker stripped it out on the way. Fix it by setting ANTHROPIC_API_KEY, or by pointing the chain at a model that can see (Gemini, GPT-4o, Grok, Llama 4), or by adding that model to VISION_ENGINES on the worker.',
     usingFallback: 'Anthropic is unavailable, so he has switched to {model}. He will keep working, but web search and connected tools are Anthropic-only and are off until it recovers.',
     backOnPrimary: 'Anthropic is answering again.',
     retryingBigger: '\u25B8 that needed more room than a normal reply — asking again with a larger budget\u2026',
@@ -1768,6 +1769,7 @@ const I18N = {
     imgFailed: 'לא הצלחתי לצרף את הקובץ',
     videoProcessing: 'קורא את הסרטון — דוגם פריימים…',
     replyCappedByBackend: 'נחתך אחרי {n} טוקנים בלבד למרות שביקשנו {max} \u2014 כלומר המגבלה מגיעה מה-backend שלך, לא ממנו. תפרוס מחדש את jarvis-worker.js: הנוכחי משכתב את הבקשה במקום להעביר אותה.',
+    imageNotSeen: 'התמונה לא הגיעה אליו — ל-{engine} אין ראייה, אז ה-worker הוריד אותה בדרך. לתקנה: להגדיר ANTHROPIC_API_KEY, או להעביר את השרשרת למודל שרואה (Gemini, GPT-4o, Grok, Llama 4), או להוסיף אותו ל-VISION_ENGINES ב-worker.',
     usingFallback: 'Anthropic לא זמינה, אז הוא עבר ל-{model}. הוא ימשיך לעבוד, אבל חיפוש באינטרנט והכלים המחוברים קיימים רק ב-Anthropic והם כבויים עד שהיא תחזור.',
     backOnPrimary: 'Anthropic חזרה לענות.',
     retryingBigger: '\u25B8 זה דרש יותר מקום מתשובה רגילה — מנסה שוב עם תקציב גדול יותר\u2026',
@@ -1874,7 +1876,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.5.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -5683,7 +5685,8 @@ let backendUrl = DEFAULT_BACKEND_URL;
 let backendSupportsStreaming = null;
 let backendCapabilities = null;
 let backendProbe = null;   // in-flight /health check, so callers can wait for it
-let announcedFallback = null; // which standby model we have already mentioned
+let announcedFallback = null;
+let announcedBlind = null; // which standby model we have already mentioned
 /* An empty backend address is ambiguous: it can mean "the user deliberately
    chose in-chat mode" or "nothing was ever configured". Only the first should
    survive a 401 from Anthropic — the second gets pointed back at the worker. */
@@ -8711,6 +8714,18 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
   // Which engine actually answered. Recorded even on success, because the
   // question only gets asked after something has already gone wrong.
   lastEngineLabel = response.headers.get('X-Jarvis-Engine') || lastEngineLabel;
+
+  /* The picture was attached, shown in the bubble, and then thrown away before
+     the request left the worker because the engine that answered has no vision.
+     Said once per engine: without it the reply reads as though he were lying
+     about what he can do, which is the one thing he must never look like. */
+  const blindEngine = response.headers.get('X-Jarvis-Blind');
+  if(blindEngine && blindEngine !== announcedBlind){
+    announcedBlind = blindEngine;
+    addMessage('system', t('imageNotSeen').replace('{engine}', blindEngine));
+  } else if(!blindEngine){
+    announcedBlind = null;
+  }
 
   const fallbackModel = response.headers.get('X-Jarvis-Fallback');
   if(fallbackModel && fallbackModel !== announcedFallback){

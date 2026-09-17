@@ -120,6 +120,14 @@ function cors(env, request) {
     'Access-Control-Allow-Origin': value,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Jarvis-Token, Authorization, anthropic-version, anthropic-beta',
+    /* Without this the page cannot READ a single one of the X-Jarvis-* headers
+       below: a cross-origin response only exposes a handful of safelisted
+       headers unless the server names the rest here. Everything the worker was
+       trying to tell the page about itself — which engine answered, that it had
+       fallen back to another model, that an image was dropped — arrived and was
+       then discarded by the browser. That is why the debug line said
+       "engine=unknown" while the worker knew perfectly well which engine it was. */
+    'Access-Control-Expose-Headers': 'X-Jarvis-Engine, X-Jarvis-Fallback, X-Jarvis-Voice, X-Jarvis-Blind',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };
@@ -452,6 +460,9 @@ async function callEngine(engine, body, env, request, announce) {
 
   const headers = { ...cors(env, request), 'X-Jarvis-Engine': engine.label };
   if (announce) headers['X-Jarvis-Fallback'] = engine.model;
+  /* The reply will talk about an image it never received. Without this the page
+     has no way to know that, and the user is left thinking the app is lying. */
+  if (imageWillBeDropped(engine, body, env)) headers['X-Jarvis-Blind'] = engine.label;
 
   if (engine.vendor === 'anthropic') {
     const contentType = upstream.headers.get('Content-Type') || '';
@@ -511,6 +522,7 @@ async function callWorkersAI(engine, body, env, request, announce) {
     }
     const headers = { ...cors(env, request), 'X-Jarvis-Engine': engine.label };
     if (announce) headers['X-Jarvis-Fallback'] = engine.model;
+    if (imageWillBeDropped(engine, body, env)) headers['X-Jarvis-Blind'] = engine.label;
     const shaped = {
       content: [{ type: 'text', text: stripLeadingThinkingBlock(String(text)) }],
       stop_reason: 'end_turn',
@@ -894,7 +906,13 @@ function anthropicBlocksToOpenAI(content, allowImages) {
     const pieces = [];
     for (const block of content) {
       if (block.type === 'text') pieces.push(block.text);
-      else if (block.type === 'image') pieces.push('[the user attached an image, which this model cannot view]');
+      else if (block.type === 'image') pieces.push(
+        '[An image was attached here by the user, but it could not be delivered to you: ' +
+        'the engine answering this request has no vision, so the picture was stripped out on the way. ' +
+        'Say plainly that the image did not reach you and that this is a backend limitation — ' +
+        'do NOT claim you are unable to look at images as a general matter, and do not pretend ' +
+        'the user failed to send one. Asking them to describe it is a reasonable fallback, ' +
+        'but only after saying why.]');
       else if (block.type === 'document') pieces.push('[the user attached a document, which this model cannot read]');
     }
     return pieces.join('\n').trim();
@@ -916,11 +934,41 @@ function anthropicBlocksToOpenAI(content, allowImages) {
   return parts.length ? parts : '';
 }
 
+/* Whether a model can look at a picture is a property of the MODEL, not of the
+   company that sells it. This used to whitelist exactly one vendor — google —
+   so GPT-4o, Grok, Pixtral, Llama 4 and every vision model on OpenRouter were
+   all declared blind, their images replaced by a line of text, and the model
+   then told the user it could not see images. It was right: by the time it read
+   the request, there was no image in it. */
+const VISION_MODELS = [
+  /gpt-4o/i, /gpt-4\.1/i, /gpt-4-turbo/i, /gpt-4\.5/i, /gpt-5/i, /chatgpt-4o/i,
+  /(^|[\/-])o[134]([-.]|$)/i,
+  /gemini/i, /grok-[2-9]/i, /grok.*vision/i,
+  /llama-?4/i, /scout/i, /maverick/i, /llama-3\.2-(11|90)b/i, /llama.*vision/i,
+  /pixtral/i, /qwen.*-?vl/i, /internvl/i, /molmo/i, /claude/i, /mistral-(small|medium)-3/i
+];
+
 function engineSeesImages(provider, env) {
   const vendor = (provider && provider.vendor) || '';
+  const model  = String((provider && provider.model) || '');
+
+  /* The manual override, and the only thing that does not go stale as models
+     ship. Takes a vendor ("xai") or a piece of a model name ("qwen2.5-vl"). */
   const extra = String((env && env.VISION_ENGINES) || '')
     .split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
-  return vendor === 'google' || extra.indexOf(vendor) >= 0;
+  if (extra.some(x => vendor === x || model.toLowerCase().indexOf(x) >= 0)) return true;
+
+  if (vendor === 'anthropic') return true;     // every Claude sees
+  if (vendor === 'google')    return true;     // every Gemini sees
+  return VISION_MODELS.some(re => re.test(model));
+}
+
+/* Did this request carry a picture that this engine will not be shown? */
+function imageWillBeDropped(engine, body, env) {
+  if (!engine || engine.vendor === 'anthropic') return false;
+  if (engineSeesImages(engine, env)) return false;
+  return (body && body.messages || []).some(m =>
+    Array.isArray(m.content) && m.content.some(b => b && b.type === 'image'));
 }
 
 function toOpenAIRequest(body, env, provider) {

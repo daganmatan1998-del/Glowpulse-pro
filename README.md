@@ -214,3 +214,42 @@ gradient rather than a shadow map: a real one needs per-model bias tuning and
 streaks across half of them when it is wrong, and this cannot fail that way.
 It is back-face culled, so turning the model underneath does not reveal a dark
 disc floating in front of it.
+
+## Why he said he could not see the picture
+
+Two separate faults, and together they made the app look like it was lying.
+
+**The image really was being thrown away.** `engineSeesImages()` decided whether
+to forward a picture by looking at the *vendor*, and the whitelist held exactly
+one entry: `google`. So GPT-4o, Grok, Pixtral, Llama 4 Scout, every vision model
+on OpenRouter — all declared blind. When an engine was "blind" the image block
+was replaced, before the request left the worker, with the sentence `[the user
+attached an image, which this model cannot view]`. The model then read that
+sentence and told the user it could not view images. It was not hallucinating;
+by the time it saw the request, there was no image in it.
+
+Vision is a property of the **model**, not of the company selling it, so that is
+what is tested now: a list of known vision families (GPT-4o/4.1/5, o-series,
+Gemini, Grok 2+, Llama 4 / Scout / Maverick / 3.2-11B and 90B, Pixtral, Qwen-VL,
+InternVL, Molmo, Claude, Mistral Small/Medium 3) plus `VISION_ENGINES` as the
+manual override — which now accepts a model name, not only a vendor, because a
+list of model families is the part that goes stale.
+
+**And the page could never be told.** `cors()` set `X-Jarvis-Engine` and
+`X-Jarvis-Fallback` but never `Access-Control-Expose-Headers`, and a browser
+hands a cross-origin response only a few safelisted headers unless the server
+names the rest. So every one of those headers arrived and was discarded before
+the page could read it. That is why the debug line read `engine=unknown` while
+the worker knew exactly which engine it was, and why "switched to a fallback
+model" never once appeared.
+
+With that fixed there is a channel, so the worker now uses it: when a picture is
+about to be dropped it sets `X-Jarvis-Blind`, and the page says so in plain
+language — which engine, and the three ways to fix it. The placeholder handed to
+the model also says *why* the image is missing, so it reports a backend
+limitation rather than claiming it has no eyes.
+
+Checked across eleven real provider configurations — that the picture is
+actually forwarded where it should be, actually stripped where it must be, that
+the warning fires only in the second case, and that a blind primary is overtaken
+in the chain by a fallback that can see.

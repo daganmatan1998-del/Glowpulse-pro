@@ -39,13 +39,24 @@ backend entirely.
 If you want the lock, make `ALLOWED_ORIGIN` accept both — the site and
 `http://tauri.localhost` — rather than one of them.
 
-## Known: the orb needs the network to draw itself
+## The orb no longer needs the network to draw itself
 
-`dist/index.html` pulls three.js and twelve of its addons from jsdelivr at
-runtime. The hologram *is* three.js, so with no connection (or a blocked CDN)
-the desktop app opens to the `no-webgl` fallback glow rather than the orb.
-Vendoring those files into `dist/` alongside the page would make the app start
-offline and faster; it has not been done yet.
+The hologram *is* three.js, and its thirteen files used to be fetched from
+jsdelivr on every cold start — which made whether the app drew an orb or the
+`no-webgl` fallback glow a property of the network: a locked-down wifi, a
+captive portal, a tunnel, or just a slow first paint on a phone.
+
+They now ship in `dist/vendor/three/` (868KB, pinned to r128, and they never
+change — which is why re-fetching them was never buying anything). The CDN
+stays as a per-file fallback: each local script is followed by a check for the
+global it should have defined, and only a missing one is re-requested from
+jsdelivr. So uploading `index.html` without `vendor/` beside it still behaves
+exactly as it did before rather than silently losing the orb.
+
+Verified by serving `dist/` with every off-origin request blocked: THREE r128
+and all twelve addons load, one canvas, no fallback class, no CDN request
+made. With `vendor/` removed, all thirteen CDN requests are attempted — the
+fallback is real, not decorative.
 
 ## Two web tools, and only one of them needs Anthropic
 
@@ -110,15 +121,21 @@ Upload these alongside it, all in the same folder, and serve them over https
 
     index.html   manifest.webmanifest   sw.js
     icon-192.png   icon-512.png   apple-touch-icon.png
+    vendor/      (the whole folder, keeping its structure)
+
+`vendor/` is three.js. Leave it out and the page still works, but the orb goes
+back to depending on the CDN being reachable.
 
 Then open the site on the phone and add it to the home screen — Share → Add to
 Home Screen on iOS, the install prompt on Android. It opens without browser
 chrome, with its own icon, and the second launch is near-instant because the
 worker serves the page from cache.
 
-The worker also caches the three.js files the hologram is built from, which is
-the mobile half of the CDN problem noted above: after one load the orb draws
-with no signal at all.
+The service worker serves `vendor/` cache-first, the same way it used to serve
+the CDN copies: 868KB is not worth re-validating on every cold start when the
+files are pinned and cannot change. Change the path under `vendor/` (or bump
+`CDN_VERSION`) to ship a different build — editing a file in place under the
+same name will keep serving the copy already cached.
 
 **Bump `SHELL_VERSION` in `sw.js` whenever `index.html` changes**, or phones
 will keep serving the copy they already installed.

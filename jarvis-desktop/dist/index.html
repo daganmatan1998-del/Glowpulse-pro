@@ -1324,25 +1324,62 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/Pass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/MaskPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<!-- three.js, served from this folder rather than fetched at runtime.
+
+     The hologram IS three.js: with these thirteen files missing the app opens
+     to the no-webgl fallback glow instead of the orb. Pulling them from a CDN
+     on every cold start made that a property of the network — a locked-down
+     wifi, a captive portal, a train tunnel, or simply a slow first paint on a
+     phone. They are pinned to one version and never change, so there was never
+     a reason to re-fetch them; now the desktop app and the installed phone app
+     both draw with no connection at all.
+
+     The CDN stays as a fallback, one file at a time. Each local script is
+     followed by a check for the global it is supposed to have defined, and
+     only if that global is missing is the CDN copy written in its place — so
+     uploading index.html without the vendor/ folder beside it still works
+     exactly as it did before, rather than silently losing the orb. document.write
+     is deliberate here and safe: it runs during parsing, which is what keeps
+     these thirteen executing in the order they depend on each other. -->
+<script>
+  window.__three = function(path, global){
+    var have = (global === 'THREE') ? window.THREE : (window.THREE && window.THREE[global]);
+    if (have) return;
+    document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/three@0.128.0/' + path + '"><\/scr' + 'ipt>');
+  };
+</script>
+<script src="./vendor/three/build/three.min.js"></script>
+<script>__three('build/three.min.js','THREE')</script>
+<script src="./vendor/three/examples/js/loaders/GLTFLoader.js"></script>
+<script>__three('examples/js/loaders/GLTFLoader.js','GLTFLoader')</script>
+<script src="./vendor/three/examples/js/controls/OrbitControls.js"></script>
+<script>__three('examples/js/controls/OrbitControls.js','OrbitControls')</script>
+<script src="./vendor/three/examples/js/postprocessing/Pass.js"></script>
+<script>__three('examples/js/postprocessing/Pass.js','Pass')</script>
+<script src="./vendor/three/examples/js/postprocessing/EffectComposer.js"></script>
+<script>__three('examples/js/postprocessing/EffectComposer.js','EffectComposer')</script>
+<script src="./vendor/three/examples/js/postprocessing/RenderPass.js"></script>
+<script>__three('examples/js/postprocessing/RenderPass.js','RenderPass')</script>
+<script src="./vendor/three/examples/js/postprocessing/ShaderPass.js"></script>
+<script>__three('examples/js/postprocessing/ShaderPass.js','ShaderPass')</script>
+<script src="./vendor/three/examples/js/postprocessing/MaskPass.js"></script>
+<script>__three('examples/js/postprocessing/MaskPass.js','MaskPass')</script>
+<script src="./vendor/three/examples/js/shaders/CopyShader.js"></script>
+<script>__three('examples/js/shaders/CopyShader.js','CopyShader')</script>
+<script src="./vendor/three/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script>__three('examples/js/shaders/LuminosityHighPassShader.js','LuminosityHighPassShader')</script>
+<script src="./vendor/three/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script>__three('examples/js/postprocessing/UnrealBloomPass.js','UnrealBloomPass')</script>
 <!-- RoomEnvironment gives MeshStandardMaterial something to reflect. Without it
      metalness renders as flat black and every generated model looks like a toy,
      which is the single biggest quality problem with the 3D viewer. GLTFExporter
      turns a model built in code into a real .glb file the user can download,
      the same way a generated one already can be. Both are optional: if either
-     fails to arrive from the CDN the viewer checks before using it. -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+     fails to arrive the viewer checks before using it. -->
+<script src="./vendor/three/examples/js/environments/RoomEnvironment.js"></script>
+<script>__three('examples/js/environments/RoomEnvironment.js','RoomEnvironment')</script>
+<script src="./vendor/three/examples/js/exporters/GLTFExporter.js"></script>
+<script>__three('examples/js/exporters/GLTFExporter.js','GLTFExporter')</script>
 
 <script>
 /* Graceful degradation: those eight scripts come from a CDN, and on a locked

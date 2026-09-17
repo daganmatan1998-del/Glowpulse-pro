@@ -21,7 +21,7 @@
    serving the copy they already have.
    ===================================================================== */
 
-const SHELL_VERSION = 'jarvis-shell-v2';
+const SHELL_VERSION = 'jarvis-shell-v3';
 const CDN_VERSION   = 'jarvis-cdn-v1';
 
 /* Only what the app cannot start without. Icons are left out on purpose:
@@ -34,6 +34,13 @@ const SHELL = [
 ];
 
 const isCDN = url => url.origin === 'https://cdn.jsdelivr.net';
+
+/* three.js now ships in ./vendor/ instead of being fetched from a CDN, and it is
+   pinned to one version that never changes. Network-first would re-download
+   868KB on every cold start only to be told it had not changed; these belong on
+   the same cache-first path as the CDN copies they replaced. */
+const isPinnedAsset = url =>
+  url.origin === self.location.origin && url.pathname.indexOf('/vendor/') >= 0;
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -65,9 +72,11 @@ self.addEventListener('fetch', event => {
   try { url = new URL(request.url); } catch (e) { return; }
 
   /* The three.js bundle never changes for a pinned version, so cache-first is
-     both correct and the whole point: after one load the hologram draws with
-     no network at all. */
-  if (isCDN(url)) {
+     both correct and the whole point: the hologram draws with no network at
+     all. To ship a different build, change the path under vendor/ (or bump
+     CDN_VERSION) — editing a file in place under the same name will keep
+     serving the copy already cached. */
+  if (isCDN(url) || isPinnedAsset(url)) {
     event.respondWith(
       caches.match(request).then(hit => hit || fetch(request).then(res => {
         /* Opaque because it is cross-origin without CORS. It cannot be read

@@ -245,7 +245,7 @@ h1 { font-family:"Barlow Condensed",sans-serif;font-size:clamp(70px,10vw,130px);
     <span><kbd>SPACE</kbd> Dash</span>
     <span><kbd>LMB</kbd> Light</span>
     <span><kbd>RMB</kbd> Heavy</span>
-    <span><kbd>DELETE</kbd> Rage</span>
+    <span><kbd>X</kbd> Rage</span>
     <div class="control-right">
       <button class="icon-button" id="soundButton">SOUND ON</button>
       <button class="icon-button" id="qualityButton">QUALITY AUTO</button>
@@ -271,7 +271,7 @@ h1 { font-family:"Barlow Condensed",sans-serif;font-size:clamp(70px,10vw,130px);
         <tr><td>Shift (hold)</td><td>Sprint · drains stamina</td></tr>
         <tr><td>Space</td><td>Dash · brief invulnerability</td></tr>
         <tr><td>Left / Right mouse</td><td>Light combo / heavy finisher</td></tr>
-        <tr><td>Delete <span class="optional">or F</span></td><td>Rage mode — only at a full meter</td></tr>
+        <tr><td>X</td><td>Rage mode — only at a full meter</td></tr>
         <tr><td>Esc / M</td><td>Pause / mute audio</td></tr>
       </tbody>
     </table>
@@ -311,10 +311,12 @@ const CONFIG = {
 // Rage mode: 70% less damage taken, 70% more damage dealt,
 // 40% faster movement, 100% faster attacks, free stamina, 30 seconds.
 const RAGE = {
-  meterMax:100,
+  meterMax:70,
   duration:30,
   greenOrbHeal:7,
-  redOrbCharge:12,
+  redOrbCharge:14,
+  killCharge:8,
+  bossKillCharge:25,
   resistance:.30,
   damage:1.70,
   speed:1.40,
@@ -323,7 +325,7 @@ const RAGE = {
 const BIND = {
   forward:'KeyW', back:'KeyS', left:'KeyA', right:'KeyD',
   sprint:'ShiftLeft', sprintAlt:'ShiftRight', dash:'Space',
-  special:'Delete', specialAlt:'KeyF', pause:'Escape', mute:'KeyM'
+  special:'KeyX', pause:'Escape', mute:'KeyM'
 };
 
 /* Each level owns a palette, an arena silhouette, a prop set and a champion.
@@ -1353,17 +1355,21 @@ function releaseOrb(i,o) {
   dummy.updateMatrix();
   orbMesh.setMatrixAt(i,dummy.matrix);
 }
+function addRage(amount) {
+  if(special.active) return;
+  special.meter=Math.min(RAGE.meterMax,special.meter+amount);
+  if(special.meter>=RAGE.meterMax&&!special.announced) {
+    special.announced=true;
+    toast('RAGE READY','PRESS X',1.6);
+    sfx('rageReady');
+  }
+}
 function collectOrb(o) {
   fxPos.copy(o.pos);
   burst(fxPos,5,o.red?0xff6b46:0x86ffb6,.55);
   if(o.red) {
-    special.meter=Math.min(RAGE.meterMax,special.meter+RAGE.redOrbCharge);
+    addRage(RAGE.redOrbCharge);
     sfx('orbRed');
-    if(special.meter>=RAGE.meterMax && !special.active && !special.announced) {
-      special.announced=true;
-      toast('RAGE READY','PRESS DELETE',1.6);
-      sfx('rageReady');
-    }
   } else {
     player.hp=Math.min(player.maxHP,player.hp+RAGE.greenOrbHeal);
     sfx('orbGreen');
@@ -2465,6 +2471,7 @@ function killEnemy(e,a) {
   e.c.trailValid=false;
   releaseToken(e);
   if(!e.boss) player.stamina=Math.min(100,player.stamina+5);
+  addRage(e.boss?RAGE.bossKillCharge:RAGE.killCharge);
   dropOrbs(e.pos,e.boss?1.8:1.0,e.type);
   sfx('death');
   if(a.heavy) shock(e.pos,1.8,0x99ebcb);
@@ -2763,7 +2770,7 @@ function updateHUD(dt) {
     DOM.special.className=state;
     hud.remaining=-1;
     if(state!=='active') {
-      DOM.specialHint.textContent=state==='ready'?'PRESS DELETE':'DEFEAT ENEMIES FOR RED ORBS';
+      DOM.specialHint.textContent=state==='ready'?'PRESS X':'DEFEAT ENEMIES FOR RED ORBS';
     }
   }
   if(state==='active') {
@@ -2896,7 +2903,7 @@ function updateCorpses(dt) {
    15. INPUT AND LIFECYCLE
 =========================================================== */
 const PREVENT=new Set([BIND.forward,BIND.back,BIND.left,BIND.right,
-  BIND.dash,BIND.sprint,BIND.sprintAlt,BIND.special,BIND.specialAlt,'Enter']);
+  BIND.dash,BIND.sprint,BIND.sprintAlt,BIND.special,'Enter']);
 window.addEventListener('keydown',event=>{
   if(PREVENT.has(event.code)) event.preventDefault();
   if(event.code===BIND.mute&&!event.repeat) { toggleSound();return; }
@@ -2910,7 +2917,7 @@ window.addEventListener('keydown',event=>{
   keys.add(event.code);
   if(event.repeat) return;
   if(event.code===BIND.dash) startDash();
-  else if(event.code===BIND.special||event.code===BIND.specialAlt) activateSpecial();
+  else if(event.code===BIND.special) activateSpecial();
 });
 window.addEventListener('keyup',event=>keys.delete(event.code));
 

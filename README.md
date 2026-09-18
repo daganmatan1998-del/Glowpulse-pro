@@ -16,7 +16,7 @@ Open `index.html` in a desktop browser. Nothing to build or install.
 | Space | Dash · brief invulnerability through its middle |
 | Left mouse | Light attack (four-hit combo) |
 | Right mouse | Heavy attack · costs stamina |
-| Delete (or F) | Rage — only at a full meter |
+| X | Rage — only at a full meter |
 | Esc / M | Pause / mute · Esc also releases the captured cursor |
 | Mouse wheel | Camera distance |
 
@@ -32,9 +32,11 @@ packs are small (two to four) and difficulty comes from behaviour, spacing and
 timing rather than from inflated health bars.
 
 **Orbs.** Every defeated enemy drops both colours. Green restores vitality, red
-charges the Rage meter. Both magnetise to the player once they settle.
+charges the Rage meter. Both magnetise to the player once they settle. A kill
+also feeds the meter directly, so Rage still builds if you fight on the move
+and leave orbs behind.
 
-**Rage.** At a full meter, `Delete` turns the rabbit red for thirty seconds:
+**Rage.** At a full meter, `X` turns the rabbit red for thirty seconds:
 70% less damage taken, 70% more damage dealt, 40% faster movement, attacks at
 double speed, and stamina stops draining entirely. The meter drains as the
 timer runs, so the bar doubles as the countdown.

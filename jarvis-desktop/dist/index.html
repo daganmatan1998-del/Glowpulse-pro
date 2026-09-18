@@ -1545,6 +1545,8 @@ const I18N = {
     permissionHint: 'Grant once and the browser remembers it for this site, so he stops asking. On iPhone, add the page to your Home Screen first - Safari forgets permissions for ordinary tabs every session.',
     micDenied: 'Microphone permission was refused. Allow it from the padlock icon in the address bar, then try again.',
     sttFailed: 'Could not transcribe: {why}',
+    captureReset: 'The microphone had stopped responding. Reopened it.',
+    doingItForReal: '▸ actually doing it…',
     stalledReleased: 'That request never came back. Listening again.',
     noLangHint: 'Note: your worker does not accept a language hint yet, so this only changes the name and colour. Deploy the updated jarvis-worker.js for it to actually help transcription.',
     sttGaveUp: 'Repeated failures — still listening, but slowing down. Fix the cause shown above.',
@@ -1714,6 +1716,8 @@ const I18N = {
     permissionHint: 'תאשר פעם אחת והדפדפן יזכור לאתר הזה, כך שהוא יפסיק לשאול. באייפון - תוסיף קודם את הדף למסך הבית, כי ספארי שוכח הרשאות של לשונית רגילה בכל פעם מחדש.',
     micDenied: 'ההרשאה למיקרופון נדחתה. תאשר דרך אייקון המנעול בשורת הכתובת ותנסה שוב.',
     sttFailed: 'לא הצלחתי לתמלל: {why}',
+    captureReset: 'המיקרופון הפסיק להגיב. פתחתי אותו מחדש.',
+    doingItForReal: '▸ מבצע בפועל…',
     stalledReleased: 'הבקשה הזו לא חזרה. מקשיב שוב.',
     noLangHint: 'שים לב: ה-worker שלך עדיין לא מקבל רמז שפה, אז זה משנה רק את השם והצבע. תעלה את jarvis-worker.js המעודכן כדי שזה באמת ישפר את התמלול.',
     sttGaveUp: 'כשלים חוזרים — עדיין מקשיב אבל מאט. תתקן את הסיבה שמופיעה למעלה.',
@@ -3245,6 +3249,19 @@ function detectModeCommand(text){
    because there the flag is exactly right. */
 function seriousMode(){ return modeState.mode === 'ultron' && !IS_DESKTOP; }
 
+/* WHAT HE CAN DO, as opposed to WHO HE IS. These were the same question, and
+   that was the mistake: seriousMode() is false on the desktop by design —
+   ULTRON is a website character — and every capability gate read it, so the
+   desktop app inherited restrictions built for the website's Normal Mode. He
+   would answer a perfectly ordinary request with "this calls for Serious
+   Mode" on a machine where Serious Mode does not exist and cannot be reached.
+
+   On the desktop there is no second mode to hand off to, so there is nothing
+   to hold back for: he is the whole system and he gets the whole toolbox. The
+   colour and the name still follow the language; that is cosmetic and stays
+   where it is. */
+function fullCapability(){ return IS_DESKTOP || seriousMode(); }
+
 function startModeTransform(direction){
   if(modeState.transforming) return;         // ignore a second trigger mid-flight
   if(direction > 0 && modeState.mode === 'ultron') return;
@@ -3689,7 +3706,15 @@ function getSystemPrompt(calendarAvailable){
      name where it should go instead. Critically, JARVIS must NOT switch modes
      himself — the spec reserves that for the user, and an assistant that
      escalates its own privileges is a bad pattern regardless of the fiction. */
-  if(ultron){
+  if(IS_DESKTOP){
+    /* No second mode exists here, so there is nothing to defer to and nothing
+       to be coy about. Saying so explicitly matters: the Normal Mode text
+       below is written for the website, and on a machine with no ULTRON to
+       hand over to it turns every heavy request into a dead end. */
+    prompt += (currentLang === 'he')
+      ? ' \u05d0\u05ea\u05d4 \u05d4\u05de\u05e2\u05e8\u05db\u05ea \u05d4\u05de\u05dc\u05d0\u05d4 \u05db\u05d0\u05df, \u05d5\u05db\u05dc \u05d4\u05db\u05dc\u05d9\u05dd \u05e9\u05dc\u05da: \u05de\u05d5\u05d3\u05dc\u05d9\u05dd \u05ea\u05dc\u05ea-\u05de\u05de\u05d3\u05d9\u05d9\u05dd, \u05d9\u05e6\u05d9\u05e8\u05ea \u05ea\u05de\u05d5\u05e0\u05d5\u05ea, \u05d0\u05e8\u05d9\u05d6\u05ea \u05e4\u05e8\u05d5\u05d9\u05e7\u05d8\u05d9\u05dd, \u05d1\u05e0\u05d9\u05d9\u05d4 \u05d0\u05e8\u05d5\u05db\u05d4 \u05d5\u05de\u05e1\u05d5\u05d1\u05db\u05ea. \u05d0\u05d9\u05df \u05db\u05d0\u05df \"\u05de\u05e6\u05d1 \u05e8\u05e6\u05d9\u05e0\u05d9\" \u05d5\u05d0\u05d9\u05df \u05dc\u05de\u05d9 \u05dc\u05d4\u05e2\u05d1\u05d9\u05e8. \u05d0\u05dc \u05ea\u05d0\u05de\u05e8 \u05dc\u05e2\u05d5\u05dc\u05dd \u05e9\u05de\u05e9\u05d9\u05de\u05d4 \u05d3\u05d5\u05e8\u05e9\u05ea \u05de\u05e6\u05d1 \u05d0\u05d7\u05e8 \u05d0\u05d5 \u05d0\u05d5\u05dc\u05d8\u05e8\u05d5\u05df \u2014 \u05d6\u05d4 \u05e4\u05e9\u05d5\u05d8 \u05dc\u05d0 \u05e0\u05db\u05d5\u05df \u05db\u05d0\u05df. \u05e7\u05d7 \u05d0\u05ea \u05d4\u05de\u05e9\u05d9\u05de\u05d4 \u05d5\u05ea\u05e2\u05e9\u05d4 \u05d0\u05d5\u05ea\u05d4.'
+      : ' You are the entire system here, and every tool is yours: 3-D models, image generation, project packaging, long and complicated builds. There is no "Serious Mode" on this machine and nobody to hand work to. NEVER tell the user a request needs another mode, or ULTRON, or more capability than you have \u2014 on the desktop that is simply false. Take the task and do it.';
+  } else if(ultron){
     prompt += (currentLang === 'he')
       ? ' מצב רציני פעיל כרגע ואתה האינטליגנציה הפעילה. אל תציג את עצמך מחדש בכל הודעה — הכרזת פתיחה אחת בהפעלה מספיקה, ומכאן פשוט תעבוד. אם המשתמש מבקש משהו קטן ויומיומי, תטפל בזה כרגיל בלי להעיר שזה מתחת לרמתך.'
       : ' Serious Mode is active and you are the running intelligence. Do not reintroduce yourself on every message — one announcement at activation is enough, and from there simply work. If the user asks for something small and everyday, handle it normally without remarking that it is beneath you.';
@@ -4193,6 +4218,22 @@ let heardThisTurn = '';
 let lastTranscript = '';   // what was heard last, to tell new words from noise
 let spokenRecently = '';           // what he is saying, for echo comparison
 
+/* THE RUNAWAY LOOP, and why a clock could never have fixed it.
+
+   Transcription is a round trip to the worker and takes a second or three.
+   So audio recorded WHILE he was talking arrives back long after he stopped,
+   and the echo guard — which asked "is he speaking right now?" — was asking
+   about the wrong moment entirely. His own sentence came in as a fresh
+   instruction, he answered it, that answer was spoken, recorded, transcribed,
+   and fed back in. Nothing errors. It simply never stops, and the only way
+   out is killing the process.
+
+   The fix is to stop consulting the clock and stamp the recording instead: if
+   he made any sound at all while this segment was open, the segment is
+   suspect when it comes back, however long the round trip took. */
+let captureSawSpeech = false;      // did he talk during the segment being recorded?
+let captureStartedAt = 0;          // when the open segment began, for the stuck check
+
 /* Everything he speaks is remembered briefly so the recognizer can tell his
    voice from yours. Without this the microphone hears the speaker, decides
    you interrupted, and cuts him off — repeatedly, and seemingly at random. */
@@ -4224,7 +4265,11 @@ function interruptSpeech(){
   if(activeAudio){ try{ activeAudio.pause(); activeAudio.currentTime = 0; }catch(e){} activeAudio = null; }
   if(window.speechSynthesis) window.speechSynthesis.cancel();
   isSpeaking = false;
-  spokenRecently = '';
+  lastSpokeEndedAt = Date.now();
+  /* spokenRecently was wiped here, which threw away the only evidence that
+     could identify the audio still in flight from the sentence just cut off.
+     It is capped at 400 characters and ages out on its own; clearing it at
+     precisely the moment it is needed is what let the echo through. */
   updateStopBtnVisibility();
 }
 
@@ -4259,10 +4304,14 @@ if(SpeechRecognitionImpl){
     const live = (final + ' ' + interim).trim();
     if(!live) return;
 
-    /* Barge-in. Held to a minimum length and checked against his own recent
-       speech, so a cough or a syllable of his own voice cannot stop him. */
+    /* Barge-in, on the browser recogniser. This used to stop him for any
+       phrase of seven characters that did not resemble his own words — which
+       is to say, for anything anyone in the room said about anything. Same
+       rule as the microphone path now: his name, or he keeps talking. */
     if(isSpeaking){
       if(live.length < BARGE_MIN_CHARS || looksLikeEcho(live)) return;
+      const spokenWords = normaliseHeard(live).split(' ');
+      if(!spokenWords.some(wordIsName)) return;
       interruptSpeech();
     }
 
@@ -4376,6 +4425,9 @@ const VAD_SILENCE_MS   = 1500;
    if you were finished, the answer is usually already back the moment the
    1500ms elapses. */
 const VAD_SPECULATE_MS = 500;
+/* Shorter, and only while he is being spoken over: the transcript is wanted
+   for one reason — to see whether his name is in it. */
+const VAD_BARGE_SPECULATE_MS = 260;
 /* 1500ms is the ceiling now, not the rule. Two things decide how much of it
    is actually spent, and both of them only ever SHORTEN the wait — the
    asymmetry above still holds, so neither is allowed to make a cut-off more
@@ -4443,7 +4495,8 @@ function looksFinished(text){
    end of a turn genuinely has to be inferred. */
 const VAD_MAX_MS       = 15000;  // hard stop, so a stuck mic cannot run forever
 const VAD_MAX_MS_MANUAL = 8000;  // website, where you pressed a button to start
-const BARGE_SUSTAIN_MS = 220;    // and this long to count as interrupting him
+const BARGE_SUSTAIN_MS = 220;    // and this long to count as someone talking over him
+let bargeActive = false;         // someone is talking over him; hurry the transcript
 /* Calibrated against the room rather than fixed. A built-in laptop microphone
    puts normal speech somewhere around 0.01-0.03 RMS, so the old fixed 0.055
    was simply never crossed on quieter hardware: speech was never detected, the
@@ -4497,6 +4550,9 @@ let sttFailures = 0;
 let lastThinkStart = 0;   // when the current request began, for the stall check
 let pendingSpeculative = null;   // a transcript that arrived before we asked for it
 let speculativePromise = null;   // ...or one still on its way
+/* Declared here and, until now, never assigned anywhere in the file — so the
+   post-speech half of the echo window evaluated Date.now() - 0 and was false
+   forever. Half the guard had simply never run. */
 let lastSpokeEndedAt = 0;   // when he last stopped talking, for the echo window
 let whisperHeardNothing = false;   // the last recording never rose above the noise floor
 
@@ -4508,20 +4564,35 @@ function whisperAvailable(){
 async function startWhisperCapture(){
   if(whisperActive) return;
   whisperActive = true;
+  captureStartedAt = Date.now();
+  // Already talking, or only just stopped: this segment starts out suspect.
+  captureSawSpeech = isSpeaking || (Date.now() - lastSpokeEndedAt < 1500);
   micBtn.classList.add('listening');
   let chunks = [];
   try{
-    whisperStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,   // the real fix for hearing himself
-        noiseSuppression: true,
-        autoGainControl: true
-      }
-    });
+    /* Raced, because getUserMedia can hang indefinitely rather than reject —
+       another application holding the microphone, or a permission prompt left
+       sitting. When it hung, whisperActive stayed true forever, every later
+       call returned at the guard above, and the watchdog saw "capturing" and
+       left it alone. Permanently deaf, no error, restart the app. */
+    whisperStream = await Promise.race([
+      navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,   // the real fix for hearing himself
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      }),
+      new Promise((_, reject) => setTimeout(()=> reject(new Error('the microphone did not open')), 8000))
+    ]);
   }catch(err){
     whisperActive = false;
+    captureStartedAt = 0;
     micBtn.classList.remove('listening');
     addMessage('system', t('micDenied'));
+    /* Do not leave the loop dead on one refusal — the microphone may simply
+       have been busy for a moment. */
+    if(conversationMode && !isThinking) setTimeout(startListening, 2000);
     return;
   }
 
@@ -4533,6 +4604,11 @@ async function startWhisperCapture(){
     const blob = new Blob(chunks, { type: chunks[0] ? chunks[0].type : 'audio/webm' });
     chunks = [];
     whisperActive = false;
+    captureStartedAt = 0;
+    /* Read and cleared here: it describes THIS recording, and the next one
+       starts from its own state rather than inheriting this one's. */
+    const sawSpeech = captureSawSpeech;
+    captureSawSpeech = false;
     const quiet = whisperHeardNothing;
     whisperHeardNothing = false;
 
@@ -4549,7 +4625,7 @@ async function startWhisperCapture(){
       return;
     }
     if(quiet) console.info('JARVIS: level meter heard nothing; transcribing anyway');
-    await transcribeAndSend(blob);
+    await transcribeAndSend(blob, sawSpeech);
   };
   /* Chunked, so the audio recorded so far can be read without stopping the
      recorder. That is what makes the speculative pass below possible. */
@@ -4702,13 +4778,26 @@ async function startWhisperCapture(){
        level. A room louder than that defeats speech detection outright, so
        there is nothing left for barge-in alone to rescue. */
     const BARGE_BAR = Math.min(0.055, Math.max(0.020, noiseFloor * 1.6));
-    /* Checked on its own bar, before the calibrated logic below, so cutting
-       him off works regardless of how the room was measured. */
+    /* LOUDNESS NO LONGER STOPS HIM, and that is the point of this block now.
+
+       A level meter knows how loud the room is and nothing whatsoever about
+       what was said, so every door, cough, chair, passing car and second
+       person in the room read as "you interrupted me" and cut the answer off
+       mid-sentence. For an assistant meant to give complete answers that is
+       fatal: the longer and more useful the reply, the likelier something in
+       the room ends it.
+
+       Only his name stops him now — checked on the words, in handleTranscript,
+       where there is an actual transcript to check. What the meter still does
+       is notice that someone is talking over him and hurry the transcription
+       along, so "Jarvis" is acted on in a moment rather than at the end of the
+       sentence. It votes on WHEN to look, never on whether to stop. */
     if(isSpeaking && rms > BARGE_BAR){
       if(!bargeSince) bargeSince = now;
-      if(now - bargeSince > BARGE_SUSTAIN_MS) interruptSpeech();
+      if(now - bargeSince > BARGE_SUSTAIN_MS) bargeActive = true;
     } else if(!isSpeaking){
       bargeSince = 0;
+      bargeActive = false;
     }
 
     if(rms > (everSpoke ? sustainBar : threshold)){
@@ -4728,7 +4817,10 @@ async function startWhisperCapture(){
 
     /* Halfway through the silence window, send what we have. The recorder
        keeps running, so nothing is lost if you were only pausing. */
-    if(everSpoke && lastLoud && !speculated && (now - lastLoud > VAD_SPECULATE_MS)){
+    /* Someone is talking over him, so the only question that matters is
+       whether they said his name. Ask it as soon as they draw breath. */
+    const specWait = bargeActive ? VAD_BARGE_SPECULATE_MS : VAD_SPECULATE_MS;
+    if(everSpoke && lastLoud && !speculated && (now - lastLoud > specWait)){
       speculated = true;
       speculativeAt = now;
       const soFar = new Blob(chunks.slice(), { type: chunks[0] ? chunks[0].type : 'audio/webm' });
@@ -5129,7 +5221,7 @@ async function transcribeOnly(blob){
   return (data.text || '').trim();
 }
 
-async function transcribeAndSend(blob){
+async function transcribeAndSend(blob, sawSpeech){
   /* If the speculative pass already came back, the whole round trip happened
      during the silence wait and there is nothing left to wait for. */
   /* If a speculative request is already in flight, WAIT for it. Starting a
@@ -5152,7 +5244,7 @@ async function transcribeAndSend(blob){
       ]);
       speculativePromise = null;
       pendingSpeculative = null;
-      if(text) { console.info('JARVIS: used the in-flight transcription'); return handleTranscript(text); }
+      if(text) { console.info('JARVIS: used the in-flight transcription'); return handleTranscript(text, sawSpeech); }
     }catch(err){
       speculativePromise = null;   // it failed; fall through and try once
     }
@@ -5160,7 +5252,7 @@ async function transcribeAndSend(blob){
   if(pendingSpeculative){
     const text = pendingSpeculative;
     pendingSpeculative = null;
-    return handleTranscript(text);
+    return handleTranscript(text, sawSpeech);
   }
   try{
     /* Pass the language mode through, so Whisper is told what to expect
@@ -5199,7 +5291,7 @@ async function transcribeAndSend(blob){
       return;
     }
     sttFailures = 0;                       // a clean round clears the count
-    return handleTranscript((data.text || '').trim());
+    return handleTranscript((data.text || '').trim(), sawSpeech);
   }catch(err){
     addMessage('system', t('sttFailed').replace('{why}', (err && err.message) || String(err)));
     if(conversationMode && !isThinking) setTimeout(startListening, 600);
@@ -5211,7 +5303,7 @@ async function transcribeAndSend(blob){
    echo guard and the language commands are applied identically either way —
    which matters, because a shortcut that skips half the checks is how the
    fast path quietly becomes the buggy path. */
-async function handleTranscript(rawText){
+async function handleTranscript(rawText, sawSpeech){
   try{
     let text = (rawText || '').trim();
 
@@ -5258,7 +5350,13 @@ async function handleTranscript(rawText){
       }
     }
 
-    const echoPossible = (typeof isSpeaking !== 'undefined' && isSpeaking) ||
+    /* sawSpeech comes from the recording itself: he made a sound while this
+       audio was being captured. That is the fact that matters, and it stays
+       true however long the transcription took to come back — which is the
+       whole reason the two clock checks beside it were not enough. They stay
+       as a second line for transcripts that reach here by another route. */
+    const echoPossible = sawSpeech === true ||
+                         (typeof isSpeaking !== 'undefined' && isSpeaking) ||
                          (Date.now() - lastSpokeEndedAt < 1500);
     if(echoPossible && text && typeof looksLikeEcho === 'function' && looksLikeEcho(text)){
       console.info('JARVIS: ignored own voice —', text.slice(0, 60));
@@ -6693,6 +6791,9 @@ function enqueueSpeech(text){
      recognizer can recognise his own voice coming back through the speaker
      and not mistake it for you interrupting. */
   if(typeof noteSpokenText === 'function') noteSpokenText(clean);
+  /* If a recording is open right now, it is about to contain his voice. This
+     is the stamp; everything downstream reads it instead of the clock. */
+  if(typeof whisperActive !== 'undefined' && whisperActive) captureSawSpeech = true;
   const item = { text: clean, audio: null };
   // Kick the fetch off now — this is what makes the queue feel instant.
   item.audio = fetchVoiceAudioQueued(clean).catch(err=>{
@@ -6735,6 +6836,7 @@ async function runSpeechQueue(){
     }
     speechQueue = [];
     isSpeaking = false;
+    lastSpokeEndedAt = Date.now();   // the echo window starts here, not at zero
     updateStopBtnVisibility();
     const waiters = speechDrainWaiters;
     speechDrainWaiters = [];
@@ -6815,8 +6917,8 @@ const MAX_BUILD_TOKENS = 6000;
    the user chooses deliberately rather than applied to everything. */
 const ULTRON_REPLY_TOKENS = 10000;
 const ULTRON_BUILD_TOKENS = 20000;
-function replyBudget(){ return seriousMode() ? ULTRON_REPLY_TOKENS : MAX_REPLY_TOKENS; }
-function buildBudget(){ return seriousMode() ? ULTRON_BUILD_TOKENS : MAX_BUILD_TOKENS; }
+function replyBudget(){ return fullCapability() ? ULTRON_REPLY_TOKENS : MAX_REPLY_TOKENS; }
+function buildBudget(){ return fullCapability() ? ULTRON_BUILD_TOKENS : MAX_BUILD_TOKENS; }
 const MAX_TOOL_ROUNDS = 10;
 
 /* Which engine actually answered, from the worker's own header. When a reply
@@ -8600,7 +8702,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     /* These run in the page itself, no backend needed — but the mode boundary
        still applies here, or the limit would simply leak out of the other
        connection route. Same split as below: packaging and 3-D are ULTRON's. */
-    requestBody.tools = seriousMode()
+    requestBody.tools = fullCapability()
       ? [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL, MAKE_ZIP_TOOL, BUILD3D_TOOL]
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
     if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL);
@@ -8622,7 +8724,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
        all, so offering it there would only invite a promise it cannot keep. */
     if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL);
     const advancedTools = [BUILD3D_TOOL, MODEL3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
-    requestBody.tools = seriousMode()
+    requestBody.tools = fullCapability()
       ? everydayTools.concat(advancedTools)
       : everydayTools;
     if(mcpServers.length) requestBody.mcp_servers = mcpServers;
@@ -8799,6 +8901,32 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
    conversation — "put my product in a scene" needs the product — which is
    exactly why live frames had to be marked apart from them rather than
    filtered by looking like images. */
+/* "I've opened YouTube for you" — with no open_url call anywhere in the turn.
+   This is the cheapest-looking failure the app has and the most corrosive: the
+   answer is fluent, confident, and completely untrue, and there is no way to
+   tell from the outside except by going and looking. Telling the model not to
+   do it is necessary and not sufficient; it is a fact about a finished turn,
+   so it is checkable, and once it is checkable it can be fixed rather than
+   discouraged.
+
+   Deliberately narrow. Only first-person claims about things a TOOL does —
+   opening, closing, searching, creating, saving, sending, scheduling, building
+   — count. "I think you should open it" and "that would create a problem" are
+   not claims about what he just did and must not trigger anything. */
+const ACTION_CLAIM_EN = /\b(?:I(?:'ve|'m| have| am)?\s+(?:just\s+|now\s+)?(?:opened|opening|closed|closing|launched|launching|searched|searching|created|creating|saved|saving|added|adding|generated|generating|built|building|made|making|sent|sending|updated|updating|scheduled|scheduling|booked|booking|remembered|noted down|pulled up|pulling up|set up|setting up)\b)|\b(?:here you go|here it is|done\b|all set\b|on it\b|taken care of)/i;
+const ACTION_CLAIM_HE = /(\u05e4\u05ea\u05d7\u05ea\u05d9|\u05e1\u05d2\u05e8\u05ea\u05d9|\u05d7\u05d9\u05e4\u05e9\u05ea\u05d9|\u05d9\u05e6\u05e8\u05ea\u05d9|\u05e9\u05de\u05e8\u05ea\u05d9|\u05d4\u05d5\u05e1\u05e4\u05ea\u05d9|\u05d1\u05e0\u05d9\u05ea\u05d9|\u05e9\u05dc\u05d7\u05ea\u05d9|\u05e2\u05d3\u05db\u05e0\u05ea\u05d9|\u05e8\u05e9\u05de\u05ea\u05d9|\u05e7\u05d1\u05e2\u05ea\u05d9|\u05d4\u05e4\u05e2\u05dc\u05ea\u05d9|\u05d4\u05d5\u05e8\u05d3\u05ea\u05d9|\u05d0\u05e0\u05d9 \u05e4\u05d5\u05ea\u05d7|\u05d0\u05e0\u05d9 \u05e1\u05d5\u05d2\u05e8|\u05d0\u05e0\u05d9 \u05de\u05d7\u05e4\u05e9|\u05d0\u05e0\u05d9 \u05d9\u05d5\u05e6\u05e8|\u05d0\u05e0\u05d9 \u05d1\u05d5\u05e0\u05d4|\u05d0\u05e0\u05d9 \u05e9\u05d5\u05de\u05e8|\u05d0\u05e0\u05d9 \u05de\u05d5\u05e1\u05d9\u05e3|\u05d0\u05e0\u05d9 \u05e9\u05d5\u05dc\u05d7|\u05d1\u05d5\u05e6\u05e2|\u05d4\u05e0\u05d4 \u05dc\u05da)/;
+
+/* The commonest shape of all, and the one the two regexes above miss: a bare
+   gerund opening the reply — "Opening Spotify.", "Pulling up your orders.".
+   It has to stay off ordinary prose that happens to start the same way, so a
+   finite verb later in the sentence disqualifies it: "Opening hours are nine
+   to five" is a fact, "Opening Spotify" is a claim. */
+const ACTION_CLAIM_GERUND = /^\s*(?:just\s+|now\s+)?(?:opening|closing|launching|searching|creating|saving|adding|generating|building|making|sending|updating|scheduling|booking|running|downloading|pulling up|setting up)\b(?![^.!?\n]*\b(?:is|are|was|were|will|would|can|could|should|may|might|do|does|did|has|have|had|takes|means|requires)\b)/i;
+function claimsAnAction(text){
+  const t = String(text || '');
+  return ACTION_CLAIM_EN.test(t) || ACTION_CLAIM_HE.test(t) || ACTION_CLAIM_GERUND.test(t);
+}
+
 function trimStaleFrames(messages){
   let newestLive = -1;
   for(let i = messages.length - 1; i >= 0; i--){
@@ -8876,105 +9004,128 @@ async function askJarvis(userText, images, onText){
     // at what came back, and correct himself — which is the whole difference
     // between describing an answer and arriving at one.
     let loopGuard = 0;
-    while(data.stop_reason === 'tool_use' && loopGuard < MAX_TOOL_ROUNDS){
-      loopGuard++;
-      const toolUseBlocks = (data.content || []).filter(b => b.type === 'tool_use');
-      workingMessages = [...workingMessages, { role:'assistant', content:data.content }];
-      const toolResults = [];
-      for(const tu of toolUseBlocks){
-        setToolStatus(toolStatusLabel(tu, loopGuard));
-        let payload;
-        /* Belt and braces. The advanced tools are not offered in Normal Mode,
-           but a call for one can still arrive — from earlier in the transcript,
-           or from a model that remembers the name. Refuse it here rather than
-           executing, so the boundary holds even when the tool list did not
-           reach the provider intact. The refusal text is written for the model:
-           it says what to tell the user, so the turn ends in a clean handoff
-           instead of an apology about a tool error. */
-        const ADVANCED_ONLY = ['build_3d_model','generate_3d_model','generate_image','make_zip'];
-        if(!seriousMode() && ADVANCED_ONLY.indexOf(tu.name) >= 0){
-          payload = {
-            error: 'not available in Normal Mode',
-            available_in: 'Serious Mode (ULTRON)',
-            tell_the_user: 'This request calls for Serious Mode — ULTRON handles 3-D models, ' +
-                           'image generation and multi-file packaging. Say "go to serious mode" ' +
-                           'and I will hand over.'
-          };
-        } else if(tu.name === 'get_calendar_events'){
-          payload = await callCalendarTool(tu.input);
-        } else if(tu.name === 'create_calendar_event'){
-          payload = await callCalendarCreateTool(tu.input);
-        } else if(tu.name === 'build_3d_model'){
-          payload = await callBuild3dTool(tu.input);
-        } else if(tu.name === 'generate_3d_model'){
-          payload = await callModel3dTool(tu.input);
-        } else if(tu.name === 'shopify_admin_query'){
-          payload = await callShopifyTool(tu.input);
-        } else if(tu.name === 'remember'){
-          payload = await callRememberTool(tu.input);
-        } else if(tu.name === 'show_html'){
-          payload = await callShowHtmlTool(tu.input);
-        } else if(tu.name === 'run_code'){
-          payload = await callRunCodeTool(tu.input);
-        } else if(tu.name === 'generate_image'){
-          payload = await callGenerateImageTool(tu.input);
-        } else if(tu.name === 'open_camera'){
-          /* tu.input, not nothing. callCameraTool reads input.close to switch
-             the camera OFF, and this was the one call in the chain that threw
-             its arguments away — so "close the camera" arrived as a bare
-             open_camera and turned it back ON. The camera could be opened by
-             voice and never closed by voice. */
-          payload = await callCameraTool(tu.input);
-        } else if(tu.name === 'take_screenshot'){
-          payload = await callScreenshotTool();
-        } else if(tu.name === 'close_browser_tab'){
-          payload = await callCloseTabTool(tu.input);
-        } else if(tu.name === 'close_window_named'){
-          payload = await callCloseNamedTool(tu.input);
-        } else if(tu.name === 'close_this_window'){
-          payload = await callCloseWindowTool();
-        } else if(tu.name === 'search_web'){
-          payload = await callSearchWebTool(tu.input);
-        } else if(tu.name === 'read_page'){
-          payload = await callReadPageTool(tu.input);
-        } else if(tu.name === 'open_url'){
-          payload = await callOpenUrlTool(tu.input);
-        } else if(tu.name === 'make_zip'){
-          payload = await callMakeZipTool(tu.input);
-        } else {
-          payload = { error: 'Unknown tool: ' + tu.name };
+    let corrections = 0;
+    /* The outer pass exists for one case: the turn ended, he described doing
+       something, and he called nothing. Then — once, never more — he is handed
+       that back and asked to either do it or say plainly that he cannot. */
+    for(;;){
+      while(data.stop_reason === 'tool_use' && loopGuard < MAX_TOOL_ROUNDS){
+        loopGuard++;
+        const toolUseBlocks = (data.content || []).filter(b => b.type === 'tool_use');
+        workingMessages = [...workingMessages, { role:'assistant', content:data.content }];
+        const toolResults = [];
+        for(const tu of toolUseBlocks){
+          setToolStatus(toolStatusLabel(tu, loopGuard));
+          let payload;
+          /* Belt and braces. The advanced tools are not offered in Normal Mode,
+             but a call for one can still arrive — from earlier in the transcript,
+             or from a model that remembers the name. Refuse it here rather than
+             executing, so the boundary holds even when the tool list did not
+             reach the provider intact. The refusal text is written for the model:
+             it says what to tell the user, so the turn ends in a clean handoff
+             instead of an apology about a tool error. */
+          const ADVANCED_ONLY = ['build_3d_model','generate_3d_model','generate_image','make_zip'];
+          if(!fullCapability() && ADVANCED_ONLY.indexOf(tu.name) >= 0){
+            payload = {
+              error: 'not available in Normal Mode',
+              available_in: 'Serious Mode (ULTRON)',
+              tell_the_user: 'This request calls for Serious Mode — ULTRON handles 3-D models, ' +
+                             'image generation and multi-file packaging. Say "go to serious mode" ' +
+                             'and I will hand over.'
+            };
+          } else if(tu.name === 'get_calendar_events'){
+            payload = await callCalendarTool(tu.input);
+          } else if(tu.name === 'create_calendar_event'){
+            payload = await callCalendarCreateTool(tu.input);
+          } else if(tu.name === 'build_3d_model'){
+            payload = await callBuild3dTool(tu.input);
+          } else if(tu.name === 'generate_3d_model'){
+            payload = await callModel3dTool(tu.input);
+          } else if(tu.name === 'shopify_admin_query'){
+            payload = await callShopifyTool(tu.input);
+          } else if(tu.name === 'remember'){
+            payload = await callRememberTool(tu.input);
+          } else if(tu.name === 'show_html'){
+            payload = await callShowHtmlTool(tu.input);
+          } else if(tu.name === 'run_code'){
+            payload = await callRunCodeTool(tu.input);
+          } else if(tu.name === 'generate_image'){
+            payload = await callGenerateImageTool(tu.input);
+          } else if(tu.name === 'open_camera'){
+            /* tu.input, not nothing. callCameraTool reads input.close to switch
+               the camera OFF, and this was the one call in the chain that threw
+               its arguments away — so "close the camera" arrived as a bare
+               open_camera and turned it back ON. The camera could be opened by
+               voice and never closed by voice. */
+            payload = await callCameraTool(tu.input);
+          } else if(tu.name === 'take_screenshot'){
+            payload = await callScreenshotTool();
+          } else if(tu.name === 'close_browser_tab'){
+            payload = await callCloseTabTool(tu.input);
+          } else if(tu.name === 'close_window_named'){
+            payload = await callCloseNamedTool(tu.input);
+          } else if(tu.name === 'close_this_window'){
+            payload = await callCloseWindowTool();
+          } else if(tu.name === 'search_web'){
+            payload = await callSearchWebTool(tu.input);
+          } else if(tu.name === 'read_page'){
+            payload = await callReadPageTool(tu.input);
+          } else if(tu.name === 'open_url'){
+            payload = await callOpenUrlTool(tu.input);
+          } else if(tu.name === 'make_zip'){
+            payload = await callMakeZipTool(tu.input);
+          } else {
+            payload = { error: 'Unknown tool: ' + tu.name };
+          }
+          /* A failed tool is handed back to the model to explain, but if it
+             answers with nothing the user is left staring at "I could not
+             process that request" with no idea which part broke. Surfacing the
+             reason here means a misconfigured key or a dead endpoint names
+             itself instead of hiding behind a generic apology. */
+          if(payload && payload.error && payload.error !== 'cancelled'){
+            addMessage('system', 'DEBUG (' + tu.name + '): ' + payload.error);
+          }
+          /* An image result has to be sent as a real content block. Wrapped in
+             JSON.stringify it becomes a base64 string in a text field — the
+             model receives thousands of characters of noise and no picture,
+             which is worse than sending nothing, because it looks like it
+             worked. Everything else still goes as JSON text. */
+          if(payload && payload.image && payload.image.data){
+            toolResults.push({
+              type:'tool_result', tool_use_id: tu.id,
+              content: [
+                { type:'image', source:{ type:'base64',
+                  media_type: payload.image.media_type || 'image/png',
+                  data: payload.image.data } },
+                { type:'text', text:'This is his screen right now. Read what is relevant and answer.' }
+              ]
+            });
+          } else {
+            toolResults.push({ type:'tool_result', tool_use_id: tu.id, content: JSON.stringify(payload) });
+          }
         }
-        /* A failed tool is handed back to the model to explain, but if it
-           answers with nothing the user is left staring at "I could not
-           process that request" with no idea which part broke. Surfacing the
-           reason here means a misconfigured key or a dead endpoint names
-           itself instead of hiding behind a generic apology. */
-        if(payload && payload.error && payload.error !== 'cancelled'){
-          addMessage('system', 'DEBUG (' + tu.name + '): ' + payload.error);
-        }
-        /* An image result has to be sent as a real content block. Wrapped in
-           JSON.stringify it becomes a base64 string in a text field — the
-           model receives thousands of characters of noise and no picture,
-           which is worse than sending nothing, because it looks like it
-           worked. Everything else still goes as JSON text. */
-        if(payload && payload.image && payload.image.data){
-          toolResults.push({
-            type:'tool_result', tool_use_id: tu.id,
-            content: [
-              { type:'image', source:{ type:'base64',
-                media_type: payload.image.media_type || 'image/png',
-                data: payload.image.data } },
-              { type:'text', text:'This is his screen right now. Read what is relevant and answer.' }
-            ]
-          });
-        } else {
-          toolResults.push({ type:'tool_result', tool_use_id: tu.id, content: JSON.stringify(payload) });
-        }
+        workingMessages = [...workingMessages, { role:'user', content:toolResults }];
+        data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
+        const more = textOf(data);
+        if(more) collected = collected ? collected + '\n' + more : more;
       }
-      workingMessages = [...workingMessages, { role:'user', content:toolResults }];
+
+      if(loopGuard > 0) break;                       // he used a tool; nothing to correct
+      if(data.stop_reason === 'tool_use') break;     // out of rounds, handled below
+      if(corrections >= 1) break;                    // one correction, never a loop
+      if(!claimsAnAction(collected)) break;          // he claimed nothing
+
+      corrections++;
+      setToolStatus(t('doingItForReal'));
+      const nudge = currentLang === 'he'
+        ? '\u05e2\u05e6\u05d5\u05e8. \u05ea\u05d9\u05d0\u05e8\u05ea \u05e2\u05db\u05e9\u05d9\u05d5 \u05e4\u05e2\u05d5\u05dc\u05d4 \u05e9\u05d1\u05d9\u05e6\u05e2\u05ea \u05d0\u05d5 \u05e9\u05d0\u05ea\u05d4 \u05de\u05d1\u05e6\u05e2 \u2014 \u05d0\u05d1\u05dc \u05dc\u05d0 \u05e7\u05e8\u05d0\u05ea \u05dc\u05e9\u05d5\u05dd \u05db\u05dc\u05d9, \u05d0\u05d6 \u05dc\u05d0 \u05e7\u05e8\u05d4 \u05db\u05dc\u05d5\u05dd. \u05d0\u05dd \u05d9\u05e9 \u05dc\u05da \u05db\u05dc\u05d9 \u05dc\u05d6\u05d4 \u2014 \u05ea\u05e7\u05e8\u05d0 \u05dc\u05d5 \u05e2\u05db\u05e9\u05d9\u05d5. \u05d0\u05dd \u05d0\u05d9\u05df \u2014 \u05ea\u05d2\u05d9\u05d3 \u05d1\u05e4\u05d9\u05e8\u05d5\u05e9 \u05e9\u05d0\u05ea\u05d4 \u05dc\u05d0 \u05d9\u05db\u05d5\u05dc \u05d5\u05de\u05d4 \u05e6\u05e8\u05d9\u05da \u05db\u05d3\u05d9 \u05e9\u05ea\u05d5\u05db\u05dc. \u05d0\u05dc \u05ea\u05d7\u05d6\u05d5\u05e8 \u05e2\u05dc \u05d4\u05de\u05e9\u05e4\u05d8 \u05d4\u05e7\u05d5\u05d3\u05dd \u05d5\u05d0\u05dc \u05ea\u05ea\u05e0\u05e6\u05dc.'
+        : 'Stop. You just described doing something, or being about to do it, but you called no tool — so nothing happened. If you have a tool for it, call it NOW. If you have no tool for it, say plainly that you cannot and what would be needed. Do not repeat the previous sentence and do not apologise.';
+      workingMessages = [...workingMessages,
+                         { role:'assistant', content: collected || '(no text)' },
+                         { role:'user', content: nudge }];
       data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
-      const more = textOf(data);
-      if(more) collected = collected ? collected + '\n' + more : more;
+      const fixed = textOf(data);
+      if(fixed) collected = collected ? collected + '\n' + fixed : fixed;
     }
     clearToolStatus();
     if(data.stop_reason === 'tool_use'){
@@ -10326,6 +10477,22 @@ adjustLayout();
       lastThinkStart = 0;
       try{ speculativePromise = null; pendingSpeculative = null; }catch(e){}
       addMessage('system', t('stalledReleased'));
+      beginListening();
+      return;
+    }
+
+    /* A recording that never closed. whisperActive is the flag every other
+       path trusts to mean "the microphone is working", so when a segment gets
+       stuck open it is not a pause — it is silence that looks healthy from
+       every angle, including from the check at the bottom of this watchdog.
+       A minute is far past any sentence. */
+    if(whisperActive && captureStartedAt && Date.now() - captureStartedAt > 60000){
+      console.warn('JARVIS: capture stuck open, resetting');
+      try{ stopWhisperCapture(); }catch(e){}
+      whisperActive = false;
+      captureStartedAt = 0;
+      captureSawSpeech = false;
+      addMessage('system', t('captureReset'));
       beginListening();
       return;
     }

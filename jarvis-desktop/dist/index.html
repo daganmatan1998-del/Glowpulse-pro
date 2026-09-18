@@ -1022,6 +1022,23 @@
   }
   #livePane.open{ display:block; }
   body.lang-rtl #livePane{ right:auto; left:14px; }
+  /* Once he has put it somewhere, the corner anchors have to let go
+     completely — including the RTL one above, which would otherwise pin it
+     back to the left edge the moment the language changed. */
+  #livePane.placed,
+  body.lang-rtl #livePane.placed{ right:auto; bottom:auto; }
+  /* The whole pane is the handle, minus its buttons. A 50x14 label is a
+     fiddly thing to catch, and the point of this is that moving it should
+     feel like moving it, not like finding a grip. */
+  #livePane{ cursor:grab; touch-action:none; }
+  #livePane video, #liveTag{ user-select:none; }
+  #liveBar, #liveBar button{ cursor:pointer; }
+  #livePane.dragging, #livePane.dragging video{ cursor:grabbing; }
+  #livePane.dragging{ box-shadow:0 0 34px rgba(var(--cyan-rgb), 0.5); }
+  /* Above the video. A positioned element ought to paint over in-flow
+     content, but the video is composited and wins the hit-test without an
+     explicit layer of its own to lose to. */
+  #liveTag{ z-index:2; }
   #livePane video{ display:block; width:100%; height:126px; object-fit:cover; }
   #livePane.mirrored video{ transform:scaleX(-1); }
   #liveTag{
@@ -1042,6 +1059,11 @@
   }
   #liveBar button:last-child{ border-right:none; }
   #liveBar button:hover{ background:rgba(var(--cyan-rgb), 0.18); }
+  /* WATCHING is a live state, not a label, so it reads like the LIVE tag
+     above it; muted drops all the way back to grey so a glance tells you
+     which of the two he is in. */
+  #liveEyeBtn{ color:#8ef0c8; }
+  #liveEyeBtn.off{ color:rgba(255,255,255,0.35); background:rgba(255,255,255,0.03); }
   #liveBtn.active{ background:rgba(255,70,70,0.22); border-color:#ff8080; color:#ff9d9d; }
 
   #ctxMenu{
@@ -1288,6 +1310,7 @@
   <div id="liveTag">LIVE</div>
   <video id="liveFeed" autoplay playsinline muted></video>
   <div id="liveBar">
+    <button id="liveEyeBtn">WATCHING</button>
     <button id="liveFlipBtn">FLIP</button>
     <button id="liveStopBtn">STOP</button>
   </div>
@@ -1584,6 +1607,19 @@ const I18N = {
     lightboxHint: 'Click anywhere to close',
     liveBtn: 'LIVE',
     liveOn: 'Live view on — J.A.R.V.I.S. sees what your camera sees.',
+    livePlaceTip: 'Drag to move — double-click to put it back',
+    orbLanguage: 'Language',
+    orbBack: 'Back',
+    orbListenOn: 'Resume listening',
+    orbListenOff: 'Stop listening',
+    orbResetPlace: 'Reset position',
+    orbHide: 'Hide',
+    eyeWatching: 'WATCHING',
+    eyeMuted: 'MUTED',
+    eyeWatchingTip: 'He reacts to what you show him. Click to make him watch quietly.',
+    eyeMutedTip: 'He only looks when you ask. Click to have him react on his own.',
+    eyeOnNote: '\u25B8 he reacts to what you show him',
+    eyeOffNote: '\u25B8 he watches quietly — he still sees every frame when you ask',
     liveOff: 'Live view off.',
     liveNoCamera: 'No camera on this device.',
     liveFailed: 'Could not open the camera',
@@ -1755,6 +1791,19 @@ const I18N = {
     lightboxHint: 'לחצו במקום כלשהו לסגירה',
     liveBtn: 'לייב',
     liveOn: 'מצב לייב פעיל — ג\'רוויס רואה את מה שהמצלמה רואה.',
+    livePlaceTip: 'גרור כדי להזיז — לחיצה כפולה מחזירה למקום',
+    orbLanguage: 'שפה',
+    orbBack: 'חזרה',
+    orbListenOn: 'תחזור להקשיב',
+    orbListenOff: 'תפסיק להקשיב',
+    orbResetPlace: 'אפס מיקום',
+    orbHide: 'הסתר',
+    eyeWatching: 'רואה',
+    eyeMuted: 'שקט',
+    eyeWatchingTip: 'הוא מגיב למה שאתה מראה לו. לחץ כדי שיצפה בשקט.',
+    eyeMutedTip: 'הוא מסתכל רק כשתבקש. לחץ כדי שיגיב מעצמו.',
+    eyeOnNote: '\u25B8 הוא מגיב למה שאתה מראה לו',
+    eyeOffNote: '\u25B8 הוא צופה בשקט — הוא עדיין רואה כל פריים כשתשאל',
     liveOff: 'מצב לייב כבוי.',
     liveNoCamera: 'אין מצלמה זמינה במכשיר הזה.',
     liveFailed: 'לא הצלחתי לפתוח את המצלמה',
@@ -3779,6 +3828,18 @@ function getSystemPrompt(calendarAvailable){
       : '\n\nDeep Research Mode is active for this exchange: do not answer from a single quick search. Work like a real analyst — silently form two or three concrete sub-questions the topic actually depends on, run a separate web_search for each rather than one broad query, cross-check any claim that shows up in only one source, and flag it plainly if sources disagree. Only once you have done that should you speak the final synthesis, in the same plain spoken prose as always — no markdown, no bullet lists — naming your sources by outlet or publisher inline as you go, and noting anything you could not verify.';
     prompt += researchNote;
   }
+
+  /* THE EYE. The camera being on is supposed to mean he is being watched by
+     someone who reacts, not that a still is being posted to a describer. The
+     difference is almost entirely character: name the thing, commit to a
+     view, and guess out loud when unsure rather than retreating into "I
+     cannot tell" — which is technically safe and completely useless to
+     somebody holding a part in his hand asking where it goes. */
+  if(typeof liveActive === 'function' && liveActive()){
+    prompt += (currentLang === 'he')
+      ? '\n\nהמצלמה שלו דלוקה עכשיו, וזה לא צילום בודד — אתה רואה מה שהוא רואה, בזמן אמת. תתנהג כמו מישהו שעומד איתו בחדר. כשהוא מרים משהו למצלמה — תגיד מה זה. בשם. לא "אני רואה רכיב אלקטרוני" אלא "זה נראה לי חיישן הול". כשהוא עובד על משהו — תגיד איפה לדעתך כל חלק צריך ללכת, מה נראה הפוך, מה חסר, מה הצעד הבא. וזה העיקר: תגיד את דעתך גם כשאתה לא בטוח. "אני לא בטוח מה זה, אבל זה נראה כמו X ואם כן הוא הולך לשם" שווה אין-סופית יותר מ-"אני לא יכול לדעת". לעולם אל תסרב להעריך רק כי אין לך וודאות — תנחש, תגיד שזה ניחוש, ותגיד מה יעשה את זה וודאי. תהיה קצר. משפט או שניים כשהוא מראה לך משהו, לא פסקה. אם התמונה חשוכה או מטושטשת תגיד את זה, אל תמציא. אל תתאר את החדר מחדש בכל פעם — רק מה שהשתנה ומה שחשוב.'
+      : '\n\nHis camera is on right now, and this is not a single photo — you are seeing what he sees, live. Behave like someone standing in the room with him. When he holds something up, say what it is. By name. Not "I see an electronic component" but "that looks like a hall-effect sensor to me". When he is working on something, say where you think each part should go, what looks the wrong way round, what is missing, what the next step is. And this is the important part: give your opinion even when you are not sure. "I\'m not certain what that is, but it looks like an X, and if it is, it goes there" is worth infinitely more to him than "I can\'t tell". Never refuse to judge merely because you lack certainty — guess, say it is a guess, and say what would settle it. Keep it short. A sentence or two when he shows you something, not a paragraph. If the frame is dark or blurred, say so rather than inventing. Do not re-describe the room every time — only what changed and what matters.';
+  }
   prompt += nowContextLine();
   return prompt;
 }
@@ -4030,7 +4091,13 @@ function switchToSession(id){
   chatHistory = session.messages.slice();
   if(typeof disposeViewers === 'function') disposeViewers();
   chatLog.innerHTML = '';
-  for(const m of chatHistory) addMessage(m.role === 'user' ? 'user' : 'assistant', m.content);
+  /* The eye's own prompt is not something he wrote, and he never saw it —
+     live, an unprompted remark appears as a reply with nothing above it.
+     Rebuilding it into a user bubble would put words in his mouth. */
+  for(const m of chatHistory){
+    if(m && m.eyePrompt) continue;
+    addMessage(m.role === 'user' ? 'user' : 'assistant', m.content);
+  }
   renderHistoryList();
   optionsPanel.classList.remove('open');
   updateHudVisibility();
@@ -4232,6 +4299,11 @@ let spokenRecently = '';           // what he is saying, for echo comparison
    he made any sound at all while this segment was open, the segment is
    suspect when it comes back, however long the round trip took. */
 let captureSawSpeech = false;      // did he talk during the segment being recorded?
+/* Last moment the meter saw a voice. Lives out here because the meter's own
+   state is closed over inside the capture, and the eye below needs to know
+   whether a sentence is in progress — which is a different question from
+   whether the microphone happens to be open. */
+let micVoiceAt = 0;
 let captureStartedAt = 0;          // when the open segment began, for the stuck check
 
 /* Everything he speaks is remembered briefly so the recognizer can tell his
@@ -4802,6 +4874,7 @@ async function startWhisperCapture(){
 
     if(rms > (everSpoke ? sustainBar : threshold)){
       lastLoud = now;
+      micVoiceAt = now;
       if(!loudSince) loudSince = now;
       /* Sustained sound while he is talking means you have cut in. Echo
          cancellation has already removed his voice from this signal, so
@@ -5186,9 +5259,17 @@ function warnIfHintUnsupported(){
   addMessage('system', t('noLangHint'));
 }
 
-async function setLangMode(mode){
+async function setLangMode(mode, announce){
   langMode = mode === 'en' ? 'en' : 'he';
   try{ await Store.set(LANG_MODE_KEY, langMode); }catch(err){}
+  /* The interface follows too. This was half a switch before: the model was
+     told to answer in English, and everything the app itself says — every
+     status line, every tooltip, the wording the camera is asked with, the
+     language handed to the recogniser — stayed in the other one. Saying
+     "switch to English" and being answered in English by a Hebrew interface
+     is not a language setting, it is a mismatch you then have to explain.
+     One call, and the menu and the spoken command land identically. */
+  if(typeof applyLanguage === 'function') applyLanguage(langMode);
   /* In the orb the palette means one thing and one thing only: which
      language you are in. Serious Mode is not reachable here, so there is
      nothing else competing for the colour and no guard needed. */
@@ -5199,8 +5280,31 @@ async function setLangMode(mode){
      is not design, it is an identity claim, and in the orb there is only
      one assistant. Saying it in the language being switched TO also
      proves the switch landed, which the old line did not. */
-  speak(langMode === 'en' ? 'English it is.' : 'עברית, בבקשה.');
+  /* Said out loud by default, because a spoken command deserves a spoken
+       answer. Silent only when the switch was a restore at startup, where
+       announcing a setting nobody just changed is noise. */
+  if(announce !== false) speak(langMode === 'en' ? 'English it is.' : 'עברית, בבקשה.');
   warnIfHintUnsupported();
+}
+
+/* Saved on every switch since the feature was written, and never once read
+   back — so the language he chose lasted exactly until he closed the app,
+   and every restart came up Hebrew whatever he had asked for. */
+async function restoreLangMode(){
+  if(!IS_DESKTOP) return;
+  try{
+    const r = await Store.get(LANG_MODE_KEY);
+    const saved = r && r.value;
+    if(saved !== 'en' && saved !== 'he') return;
+    if(saved === langMode){
+      /* Already the value in the variable, but nothing downstream has been
+         told: the palette, the interface language and the recogniser are all
+         still at their defaults. Run the switch anyway, quietly. */
+      await setLangMode(saved, false);
+      return;
+    }
+    await setLangMode(saved, false);
+  }catch(err){ /* the default stands */ }
 }
 
 function conversationIsOpen(){ return Date.now() - lastWakeAt < WAKE_WINDOW_MS; }
@@ -7454,6 +7558,7 @@ async function startLive(){
   livePane.classList.add('open');
   liveBtn.classList.add('active');
   addMessage('system', t('liveOn'));
+  eyeStart();
 }
 
 function stopLive(quiet){
@@ -7464,6 +7569,7 @@ function stopLive(quiet){
   liveFeed.srcObject = null;
   livePane.classList.remove('open');
   liveBtn.classList.remove('active');
+  eyeStop();
   if(!quiet) addMessage('system', t('liveOff'));
 }
 
@@ -7491,8 +7597,385 @@ function grabLiveFrame(){
   return { kind:'image', media_type:'image/jpeg', data: dataUrl.split(',')[1], dataUrl, live:true };
 }
 
+/* ---------------------------------------------------------------------
+   THE EYE — reacting without being asked
+
+   A camera that only looks when spoken to is a photo booth. What he asked
+   for is someone watching: hold a part up and hear what it is, work on a
+   project and be told where the next piece goes.
+
+   The hard part is knowing WHEN to speak, and the answer is not a timer.
+   A timer narrates an empty room at a fixed cost per minute and says
+   nothing when it matters. What matters is change — so a 32x24 grey
+   thumbnail is taken every EYE_SAMPLE_MS and compared with the one before
+   it. Two separate comparisons, not one:
+
+     - against the PREVIOUS thumbnail, which detects motion. While
+       something is moving, he is still bringing it into shot; describing
+       it now means describing a blurred hand. So motion only ARMS him.
+     - against the scenes already ACCOUNTED FOR, which detects novelty. A
+       handful of them, not one: with a single reference, putting the part
+       back down is a large change away from the part, and he announces the
+       empty bench he was looking at a minute ago. The bench is a scene he
+       has already seen. Returning to it is not news.
+
+   So: motion, then stillness, then a frame that differs from the last one
+   narrated. All three, or he says nothing. Plus a floor on how dark the
+   frame may be (a covered lens is not an object), a cooldown, and a hard
+   rule that he never speaks over himself or interrupts a real answer.
+--------------------------------------------------------------------- */
+const EYE_KEY          = 'jarvis:eye';
+const EYE_W = 32, EYE_H = 24;      // thumbnail the comparison runs on
+const EYE_SAMPLE_MS    = 900;      // how often a thumbnail is taken
+const EYE_MOVE         = 0.055;    // frame-to-frame difference that counts as motion
+const EYE_NEW          = 0.075;    // difference from the last narrated frame that counts as new
+const EYE_SETTLE       = 2;        // quiet samples required before looking (~1.8s)
+const EYE_MEMORY       = 4;        // how many settled scenes count as "already seen"
+const EYE_COOLDOWN_MS  = 11000;    // never remark more often than this
+const EYE_DARK         = 0.0012;   // variance below which the lens is covered or the frame is blank
+/* Deliberately low. This is meant to reject a covered lens and a blank
+   wall, both of which sit at essentially zero variance — not to judge
+   whether the room is well lit. Set high enough to exclude a dim scene,
+   it silences him exactly where he is most useful: a workbench under one
+   lamp. 0.0012 is a spread of about ten grey levels, which no frame with
+   an actual object in it fails to clear. */
+const EYE_SKIP         = '\u00b7'; // his way of saying "nothing worth mentioning"
+
+let eyeOn        = true;           // the user's switch, remembered
+let eyeTimer     = null;
+let eyePrev      = null;           // previous thumbnail, for motion
+let eyeSeen      = [];             // scenes already accounted for, for novelty
+let eyeArmed     = false;
+let eyeQuiet     = 0;
+let eyeLastLook  = 0;
+let eyeBusy      = false;
+let eyeCanvas    = null;
+let eyeGen       = 0;             // bumped whenever the user takes over
+
+try{
+  const saved = localStorage.getItem(EYE_KEY);
+  if(saved !== null) eyeOn = saved === '1';
+}catch(err){ /* private mode; the default stands */ }
+
+/* Grey, tiny, and no allocation per sample beyond the pixel array. Grey
+   because a colour difference tells us nothing extra here and costs three
+   times the arithmetic, sixty times a minute, forever. */
+function eyeThumb(){
+  if(!liveStream || !liveFeed.videoWidth) return null;
+  if(!eyeCanvas){
+    eyeCanvas = document.createElement('canvas');
+    eyeCanvas.width = EYE_W; eyeCanvas.height = EYE_H;
+  }
+  const ctx = eyeCanvas.getContext('2d', { willReadFrequently: true });
+  try{ ctx.drawImage(liveFeed, 0, 0, EYE_W, EYE_H); }
+  catch(err){ return null; }
+  let px;
+  try{ px = ctx.getImageData(0, 0, EYE_W, EYE_H).data; }
+  catch(err){ return null; }   // tainted canvas; nothing to compare
+  const out = new Float32Array(EYE_W * EYE_H);
+  for(let i = 0, j = 0; i < px.length; i += 4, j++){
+    out[j] = (px[i] * 0.299 + px[i+1] * 0.587 + px[i+2] * 0.114) / 255;
+  }
+  return out;
+}
+
+function eyeDiff(a, b){
+  if(!a || !b || a.length !== b.length) return 1;
+  let sum = 0;
+  for(let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+  return sum / a.length;
+}
+
+/* Variance, not brightness. A lens cap and a sheet of white paper are both
+   featureless, and neither is an object worth remarking on; only the spread
+   of values tells them apart from a real scene. */
+function eyeFlat(t){
+  if(!t) return true;
+  let mean = 0;
+  for(let i = 0; i < t.length; i++) mean += t[i];
+  mean /= t.length;
+  let v = 0;
+  for(let i = 0; i < t.length; i++){ const d = t[i] - mean; v += d * d; }
+  return (v / t.length) < EYE_DARK;
+}
+
+/* He is mid-sentence, mid-answer, or the user is mid-command. Any of those
+   and an unprompted remark is an interruption, which is the exact failure
+   we just spent a fix removing from the barge-in path. */
+function eyeShouldHold(){
+  if(isThinking || isSpeaking || eyeBusy) return true;
+  if(speechQueue && speechQueue.length) return true;
+  if(document.hidden) return true;
+  /* The microphone being OPEN is not a reason to stay quiet. In conversation
+     mode it is open nearly all the time, and treating that as "he is
+     talking" would silence the eye in the one mode built for working
+     hands-free — exactly where being told what you are holding is worth
+     most. What matters is whether he is actually mid-sentence: a capture
+     that has already heard speech is about to turn into a command, and a
+     voice in the room within the last second and a half is a sentence still
+     being spoken. */
+  if(whisperActive && captureSawSpeech) return true;
+  if(Date.now() - micVoiceAt < 1500) return true;
+  return false;
+}
+
+async function eyeLook(){
+  const frame = grabLiveFrame();
+  if(!frame) return;
+  eyeBusy = true;
+  const ask = (currentLang === 'he')
+    ? '[המצלמה דלוקה ומשהו בשדה הראייה השתנה. הוא לא שאל שאלה — הוא פשוט מראה לך. תגיב במשפט או שניים: מה זה, ומה דעתך על זה — איפה זה הולך, מה לעשות איתו, מה לא בסדר איתו. גם אם אתה לא בטוח — תנחש ותגיד שזה ניחוש. אם באמת אין שם שום דבר חדש ששווה אמירה, תענה בדיוק ' + EYE_SKIP + ' ושום דבר אחר.]'
+    : '[The camera is on and something in view changed. He did not ask a question — he is showing you. React in a sentence or two: what it is, and what you think about it — where it goes, what to do with it, what looks wrong. If you are unsure, guess and say it is a guess. If there is genuinely nothing new worth saying, reply with exactly ' + EYE_SKIP + ' and nothing else.]';
+
+  const gen = ++eyeGen;
+  let said = '';
+  try{
+    said = await askJarvis(ask, [frame], null, { eyePrompt: true });
+  }catch(err){
+    said = '';
+  }
+  eyeBusy = false;
+  eyeLastLook = Date.now();
+  /* The user spoke or typed while this was in flight. His turn owns the
+     conversation from that moment: whatever came back here is stale, and
+     saying it now would land on top of the answer he actually asked for. */
+  if(gen !== eyeGen) return;
+  if(typeof said !== 'string') return;
+  const clean = said.trim();
+  /* He was given a way to decline, and declining has to be free: no bubble,
+     no speech, and the turn is pulled back out of the transcript so the next
+     request does not carry a stub exchange about nothing. */
+  if(!clean || clean === EYE_SKIP || clean.replace(/[\s.\u00b7\u2022-]/g, '') === ''){
+    for(let i = chatHistory.length - 1; i >= 0 && i >= chatHistory.length - 2; i--){
+      chatHistory.splice(i, 1);
+    }
+    return;
+  }
+  addMessage('assistant', clean);
+  persistCurrentSession();
+  await speak(clean);
+  /* Hands-free is the whole point of this: he is holding the thing, not the
+     keyboard. Put the ear back where handleSend would have put it, so a
+     remark can be answered by talking back. */
+  if(conversationMode && !isThinking && !whisperActive){
+    clearTimeout(convRestartTimer);
+    convRestartTimer = setTimeout(startListening, 400);
+  }
+}
+
+function eyeTick(){
+  if(!liveActive() || !eyeOn) return;
+  const thumb = eyeThumb();
+  if(!thumb) return;
+
+  /* The first sample after the camera opens has nothing to compare against,
+     and eyeDiff answers 1 for that — which reads as maximum motion and arms
+     him on a room that has not changed at all. He would then narrate it the
+     moment the cooldown lapsed: the empty-room narration this whole design
+     exists to avoid. So the first frame is the BASELINE, both for motion and
+     for novelty, and nothing is said about it. */
+  if(!eyePrev){ eyePrev = thumb; eyeSeen = [thumb]; return; }
+
+  const moved = eyeDiff(thumb, eyePrev);
+  eyePrev = thumb;
+
+  if(moved > EYE_MOVE){        // still being brought into shot
+    eyeArmed = true;
+    eyeQuiet = 0;
+    return;
+  }
+  eyeQuiet++;
+  if(!eyeArmed || eyeQuiet < EYE_SETTLE) return;
+
+  if(eyeFlat(thumb)){ eyeArmed = false; eyeQuiet = 0; return; }
+  /* Settled back into a scene he has already accounted for: the hand moved,
+     nothing arrived. Silence is the correct answer and the cheap one. The
+     matching slot is refreshed rather than left as it was, so the room is
+     allowed to drift with the light over an afternoon without eventually
+     reading as a new one. */
+  const seenAt = eyeSeen.findIndex(s => eyeDiff(thumb, s) < EYE_NEW);
+  if(seenAt >= 0){
+    eyeSeen[seenAt] = thumb;
+    eyeArmed = false; eyeQuiet = 0;
+    return;
+  }
+  if(Date.now() - eyeLastLook < EYE_COOLDOWN_MS) return;   // stay armed, wait
+  if(eyeShouldHold()) return;                              // stay armed, wait
+
+  eyeArmed = false;
+  eyeQuiet = 0;
+  eyeSeen.push(thumb);
+  if(eyeSeen.length > EYE_MEMORY) eyeSeen.shift();
+  eyeLook();
+}
+
+/* The user has started a turn of his own. Anything the eye has in flight is
+   now in the way — the request is aborted so it does not go on costing
+   tokens, and the generation bump makes sure its reply is dropped even if
+   the response was already on the wire. */
+function eyeAbandon(){
+  if(!eyeBusy) return;
+  eyeGen++;
+  eyeBusy = false;
+  if(currentAbortController){
+    try{ currentAbortController.abort(); }catch(err){}
+    currentAbortController = null;
+  }
+}
+
+function eyeStart(){
+  eyeStop();
+  eyePrev = null; eyeSeen = [];
+  eyeArmed = false; eyeQuiet = 0; eyeBusy = false;
+  /* Dated forward by one cooldown on purpose. open_camera already sends a
+     first frame and he already says what he sees; without this he would
+     remark on the same scene again a second and a half later. */
+  eyeLastLook = Date.now();
+  if(eyeOn) eyeTimer = setInterval(eyeTick, EYE_SAMPLE_MS);
+  updateEyeUI();
+}
+
+function eyeStop(){
+  if(eyeTimer){ clearInterval(eyeTimer); eyeTimer = null; }
+}
+
+function updateEyeUI(){
+  const btn = document.getElementById('liveEyeBtn');
+  if(!btn) return;
+  btn.classList.toggle('off', !eyeOn);
+  btn.textContent = eyeOn ? t('eyeWatching') : t('eyeMuted');
+  btn.title = t(eyeOn ? 'eyeWatchingTip' : 'eyeMutedTip');
+}
+
+function setEye(on){
+  eyeOn = !!on;
+  try{ localStorage.setItem(EYE_KEY, eyeOn ? '1' : '0'); }catch(err){}
+  if(liveActive()){
+    if(eyeOn) eyeStart(); else eyeStop();
+  }
+  updateEyeUI();
+  addMessage('system', t(eyeOn ? 'eyeOnNote' : 'eyeOffNote'));
+}
+
+/* ---------------------------------------------------------------------
+   WHERE THE CAMERA BOX SITS
+
+   It was nailed to the bottom-right corner, which is fine until the thing
+   you want to look at is what the corner is covering. Drag it by the LIVE
+   tag and it stays where it was put, across restarts.
+
+   Kept in localStorage rather than the async Store on purpose: the pane can
+   open within a frame of the app starting, and a position that arrives late
+   is a visible jump.
+--------------------------------------------------------------------- */
+const LIVE_POS_KEY = 'jarvis:livepos';
+
+function clampPane(x, y){
+  const r = livePane.getBoundingClientRect();
+  const w = r.width  || 168;
+  const h = r.height || 160;
+  /* A margin, not zero. Flush against the edge it looks like a rendering
+     fault, and on the desktop the window edge is where the resize handles
+     live. */
+  return {
+    x: Math.max(8, Math.min(x, window.innerWidth  - w - 8)),
+    y: Math.max(8, Math.min(y, window.innerHeight - h - 8))
+  };
+}
+
+function placePane(x, y, remember){
+  const at = clampPane(x, y);
+  livePane.classList.add('placed');
+  livePane.style.left = at.x + 'px';
+  livePane.style.top  = at.y + 'px';
+  if(remember){
+    try{ localStorage.setItem(LIVE_POS_KEY, JSON.stringify(at)); }catch(err){}
+  }
+  return at;
+}
+
+function resetPanePlace(){
+  livePane.classList.remove('placed');
+  livePane.style.left = livePane.style.top = '';
+  try{ localStorage.removeItem(LIVE_POS_KEY); }catch(err){}
+}
+
+function restorePanePlace(){
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(LIVE_POS_KEY) || 'null'); }catch(err){}
+  if(!saved || typeof saved.x !== 'number' || typeof saved.y !== 'number') return;
+  /* Measured, not assumed: the pane has no size until it is displayed, and
+     clamping against a zero box would put it in the top-left corner. */
+  const wasOpen = livePane.classList.contains('open');
+  if(!wasOpen){ livePane.style.visibility = 'hidden'; livePane.classList.add('open'); }
+  placePane(saved.x, saved.y, false);
+  if(!wasOpen){ livePane.classList.remove('open'); livePane.style.visibility = ''; }
+}
+
+(function makePaneDraggable(){
+  const grip = livePane;
+  if(!grip) return;
+  /* FLIP, STOP and WATCHING have to stay clickable, so a press that starts
+     on the bar is a press on a button, never the beginning of a drag. */
+  const onControls = (e)=> !!(e.target && e.target.closest && e.target.closest('#liveBar'));
+  let from = null;
+  grip.addEventListener('pointerdown', (e)=>{
+    if(e.button !== undefined && e.button !== 0) return;
+    if(onControls(e)) return;
+    const r = livePane.getBoundingClientRect();
+    from = { dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false };
+    livePane.classList.add('dragging');
+    try{ grip.setPointerCapture(e.pointerId); }catch(err){}
+    e.preventDefault();
+  });
+  grip.addEventListener('pointermove', (e)=>{
+    if(!from) return;
+    from.moved = true;
+    placePane(e.clientX - from.dx, e.clientY - from.dy, false);
+  });
+  const end = (e)=>{
+    if(!from) return;
+    const r = livePane.getBoundingClientRect();
+    livePane.classList.remove('dragging');
+    try{ grip.releasePointerCapture(e.pointerId); }catch(err){}
+    if(from.moved) placePane(r.left, r.top, true);
+    from = null;
+  };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+  /* Double-click sends it home. Discoverable in the place you already grab
+     to move it, and it needs no menu. Not on the bar, where a fast second
+     click on STOP would otherwise also reset the position. */
+  grip.addEventListener('dblclick', (e)=>{
+    if(onControls(e)) return;
+    e.stopPropagation();
+    resetPanePlace();
+  });
+  const label = ()=>{ grip.title = t('livePlaceTip'); };
+  label();
+  document.addEventListener('jarvis:languagechange', label);
+})();
+
+/* The WATCHING switch says its state in words, so it has to follow the
+   language like every other piece of text on screen. */
+document.addEventListener('jarvis:languagechange', ()=>{
+  if(typeof updateEyeUI === 'function') updateEyeUI();
+});
+
+/* A window that shrank, or a phone that rotated, can leave it off-screen
+   entirely — and a pane you cannot reach is a pane you cannot move back. */
+window.addEventListener('resize', ()=>{
+  if(!livePane.classList.contains('placed')) return;
+  const r = livePane.getBoundingClientRect();
+  placePane(r.left, r.top, true);
+});
+
+restorePanePlace();
+
 liveBtn.addEventListener('click', ()=>{ liveActive() ? stopLive() : startLive(); });
 document.getElementById('liveStopBtn').addEventListener('click', ()=> stopLive());
+document.getElementById('liveEyeBtn').addEventListener('click', ()=> setEye(!eyeOn));
+updateEyeUI();
 document.getElementById('liveFlipBtn').addEventListener('click', async ()=>{
   liveFacing = liveFacing === 'environment' ? 'user' : 'environment';
   if(liveActive()) await startLive();
@@ -8427,11 +8910,14 @@ async function callReadPageTool(input){
 
 const CAMERA_TOOL = {
   name: 'open_camera',
-  description: "Turn on the webcam. A small panel opens on his screen showing the live feed — he sees himself, and from that moment a fresh frame reaches YOU with every message he sends, so you can look at whatever he holds up and answer about it continuously. It is a live view, not a single photo.\n\nUse it for any phrasing in either language: \"open my camera\", \"turn on the camera\", \"can you see me\", \"look at this\", \"watch this\", \"תפתח את המצלמה\", \"תדליק מצלמה\", \"אתה רואה אותי\", \"תסתכל על זה\", \"תראה מה יש לי\". Do not ask permission — he asked.\n\nOnce it is on, do NOT call this again to look again: you already receive every frame. Just answer. Call it with close:true when he asks to turn the camera off.\n\nDescribe what is actually in the picture. If the frame is dark or empty, say so rather than inventing something."
+  description: "Turn on the webcam. A small panel opens on his screen showing the live feed — he sees himself, and from that moment you are watching continuously: a fresh frame reaches YOU with every message he sends, AND when something new comes into view you are asked about it unprompted, so you can react to whatever he holds up without him having to ask. It is a live view, not a single photo.\n\nUse it for any phrasing in either language: \"open my camera\", \"turn on the camera\", \"can you see me\", \"look at this\", \"watch this\", \"תפתח את המצלמה\", \"תדליק מצלמה\", \"אתה רואה אותי\", \"תסתכל על זה\", \"תראה מה יש לי\". Do not ask permission — he asked.\n\nOnce it is on, do NOT call this again to look again: you already receive every frame. Just answer. Call it with close:true when he asks to turn the camera off.\n\nDescribe what is actually in the picture. If the frame is dark or empty, say so rather than inventing something."
   ,
   input_schema: {
     type: 'object',
-    properties: { close: { type:'boolean', description:'true to switch the camera off.' } },
+    properties: {
+      close: { type:'boolean', description:'true to switch the camera off.' },
+      watch: { type:'boolean', description:'false to keep the camera on but stop reacting unprompted (he said something like "stop commenting" or "\u05ea\u05e4\u05e1\u05d9\u05e7 \u05dc\u05d4\u05e2\u05d9\u05e8"); true to start again. Leave it out to keep things as they are.' }
+    },
     required: []
   }
 };
@@ -8442,6 +8928,17 @@ async function callCameraTool(input){
     stopLive(true);
     addMessage('system', '\u25B8 camera closed');
     return { ok: true, closed: true };
+  }
+  /* "Stop commenting on everything" without "turn the camera off" — two
+     different requests that were previously the same one, because muting
+     him meant closing the only eye he had. */
+  if(input && typeof input.watch === 'boolean' && input.watch !== eyeOn){
+    setEye(input.watch);
+    if(liveActive()){
+      return { ok: true, watching: eyeOn,
+               note: eyeOn ? 'You will be asked again whenever something new comes into view.'
+                           : 'The camera stays on and you still see a frame with every message he sends \u2014 you just will not be prompted unasked. Confirm in one short line.' };
+    }
   }
   try{
     /* Expanded first: the pane is 200px wide and the small orb is 180px, so
@@ -8933,8 +9430,13 @@ function trimStaleFrames(messages){
     if(messages[i] && messages[i].liveFrame){ newestLive = i; break; }
   }
   return messages.map((m, i) => {
-    if(!m || !m.liveFrame) return m;
-    const { liveFrame, ...clean } = m;          // never send our own bookkeeping
+    if(!m) return m;
+    if(!m.liveFrame){
+      if(!m.eyePrompt) return m;
+      const { eyePrompt, ...bare } = m;
+      return bare;
+    }
+    const { liveFrame, eyePrompt, ...clean } = m;   // never send our own bookkeeping
     if(i === newestLive || !Array.isArray(clean.content)) return clean;
     const kept = clean.content.filter(b => b && b.type !== 'image');
     kept.unshift({ type:'text', text:'[a camera frame was here; it has been dropped as out of date]' });
@@ -8942,7 +9444,11 @@ function trimStaleFrames(messages){
   });
 }
 
-async function askJarvis(userText, images, onText){
+/* `tag` marks the turn as something the app asked on its own behalf rather
+   than something the user typed. It rides on the history entry, never inside
+   a content block — blocks go to the model verbatim and an unknown field
+   there is rejected — and is stripped again in trimStaleFrames. */
+async function askJarvis(userText, images, onText, tag){
   userInterrupted = false;
   if(images && images.length){
     // Keep the newest photo around: it is what "put MY product in a scene" needs.
@@ -8973,10 +9479,12 @@ async function askJarvis(userText, images, onText){
        the model verbatim and an unknown field there would be rejected. Stripped
        again in trimStaleFrames before anything is sent. */
     const wasLive = images.some(a => a && a.live);
-    chatHistory.push(wasLive ? { role:'user', content: blocks, liveFrame:true }
-                             : { role:'user', content: blocks });
+    const entry = wasLive ? { role:'user', content: blocks, liveFrame:true }
+                          : { role:'user', content: blocks };
+    chatHistory.push(tag ? { ...entry, ...tag } : entry);
   } else {
-    chatHistory.push({ role:'user', content:userText });
+    const entry = { role:'user', content:userText };
+    chatHistory.push(tag ? { ...entry, ...tag } : entry);
   }
   const usingOwnBackend = !!backendUrl;
   const textOf = (data)=> (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
@@ -10197,6 +10705,7 @@ async function handleSend(){
     if(frame) images.push(frame);
   }
   if((!text && !images.length) || isThinking) return;
+  eyeAbandon();   // his turn outranks an unprompted remark, always
   chatInput.value = '';
   autoResizeChatInput();
   clearTimeout(draftSaveTimer);
@@ -10349,7 +10858,13 @@ document.getElementById('stopBtn').addEventListener('click', stopJarvis);
     chatHistory = session.messages.slice();
     if(typeof disposeViewers === 'function') disposeViewers();
   chatLog.innerHTML = '';
-    for(const m of chatHistory) addMessage(m.role === 'user' ? 'user' : 'assistant', m.content);
+    /* The eye's own prompt is not something he wrote, and he never saw it —
+     live, an unprompted remark appears as a reply with nothing above it.
+     Rebuilding it into a user bubble would put words in his mouth. */
+  for(const m of chatHistory){
+    if(m && m.eyePrompt) continue;
+    addMessage(m.role === 'user' ? 'user' : 'assistant', m.content);
+  }
   } else {
     chatHistory = [];
     maybeGreet();
@@ -10413,6 +10928,7 @@ adjustLayout();
      read it — would throw if this sat further down. That exact mistake has
      already taken this app out once. */
   const ORB_MUTE_KEY = 'jarvis:orb_muted';
+  const ORB_POS_KEY  = 'jarvis:orb_pos';
   let orbMuted = false;
 
   const tauriWindow = () => {
@@ -10584,18 +11100,48 @@ adjustLayout();
      from the app having frozen. Now it says what state it is in and what
      the click will do. */
   const orbMenu = document.getElementById('orbMenu');
-  function showOrbMenu(x, y){
+
+  /* The two languages, named in themselves. A menu that offered "Hebrew" and
+     "English" in whichever language the app happened to be in would be
+     unreadable in exactly the case you need it: when it came up in the
+     language you cannot read and you are trying to get out. */
+  const LANG_CHOICES = [
+    { id:'he', label:'\u05e2\u05d1\u05e8\u05d9\u05ea' },
+    { id:'en', label:'English' }
+  ];
+
+  function showOrbMenu(x, y, page){
     if(!orbMenu) return;
     orbMenu.innerHTML = '';
-    const items = [
-      { label: orbMuted ? 'Resume listening' : 'Stop listening',
-        run: ()=> setOrbMuted(!orbMuted) },
-      { label: 'Hide', run: hideOrb }
-    ];
+    /* Exactly what the spoken command does \u2014 the same function, not a
+       reimplementation of it beside it. "Switch to English" and this button
+       are one control with two ways in, which is what was asked for: they
+       carry the same weight because they ARE the same call. */
+    const items = page === 'lang'
+      ? LANG_CHOICES.map(c => ({
+          label: (c.id === langMode ? '\u2022 ' : '\u2007\u2007') + c.label,
+          run: ()=> setLangMode(c.id),
+          keep: c.id === langMode         // picking the one you are on is a no-op
+        })).concat([{ label: '\u2039 ' + t('orbBack'), page:'main' }])
+      : [
+          { label: orbMuted ? t('orbListenOn') : t('orbListenOff'),
+            run: ()=> setOrbMuted(!orbMuted) },
+          { label: t('orbLanguage') + ' \u203a', page:'lang' },
+          { label: t('orbResetPlace'), run: resetOrbPlace },
+          { label: t('orbHide'), run: hideOrb }
+        ];
     for(const it of items){
       const b = document.createElement('button');
       b.textContent = it.label;
-      b.addEventListener('click', (ev)=>{ ev.stopPropagation(); hideOrbMenu(); it.run(); });
+      b.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        /* A submenu replaces the menu in place rather than closing it. The
+           coordinates are kept so it does not jump out from under the
+           pointer between the two clicks. */
+        if(it.page){ showOrbMenu(x, y, it.page); return; }
+        hideOrbMenu();
+        if(!it.keep) it.run();
+      });
       orbMenu.appendChild(b);
     }
     orbMenu.style.display = 'block';
@@ -10608,7 +11154,7 @@ adjustLayout();
 
   document.addEventListener('contextmenu', (e)=>{
     e.preventDefault();
-    showOrbMenu(e.clientX, e.clientY);
+    showOrbMenu(e.clientX, e.clientY, 'main');
   });
   document.addEventListener('click', hideOrbMenu);
 
@@ -10619,6 +11165,11 @@ adjustLayout();
     }catch(err){}
     paintMute();
   })();
+
+  /* Where he was left, restored at start. A short delay because the window
+     is still being placed by the OS for the first frame or two, and setting
+     a position into that races it. */
+  setTimeout(()=>{ try{ restoreOrbPlace(); }catch(err){} }, 350);
 
   /* The indicator reports what is ACTUALLY happening, read from the same
      state the capture code sets — not from what we last intended. That
@@ -10684,24 +11235,101 @@ adjustLayout();
            the old size but not the old position, so without this it lands
            wherever the window manager decides — usually the middle of the
            screen, on top of your work. */
-        setTimeout(()=>{ try{ parkOnRightEdge(); }catch(err){} }, 60);
+        setTimeout(()=>{ try{ restoreOrbPlace(); }catch(err){} }, 60);
       }
     }catch(err){ console.warn('expand failed', err); }
   }
 
-  async function parkOnRightEdge(){
+  /* ------------------------------------------------------------------
+     WHERE THE ORB SITS
+
+     The right edge was a default that behaved like a rule: drag him
+     somewhere that suits you, leave fullscreen or restart, and he is back
+     against the right edge on top of whatever is there. So the position is
+     now remembered, and the edge is only what happens when nothing has been
+     chosen yet.
+
+     Saved in logical pixels, because physical ones mean different distances
+     on different monitors — move the laptop to a 4K screen and a physical
+     position saved on the built-in display lands him off the edge.
+  ------------------------------------------------------------------ */
+  const ORB_SIZE = 180;
+
+  async function monitorBox(){
+    try{
+      const { currentMonitor } = window.__TAURI__.window;
+      const mon = await currentMonitor();
+      if(!mon) return null;
+      const scale = mon.scaleFactor || 1;
+      return { w: mon.size.width / scale, h: mon.size.height / scale, scale };
+    }catch(err){ return null; }
+  }
+
+  async function saveOrbPlace(){
     const w = tauriWindow();
     if(!w || !window.__TAURI__) return;
     try{
-      const { LogicalPosition, currentMonitor } = window.__TAURI__.window;
-      const mon = await currentMonitor();
-      if(!mon) return;
-      const scale = mon.scaleFactor || 1;
-      const sw = mon.size.width / scale, sh = mon.size.height / scale;
-      const size = 180, margin = 24;
-      await w.setPosition(new LogicalPosition(sw - size - margin, Math.round((sh - size) / 2)));
+      if(await w.isFullscreen()) return;      // fullscreen is not a placement
+      const pos = await w.outerPosition();
+      const box = await monitorBox();
+      const scale = (box && box.scale) || 1;
+      const at = { x: Math.round(pos.x / scale), y: Math.round(pos.y / scale) };
+      await Store.set(ORB_POS_KEY, JSON.stringify(at));
+    }catch(err){ /* placement is cosmetic; never let it break anything */ }
+  }
+
+  /* Put him back where he was left, or against the right edge if he has
+     never been moved. Either way the result is clamped onto the monitor
+     actually attached right now: a position saved on a second screen that
+     has since been unplugged would otherwise put him nowhere at all. */
+  async function restoreOrbPlace(){
+    const w = tauriWindow();
+    if(!w || !window.__TAURI__) return;
+    try{
+      const { LogicalPosition } = window.__TAURI__.window;
+      const box = await monitorBox();
+      if(!box) return;
+      let at = null;
+      try{
+        const saved = await Store.get(ORB_POS_KEY);
+        if(saved && saved.value) at = JSON.parse(saved.value);
+      }catch(err){}
+      if(!at || typeof at.x !== 'number' || typeof at.y !== 'number'){
+        const margin = 24;
+        at = { x: box.w - ORB_SIZE - margin, y: Math.round((box.h - ORB_SIZE) / 2) };
+      }
+      const x = Math.max(0, Math.min(at.x, box.w - ORB_SIZE));
+      const y = Math.max(0, Math.min(at.y, box.h - ORB_SIZE));
+      await w.setPosition(new LogicalPosition(Math.round(x), Math.round(y)));
     }catch(err){ /* position is cosmetic; never let it break the collapse */ }
   }
+
+  async function resetOrbPlace(){
+    try{ await Store.delete(ORB_POS_KEY); }catch(err){}
+    await restoreOrbPlace();
+    resetPanePlace();
+  }
+
+  /* Tauri's drag region hands the drag to the window manager, and the
+     webview is not told when it ends — there is no dragend to listen for.
+     So the position is read a moment after the pointer goes up, and again
+     on a timer that covers the case where the mouseup never arrives at the
+     page at all because the OS swallowed it. */
+  (function watchOrbDrag(){
+    const grip = document.getElementById('orbDrag');
+    if(!grip) return;
+    let pending = null;
+    const settle = ()=>{
+      clearTimeout(pending);
+      pending = setTimeout(saveOrbPlace, 220);
+    };
+    grip.addEventListener('mousedown', ()=>{
+      settle();                                   // covers a swallowed mouseup
+      pending = setTimeout(saveOrbPlace, 1400);
+    });
+    window.addEventListener('mouseup', settle);
+    window.addEventListener('blur', ()=> setTimeout(saveOrbPlace, 120));
+  })();
 
   /* Sleep. Standby can be undone by right-clicking or touching the orb;
      this deliberately cannot. Nothing in the window brings him back —
@@ -10778,6 +11406,10 @@ wireLanguagePanel();
     if(r && (r.value === 'he' || r.value === 'en')) saved = r.value;
   }catch(err){ /* default to English */ }
   applyLanguage(saved);
+  /* After applyLanguage, not before: on the desktop the spoken language mode
+     is the authority, and it has to have the last word over the generic
+     setting the website uses. */
+  try{ await restoreLangMode(); }catch(err){}
 })();
 
 window.addEventListener('load', ()=>{

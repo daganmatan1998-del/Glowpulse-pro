@@ -253,3 +253,120 @@ Checked across eleven real provider configurations — that the picture is
 actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
+
+## The loop that needed Ctrl+C
+
+`lastSpokeEndedAt` was declared at the top of the file and assigned nowhere in
+it. Half the echo guard was therefore comparing `Date.now()` against `0`, which
+is false forever, and the other half asked "is he speaking *now*" — a question
+about the wrong moment, because transcription is a round trip. Audio recorded
+while he was still talking came back a second later, when he had stopped, and
+arrived unguarded as a fresh command. He answered himself, and kept going.
+
+The recording is stamped instead of the clock consulted: `captureSawSpeech` is
+set when the meter hears a voice during a capture, and travels with that blob
+into `transcribeAndSend` and `handleTranscript`. What matters is whether he was
+talking *while this audio was being recorded*, and that stays true however long
+the transcript took to come back.
+
+Two other ways the same freeze was reachable are closed with it. `getUserMedia`
+can hang rather than reject — a busy microphone, a permission prompt nobody
+answered — leaving `whisperActive` true forever while the watchdog reads it as
+healthy; it now races an eight-second timeout and retries. And a capture left
+open longer than a minute is torn down and restarted.
+
+## Saying he did it, and not doing it
+
+He would repeat the task back and stop. The turn ends, the text claims an
+action, and no tool was called — so nothing happened, and the only clue was the
+absence of a result you had no particular reason to look for.
+
+`claimsAnAction` catches the three shapes this takes — the perfect ("I've opened
+YouTube", "פתחתי לך"), the progressive ("I'm opening it", "אני פותח"), and the
+bare gerund that is by far the commonest ("Opening Spotify.") — in both
+languages. A gerund is only a claim when no finite verb follows it in the same
+sentence, which is what keeps "Opening hours are nine to five" out.
+
+When one fires with `loopGuard === 0`, the reply is handed straight back with an
+instruction to call the tool now or say plainly that it cannot be done. Once,
+never a loop, and never when a tool actually ran.
+
+## Serious Mode does not exist on the desktop
+
+`seriousMode()` returns `modeState.mode === 'ultron' && !IS_DESKTOP` — false on
+the desktop *by design*, because in the orb ULTRON is the English half of the
+language switch and not a second assistant. Every capability gate read that
+function, so the desktop app inherited the website's Normal Mode restrictions
+and told you a request needed a mode that does not exist there.
+
+Gates now read `fullCapability()`, which is `IS_DESKTOP || seriousMode()`, and
+the desktop prompt says outright never to mention another mode.
+
+## Only his name interrupts him
+
+Any sound over the bar used to cut him off mid-sentence. The level meter no
+longer votes on whether to stop — only on *when to look*: sustained speech over
+his voice shortens the endpoint wait to 260ms so his name is acted on quickly.
+Stopping is decided on the words, against the wake list, where there is an
+actual transcript to check.
+
+## The camera, as an eye
+
+A camera that only looks when spoken to is a photo booth. With the pane open, a
+32×24 grey thumbnail is taken every 900ms and compared twice: against the
+previous one, which detects motion, and against the scenes already accounted
+for, which detects novelty. Motion only *arms* him — describing something still
+being brought into shot means describing a blurred hand. He speaks when the
+scene has moved, then settled, and differs from everything in his short scene
+memory. A room that never changes costs nothing.
+
+He holds four scenes, not one: with a single reference, putting a part back down
+is a large change *away* from the part, and he announces the empty bench. A
+matched scene is refreshed in place, so the room may drift with the light all
+afternoon without eventually reading as a new one.
+
+He never speaks over himself, over a reply, or over a sentence in progress — but
+an *open* microphone is explicitly not a reason to stay quiet, or he would be
+silent in LOOP mode, which is exactly where being told what you are holding is
+worth most. A user turn always wins: `eyeAbandon()` aborts an in-flight look and
+bumps a generation counter so its answer is dropped even if it was already on
+the wire.
+
+The character is in the prompt, and it is the point: name the thing, say where
+you think each part goes, and **commit to a view when you are not sure** — a
+guess labelled as a guess beats "I can't tell" for someone holding a part and
+asking where it goes. He can decline a frame by answering with a single `·`,
+which produces no bubble, no speech, and pulls the stub turn back out of the
+transcript. WATCHING in the pane's own bar mutes it without closing the camera,
+and so does `open_camera` with `watch: false`.
+
+## Where things sit
+
+The camera pane was nailed to the bottom-right corner, which is fine until the
+thing you want to look at is what the corner is covering. Drag it anywhere by
+its picture — the button bar stays clickable — and it stays there across
+restarts. Double-click the picture to send it home. It is clamped on every move
+and on every resize, so a rotated phone or a shrunken window can never leave it
+somewhere you cannot reach it.
+
+The orb's own window is the same story: its position is saved in **logical**
+pixels (physical ones mean different distances on different monitors) and
+restored on start-up and on leaving fullscreen, instead of being forced back to
+the right edge. The saved point is clamped onto the monitor actually attached,
+so a position saved on a second screen that has since been unplugged does not
+strand him off-canvas. Right-click → Reset position puts both back.
+
+## The language switch only half-landed
+
+`LANG_MODE_KEY` was written on every switch and never once read back, so the
+language he chose lasted until the app closed. And `setLangMode` told the *model*
+to answer in English without telling the *interface* anything — every status
+line, tooltip, the wording the camera is asked with, and the language handed to
+the recogniser stayed as they were.
+
+Both are one call now: `setLangMode` applies the interface language too, and the
+choice is restored at boot, quietly. The orb's right-click menu has a Language
+item opening עברית and English, each named in itself so it is readable in the
+one case you need it — when it came up in the language you cannot read. It calls
+`setLangMode`, the same function the spoken command calls. They carry the same
+weight because they are the same control.

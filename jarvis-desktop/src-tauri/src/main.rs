@@ -4,7 +4,10 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager, WebviewWindow,
+    /* Emitter is what puts .emit() on the window, the same way Manager puts
+       .get_webview_window() on the app. Without it in scope the method does
+       not exist and the compiler reports no such method on the type. */
+    Emitter, Manager, WebviewWindow,
 };
 /* GlobalShortcutExt is what puts .global_shortcut() on the App handle. Without
    it in scope the method simply does not exist and the compiler says the type
@@ -20,6 +23,20 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 const HOTKEY_MODS: Modifiers = Modifiers::CONTROL.union(Modifiers::SHIFT);
 const HOTKEY_CODE: Code = Code::Space;
 const HOTKEY_LABEL: &str = "Ctrl+Shift+Space";
+
+/* STOP TALKING, and why it has to be a global shortcut rather than anything
+   in the page.
+
+   Everything else that silences him depends on the microphone: saying his
+   name has to be recorded, transcribed and recognised, and all three can be
+   defeated at once by the thing you are trying to escape — his own voice
+   holding the input level up so the turn never ends and nothing is ever
+   sent. A key that the operating system delivers straight to the process
+   cannot be drowned out. It is the one stop that works when everything
+   else has failed, and it works with the window hidden and unfocused. */
+const HUSH_MODS: Modifiers = Modifiers::CONTROL.union(Modifiers::SHIFT);
+const HUSH_CODE: Code = Code::KeyX;
+const HUSH_LABEL: &str = "Ctrl+Shift+X";
 
 /* Park the panel against the right-hand edge, vertically centred — the corner
    of the screen you are least likely to be working in. Done in code rather
@@ -368,15 +385,22 @@ fn main() {
                already has focus, which is useless here — the entire purpose is
                to summon it from whatever you were doing instead. */
             let shortcut = Shortcut::new(Some(HOTKEY_MODS), HOTKEY_CODE);
+            let hush = Shortcut::new(Some(HUSH_MODS), HUSH_CODE);
             let hotkey_window = window.clone();
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(move |_app, fired, event| {
                         // Pressed only: without this it toggles twice per press.
-                        if event.state() == ShortcutState::Pressed
-                            && fired.matches(HOTKEY_MODS, HOTKEY_CODE)
-                        {
+                        if event.state() != ShortcutState::Pressed {
+                            return;
+                        }
+                        if fired.matches(HOTKEY_MODS, HOTKEY_CODE) {
                             toggle(&hotkey_window);
+                        } else if fired.matches(HUSH_MODS, HUSH_CODE) {
+                            /* Deliberately does NOT show or focus the window.
+                               The whole point is to shut him up without being
+                               pulled out of whatever you are working in. */
+                            let _ = hotkey_window.emit("jarvis://hush", ());
                         }
                     })
                     .build(),
@@ -390,25 +414,38 @@ fn main() {
                     HOTKEY_LABEL, err
                 );
             }
+            if let Err(err) = app.global_shortcut().register(hush) {
+                eprintln!(
+                    "JARVIS: could not register {} — another app may already use it ({})",
+                    HUSH_LABEL, err
+                );
+            }
 
             /* A tray icon, because the window has no title bar and is hidden
                half the time: without it there is no way to get the app back if
                the shortcut is taken, and no obvious way to quit. */
             let show_item = MenuItem::with_id(app, "show", "Show JARVIS", true, None::<&str>)?;
+            let hush_item = MenuItem::with_id(app, "hush", "Stop talking", true, None::<&str>)?;
             let hide_item = MenuItem::with_id(app, "hide", "Hide", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &hide_item, &quit_item])?;
+            let menu = Menu::with_items(app, &[&show_item, &hush_item, &hide_item, &quit_item])?;
 
             let tray_window = window.clone();
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip(&format!("JARVIS — {}", HOTKEY_LABEL))
+                .tooltip(&format!(
+                    "JARVIS — {} to summon, {} to stop talking",
+                    HOTKEY_LABEL, HUSH_LABEL
+                ))
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "show" => {
                         let _ = tray_window.show();
                         let _ = tray_window.set_focus();
+                    }
+                    "hush" => {
+                        let _ = tray_window.emit("jarvis://hush", ());
                     }
                     "hide" => {
                         let _ = tray_window.hide();

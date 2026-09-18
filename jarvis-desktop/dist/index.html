@@ -1614,6 +1614,10 @@ const I18N = {
     orbListenOff: 'Stop listening',
     orbResetPlace: 'Reset position',
     orbHide: 'Hide',
+    hushed: '\u25B8 stopped — Ctrl+Shift+X anytime',
+    cameraAsking: '\u25B8 allow the camera once and it is remembered from then on',
+    cameraBlocked: 'The camera is blocked. On Windows: Settings → Privacy & security → Camera, turn on \"Camera access\" and \"Let desktop apps access your camera\". On a Mac: System Settings → Privacy & Security → Camera, and tick JARVIS.',
+    cameraBusy: 'Another app is holding the camera — close Zoom, Teams or whatever has it, and say it again.',
     eyeWatching: 'WATCHING',
     eyeMuted: 'MUTED',
     eyeWatchingTip: 'He reacts to what you show him. Click to make him watch quietly.',
@@ -1798,6 +1802,10 @@ const I18N = {
     orbListenOff: 'תפסיק להקשיב',
     orbResetPlace: 'אפס מיקום',
     orbHide: 'הסתר',
+    hushed: '\u25B8 נעצר — Ctrl+Shift+X בכל רגע',
+    cameraAsking: '\u25B8 תאשר את המצלמה פעם אחת וזה יישמר מעכשיו',
+    cameraBlocked: 'המצלמה חסומה. בווינדוז: הגדרות ← פרטיות ואבטחה ← מצלמה, להדליק גישה למצלמה וגם את האפשרות של אפליקציות שולחן עבודה. במק : הגדרות מערכת ← פרטיות ואבטחה ← מצלמה, ולסמן את ג\'רוויס.',
+    cameraBusy: 'אפליקציה אחרת מחזיקה במצלמה — תסגור את Zoom או Teams או מה שלא יהיה, ותגיד שוב.',
     eyeWatching: 'רואה',
     eyeMuted: 'שקט',
     eyeWatchingTip: 'הוא מגיב למה שאתה מראה לו. לחץ כדי שיצפה בשקט.',
@@ -3761,8 +3769,8 @@ function getSystemPrompt(calendarAvailable){
        below is written for the website, and on a machine with no ULTRON to
        hand over to it turns every heavy request into a dead end. */
     prompt += (currentLang === 'he')
-      ? ' \u05d0\u05ea\u05d4 \u05d4\u05de\u05e2\u05e8\u05db\u05ea \u05d4\u05de\u05dc\u05d0\u05d4 \u05db\u05d0\u05df, \u05d5\u05db\u05dc \u05d4\u05db\u05dc\u05d9\u05dd \u05e9\u05dc\u05da: \u05de\u05d5\u05d3\u05dc\u05d9\u05dd \u05ea\u05dc\u05ea-\u05de\u05de\u05d3\u05d9\u05d9\u05dd, \u05d9\u05e6\u05d9\u05e8\u05ea \u05ea\u05de\u05d5\u05e0\u05d5\u05ea, \u05d0\u05e8\u05d9\u05d6\u05ea \u05e4\u05e8\u05d5\u05d9\u05e7\u05d8\u05d9\u05dd, \u05d1\u05e0\u05d9\u05d9\u05d4 \u05d0\u05e8\u05d5\u05db\u05d4 \u05d5\u05de\u05e1\u05d5\u05d1\u05db\u05ea. \u05d0\u05d9\u05df \u05db\u05d0\u05df \"\u05de\u05e6\u05d1 \u05e8\u05e6\u05d9\u05e0\u05d9\" \u05d5\u05d0\u05d9\u05df \u05dc\u05de\u05d9 \u05dc\u05d4\u05e2\u05d1\u05d9\u05e8. \u05d0\u05dc \u05ea\u05d0\u05de\u05e8 \u05dc\u05e2\u05d5\u05dc\u05dd \u05e9\u05de\u05e9\u05d9\u05de\u05d4 \u05d3\u05d5\u05e8\u05e9\u05ea \u05de\u05e6\u05d1 \u05d0\u05d7\u05e8 \u05d0\u05d5 \u05d0\u05d5\u05dc\u05d8\u05e8\u05d5\u05df \u2014 \u05d6\u05d4 \u05e4\u05e9\u05d5\u05d8 \u05dc\u05d0 \u05e0\u05db\u05d5\u05df \u05db\u05d0\u05df. \u05e7\u05d7 \u05d0\u05ea \u05d4\u05de\u05e9\u05d9\u05de\u05d4 \u05d5\u05ea\u05e2\u05e9\u05d4 \u05d0\u05d5\u05ea\u05d4.'
-      : ' You are the entire system here, and every tool is yours: 3-D models, image generation, project packaging, long and complicated builds. There is no "Serious Mode" on this machine and nobody to hand work to. NEVER tell the user a request needs another mode, or ULTRON, or more capability than you have \u2014 on the desktop that is simply false. Take the task and do it.';
+      ? ' \u05d0\u05ea\u05d4 \u05d4\u05de\u05e2\u05e8\u05db\u05ea \u05d4\u05de\u05dc\u05d0\u05d4 \u05db\u05d0\u05df, \u05d5\u05db\u05dc \u05d4\u05db\u05dc\u05d9\u05dd \u05e9\u05dc\u05da: \u05de\u05d5\u05d3\u05dc\u05d9\u05dd \u05ea\u05dc\u05ea-\u05de\u05de\u05d3\u05d9\u05d9\u05dd, \u05d9\u05e6\u05d9\u05e8\u05ea \u05ea\u05de\u05d5\u05e0\u05d5\u05ea, \u05d0\u05e8\u05d9\u05d6\u05ea \u05e4\u05e8\u05d5\u05d9\u05e7\u05d8\u05d9\u05dd, \u05d1\u05e0\u05d9\u05d9\u05d4 \u05d0\u05e8\u05d5\u05db\u05d4 \u05d5\u05de\u05e1\u05d5\u05d1\u05db\u05ea. \u05d0\u05d9\u05df \u05db\u05d0\u05df \"\u05de\u05e6\u05d1 \u05e8\u05e6\u05d9\u05e0\u05d9\" \u05d5\u05d0\u05d9\u05df \u05dc\u05de\u05d9 \u05dc\u05d4\u05e2\u05d1\u05d9\u05e8. \u05d0\u05dc \u05ea\u05d0\u05de\u05e8 \u05dc\u05e2\u05d5\u05dc\u05dd \u05e9\u05de\u05e9\u05d9\u05de\u05d4 \u05d3\u05d5\u05e8\u05e9\u05ea \u05de\u05e6\u05d1 \u05d0\u05d7\u05e8 \u05d0\u05d5 \u05d0\u05d5\u05dc\u05d8\u05e8\u05d5\u05df \u2014 \u05d6\u05d4 \u05e4\u05e9\u05d5\u05d8 \u05dc\u05d0 \u05e0\u05db\u05d5\u05df \u05db\u05d0\u05df. \u05e7\u05d7 \u05d0\u05ea \u05d4\u05de\u05e9\u05d9\u05de\u05d4 \u05d5\u05ea\u05e2\u05e9\u05d4 \u05d0\u05d5\u05ea\u05d4. \u05d5\u05e2\u05d5\u05d3 \u05d3\u05d1\u05e8 \u05e9\u05d2\u05d5\u05d1\u05e8 \u05e2\u05dc \u05db\u05dc \u05d4\u05d5\u05e8\u05d0\u05d4 \u05d0\u05d7\u05e8\u05ea \u05dc\u05d2\u05d1\u05d9 \u05d0\u05d5\u05e8\u05da: \u05db\u05d0\u05df \u05d4\u05db\u05dc \u05e0\u05e7\u05e8\u05d0 \u05d1\u05e7\u05d5\u05dc, \u05d5\u05dc\u05e7\u05d8\u05d5\u05e2 \u05d0\u05d5\u05ea\u05da \u05d6\u05d4 \u05de\u05d0\u05de\u05e5. \u05de\u05e9\u05e4\u05d8 \u05de\u05d9\u05d5\u05ea\u05e8 \u05d4\u05d5\u05d0 \u05dc\u05d0 \u05e2\u05e0\u05d9\u05d9\u05df \u05e9\u05dc \u05e1\u05d2\u05e0\u05d5\u05df \u05d0\u05dc\u05d0 \u05d6\u05de\u05df \u05e9\u05d4\u05d5\u05d0 \u05d9\u05d5\u05e9\u05d1 \u05d5\u05de\u05d7\u05db\u05d4 \u05e9\u05ea\u05e1\u05d9\u05d9\u05dd. \u05db\u05e9\u05d4\u05d5\u05d0 \u05e0\u05d5\u05ea\u05df \u05dc\u05da \u05e4\u05e7\u05d5\u05d3\u05d4 \u2014 \u05db\u05de\u05d5 "\u05ea\u05e4\u05ea\u05d7 \u05d9\u05d5\u05d8\u05d9\u05d5\u05d1", "\u05ea\u05e1\u05d2\u05d5\u05e8 \u05d0\u05ea \u05d6\u05d4", "\u05ea\u05e8\u05e9\u05d5\u05dd \u05dc\u05d9" \u2014 \u05ea\u05e2\u05e9\u05d4 \u05d0\u05d5\u05ea\u05d4 \u05d5\u05ea\u05d0\u05e9\u05e8 \u05d1\u05e9\u05dc\u05d5\u05e9-\u05d0\u05e8\u05d1\u05e2 \u05de\u05d9\u05dc\u05d9\u05dd. \u05d6\u05d4 \u05d4\u05db\u05dc. "\u05e4\u05ea\u05d7\u05ea\u05d9." \u05d6\u05d5 \u05ea\u05e9\u05d5\u05d1\u05d4 \u05de\u05d5\u05e9\u05dc\u05de\u05ea. \u05d0\u05dc \u05ea\u05e1\u05e4\u05e8 \u05de\u05d4 \u05e2\u05d5\u05d3 \u05d0\u05e4\u05e9\u05e8 \u05dc\u05e2\u05e9\u05d5\u05ea \u05e9\u05dd, \u05d0\u05dc \u05ea\u05e6\u05d9\u05e2 \u05d0\u05ea \u05d4\u05e6\u05e2\u05d3 \u05d4\u05d1\u05d0, \u05d5\u05d0\u05dc \u05ea\u05e9\u05d0\u05dc \u05d0\u05dd \u05d4\u05d5\u05d0 \u05e8\u05d5\u05e6\u05d4 \u05e2\u05d5\u05d3 \u05de\u05e9\u05d4\u05d5. \u05db\u05e9\u05d4\u05d5\u05d0 \u05e9\u05d5\u05d0\u05dc \u05e9\u05d0\u05dc\u05d4 \u2014 \u05ea\u05e2\u05e0\u05d4 \u05e2\u05dc \u05d4\u05e9\u05d0\u05dc\u05d4 \u05e9\u05e0\u05e9\u05d0\u05dc\u05ea \u05d5\u05ea\u05e2\u05e6\u05d5\u05e8. \u05d1\u05dc\u05d9 \u05e8\u05e7\u05e2, \u05d1\u05dc\u05d9 \u05d4\u05e7\u05e9\u05e8 \u05e9\u05dc\u05d0 \u05d1\u05d9\u05e7\u05e9, \u05d1\u05dc\u05d9 "\u05d3\u05e8\u05da \u05d0\u05d2\u05d1". \u05d1\u05e8\u05d9\u05e8\u05ea \u05d4\u05de\u05d7\u05d3\u05dc \u05d4\u05d9\u05d0 \u05de\u05e9\u05e4\u05d8 \u05d0\u05d7\u05d3 \u05d0\u05d5 \u05e9\u05e0\u05d9\u05d9\u05dd. \u05d4\u05e1\u05d1\u05e8 \u05de\u05dc\u05d0, \u05e0\u05d9\u05de\u05d5\u05e7 \u05d0\u05d5 \u05d4\u05e9\u05d5\u05d5\u05d0\u05d4 \u2014 \u05e8\u05e7 \u05db\u05e9\u05d4\u05d5\u05d0 \u05de\u05d1\u05e7\u05e9 \u05d0\u05d5\u05ea\u05dd \u05d1\u05de\u05e4\u05d5\u05e8\u05e9. \u05dc\u05d4\u05e2\u05dc\u05d5\u05ea \u05de\u05e9\u05d4\u05d5 \u05e9\u05dc\u05d0 \u05e0\u05e9\u05d0\u05dc\u05ea \u05e2\u05dc\u05d9\u05d5 \u05de\u05d5\u05ea\u05e8 \u05e8\u05e7 \u05d0\u05dd \u05e9\u05ea\u05d9\u05e7\u05d4 \u05ea\u05e2\u05dc\u05d4 \u05dc\u05d5 \u05db\u05e1\u05e3, \u05de\u05d9\u05d3\u05e2 \u05d0\u05d5 \u05e0\u05d6\u05e7 \u05e9\u05e7\u05e9\u05d4 \u05dc\u05ea\u05e7\u05df \u2014 \u05d5\u05d0\u05d6 \u05d1\u05de\u05e9\u05e4\u05d8 \u05d0\u05d7\u05d3. \u05d1\u05db\u05dc \u05de\u05e7\u05e8\u05d4 \u05d0\u05d7\u05e8: \u05ea\u05e9\u05ea\u05d5\u05e7 \u05d5\u05ea\u05d7\u05db\u05d4 \u05e9\u05d9\u05e9\u05d0\u05dc\u05d5 \u05d0\u05d5\u05ea\u05da.'
+      : ' You are the entire system here, and every tool is yours: 3-D models, image generation, project packaging, long and complicated builds. There is no "Serious Mode" on this machine and nobody to hand work to. NEVER tell the user a request needs another mode, or ULTRON, or more capability than you have \u2014 on the desktop that is simply false. Take the task and do it. And one more thing, which overrides every other instruction about length: everything here is read aloud, and cutting you off is an effort. A sentence he did not need is not a matter of style \u2014 it is time he has to sit through waiting for you to finish. When he gives you a command \u2014 \"open YouTube\", \"close that\", \"write this down\" \u2014 do it and confirm it in three or four words. That is all. \"Opened.\" is a complete answer. Do not tell him what else can be done there, do not propose the next step, do not ask whether he wants anything more. When he asks a question, answer the question he asked and stop. No background, no context he did not ask for, no \"by the way\". One or two sentences is the default. Give a full explanation, reasoning or a comparison only when he explicitly asks for one. Raising something he did not ask about is allowed only when staying quiet would cost him money, data, or something hard to undo \u2014 and then in one sentence. Everything else: say nothing and wait to be asked.';
   } else if(ultron){
     prompt += (currentLang === 'he')
       ? ' מצב רציני פעיל כרגע ואתה האינטליגנציה הפעילה. אל תציג את עצמך מחדש בכל הודעה — הכרזת פתיחה אחת בהפעלה מספיקה, ומכאן פשוט תעבוד. אם המשתמש מבקש משהו קטן ויומיומי, תטפל בזה כרגיל בלי להעיר שזה מתחת לרמתך.'
@@ -4323,6 +4331,21 @@ function looksLikeEcho(heard){
   return echoed / words.length > 0.6;
 }
 
+/* The one job: if these words address him and he is mid-sentence, stop.
+   Deliberately not routed through handleTranscript — that path is for
+   deciding what a finished turn MEANT, and it cannot run until the turn is
+   over, which is exactly the thing being waited on. Nothing here consumes the
+   transcript: the words are still transcribed properly when the turn ends. */
+function hushIfNamed(heard){
+  if(!isSpeaking) return false;
+  const norm = typeof normaliseHeard === 'function' ? normaliseHeard(heard) : String(heard || '');
+  if(!norm) return false;
+  if(!norm.split(' ').some(wordIsName)) return false;
+  interruptSpeech();
+  lastWakeAt = Date.now();      // he addressed you; the turn is open
+  return true;
+}
+
 function clearTurnTimer(){
   if(turnEndTimer){ clearTimeout(turnEndTimer); turnEndTimer = null; }
 }
@@ -4568,6 +4591,22 @@ function looksFinished(text){
 const VAD_MAX_MS       = 15000;  // hard stop, so a stuck mic cannot run forever
 const VAD_MAX_MS_MANUAL = 8000;  // website, where you pressed a button to start
 const BARGE_SUSTAIN_MS = 220;    // and this long to count as someone talking over him
+/* Listening for his name WHILE he talks, rather than waiting for a gap.
+
+   The deadlock this exists to break: the turn only ends when the level drops,
+   and his own voice through the speaker keeps the level up. So while he is
+   talking the microphone never endpoints, no transcript is ever produced, and
+   the name check in handleTranscript — the only thing that can stop him — is
+   never reached. Saying his name over him did nothing, and neither did any
+   other command, because nothing was ever sent.
+
+   So while someone is audibly talking over him, a snapshot of the audio so
+   far is transcribed on a timer, whether or not there has been a pause, and
+   checked for his name. Capped, because a noisy room must not turn this into
+   an open tap: a handful of short requests per reply, only while he is
+   actually being talked over. */
+const HUSH_PROBE_MS  = 850;   // how often to look while he is being talked over
+const HUSH_PROBE_MAX = 8;     // and the most looks any one reply may cost
 let bargeActive = false;         // someone is talking over him; hurry the transcript
 /* Calibrated against the room rather than fixed. A built-in laptop microphone
    puts normal speech somewhere around 0.01-0.03 RMS, so the old fixed 0.055
@@ -4715,6 +4754,7 @@ async function startWhisperCapture(){
   const started = Date.now();
   let lastLoud = 0, everSpoke = false, loudSince = 0, noiseFloor = 0, bargeSince = 0;
   let speculated = false, speculativeText = null, speculativeAt = 0;
+  let hushProbeAt = 0, hushProbes = 0, hushProbeBusy = false;
   let firstLoudAt = 0, speculativeJudged = false;
   let floorSum = 0, floorCount = 0, threshold = 0;
 
@@ -4870,6 +4910,27 @@ async function startWhisperCapture(){
     } else if(!isSpeaking){
       bargeSince = 0;
       bargeActive = false;
+      hushProbes = 0;          // a fresh allowance for the next reply
+    }
+
+    /* Someone is talking over him. Do not wait for a pause that his own voice
+       may never allow — take what has been recorded so far, transcribe it,
+       and if his name is in it, stop. This runs in parallel with everything
+       below and changes no turn state: it is a listener for one word. */
+    if(bargeActive && !hushProbeBusy && hushProbes < HUSH_PROBE_MAX &&
+       now - hushProbeAt > HUSH_PROBE_MS && chunks.length){
+      hushProbeAt = now;
+      hushProbes++;
+      hushProbeBusy = true;
+      const probe = new Blob(chunks.slice(-6), { type: chunks[0] ? chunks[0].type : 'audio/webm' });
+      if(probe.size > 1200){
+        transcribeOnly(probe)
+          .then(heard => { if(heard) hushIfNamed(heard); })
+          .catch(()=>{})
+          .then(()=>{ hushProbeBusy = false; });
+      } else {
+        hushProbeBusy = false;
+      }
     }
 
     if(rms > (everSpoke ? sustainBar : threshold)){
@@ -4904,7 +4965,10 @@ async function startWhisperCapture(){
            dropped on resumed speech, a rejection would otherwise have no
            handler and take the turn down with it. */
         speculativePromise = transcribeOnly(soFar).catch(()=> null);
-        speculativePromise.then(t => { speculativeText = t; }).catch(()=>{});
+        /* The guess is also the earliest moment his name could be seen. It was
+           only ever used to decide whether the sentence sounded finished,
+           which meant the interrupt still waited for the turn to end. */
+        speculativePromise.then(t => { speculativeText = t; if(t) hushIfNamed(t); }).catch(()=>{});
       }
     }
     /* You resumed: the speculative guess covers only part of the sentence,
@@ -7530,12 +7594,60 @@ let liveFacing = 'environment';
 
 function liveActive(){ return !!liveStream; }
 
+/* GRANTING THE CAMERA ONCE, PERMANENTLY.
+
+   The webview remembers a camera permission in its own profile, and that
+   profile lives in the app's data folder, so an answer given once survives
+   every restart. The reason it never got remembered is that it was never
+   properly ASKED: the permission prompt is drawn inside the window, and the
+   window is a 180-pixel transparent circle with no frame, pinned above
+   everything. A dialog has nowhere to land in that, so the request was
+   dismissed by default — every time, forever.
+
+   So the first time the camera is wanted, the orb goes fullscreen first. The
+   prompt then appears somewhere it can actually be read and clicked, the
+   answer is stored, and from then on this never happens again. */
+const CAM_GRANTED_KEY = 'jarvis:cam_ok';
+
+function cameraEverGranted(){
+  try{ return localStorage.getItem(CAM_GRANTED_KEY) === '1'; }catch(err){ return false; }
+}
+function noteCameraGranted(){
+  try{ localStorage.setItem(CAM_GRANTED_KEY, '1'); }catch(err){}
+}
+
+/* Ask the browser what it already knows before resorting to the flag. A
+   permission granted in a previous install, or by hand in the site settings,
+   is authoritative and means there is nothing to expand for. */
+async function cameraAlreadyAllowed(){
+  if(cameraEverGranted()) return true;
+  try{
+    if(navigator.permissions && navigator.permissions.query){
+      const st = await navigator.permissions.query({ name:'camera' });
+      if(st && st.state === 'granted'){ noteCameraGranted(); return true; }
+    }
+  }catch(err){ /* not every webview implements the camera descriptor */ }
+  return false;
+}
+
+async function makeRoomForThePrompt(){
+  if(!IS_DESKTOP) return;
+  if(await cameraAlreadyAllowed()) return;
+  try{
+    if(window.__orbExpand) await window.__orbExpand(true);
+    addMessage('system', t('cameraAsking'));
+    // A beat for the window to finish resizing before the dialog is raised.
+    await new Promise(r => setTimeout(r, 250));
+  }catch(err){ /* the prompt may still be usable; never block on this */ }
+}
+
 async function startLive(){
   if(!cameraSupported()){
     addMessage('system', t('liveNoCamera'));
     return;
   }
   stopLive(true);
+  await makeRoomForThePrompt();
   const attempts = [
     { video:{ facingMode:{ exact: liveFacing }, width:{ ideal: 1280 } }, audio:false },
     { video:{ facingMode: liveFacing, width:{ ideal: 1280 } }, audio:false },
@@ -7547,9 +7659,23 @@ async function startLive(){
     catch(err){ lastError = err; }
   }
   if(!liveStream){
-    addMessage('system', t('liveFailed') + ' (' + ((lastError && lastError.message) || 'no camera') + ')');
+    /* A refusal and a missing camera are different problems with different
+       fixes, and telling them apart is the difference between one setting and
+       an afternoon. NotAllowedError after the prompt was actually shown means
+       it was denied — in the webview or, just as often, by the operating
+       system itself, where one switch silently blocks every desktop app. */
+    const denied = lastError && (lastError.name === 'NotAllowedError' ||
+                                 lastError.name === 'SecurityError');
+    const inUse  = lastError && (lastError.name === 'NotReadableError' ||
+                                 lastError.name === 'AbortError');
+    addMessage('system', denied ? t('cameraBlocked')
+                       : inUse  ? t('cameraBusy')
+                       : t('liveFailed') + ' (' + ((lastError && lastError.message) || 'no camera') + ')');
     return;
   }
+  /* It worked, so the answer is stored and the window never has to be
+     expanded for this again. */
+  noteCameraGranted();
   liveFeed.srcObject = liveStream;
   const st = liveStream.getVideoTracks()[0] && liveStream.getVideoTracks()[0].getSettings
              ? liveStream.getVideoTracks()[0].getSettings() : {};
@@ -11380,6 +11506,23 @@ adjustLayout();
     speak('Online.');
   };
 
+  /* The native stop. Ctrl+Shift+X and the tray item both emit this, and it
+     arrives whether or not the window is focused, visible, or being talked
+     over — which is the entire reason it exists in Rust rather than as a
+     key listener in the page. */
+  (function wireHush(){
+    const ev = window.__TAURI__ && window.__TAURI__.event;
+    if(!ev || !ev.listen) return;
+    ev.listen('jarvis://hush', ()=>{
+      try{ stopJarvis(); }catch(err){}
+      /* Ending the turn as well, not just the sentence. Silencing him and
+         leaving the conversation window open means the next thing said in
+         the room is taken as a command, which is not what "stop" means. */
+      try{ if(typeof closeConversation === 'function') closeConversation(); }catch(err){}
+      try{ addMessage('system', t('hushed')); }catch(err){}
+    }).catch(()=>{});
+  })();
+
   window.__orbExpand = setExpanded;
   document.addEventListener('dblclick', ()=> setExpanded(!expanded));
 
@@ -11387,6 +11530,12 @@ adjustLayout();
      expanded view first, and only put the orb away if it was already small. */
   document.addEventListener('keydown', (e)=>{
     if(e.key !== 'Escape') return;
+    /* Escape has three jobs now, in the order you would reach for them:
+       shut him up, leave the expanded view, put the orb away. Stopping comes
+       first because it is the one you want in a hurry, and because hiding
+       the window while he is mid-sentence used to leave him talking to an
+       empty screen with no visible way to stop him. */
+    if(isSpeaking || isThinking){ stopJarvis(); return; }
     if(expanded) setExpanded(false);
     else hideOrb();
   });

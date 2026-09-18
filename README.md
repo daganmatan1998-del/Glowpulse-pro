@@ -370,3 +370,56 @@ item opening עברית and English, each named in itself so it is readable in t
 one case you need it — when it came up in the language you cannot read. It calls
 `setLangMode`, the same function the spoken command calls. They carry the same
 weight because they are the same control.
+
+## "He does not stop talking and I cannot give him commands"
+
+A deadlock, and it explains both halves of that sentence at once. The turn ends
+when the input level drops; his own voice through the speaker keeps the level
+up; so while he is talking the microphone never endpoints, nothing is ever
+transcribed, and the name check in `handleTranscript` — the only thing that can
+stop him — is never reached. Saying his name over him did nothing, and neither
+did any other command, because nothing was ever sent. The fix is three
+independent ways out, because the one that matters is the one that works when
+the other two have failed.
+
+**Listen while he talks, not after.** While someone is audibly talking over
+him, a snapshot of the audio so far is transcribed on a timer — `HUSH_PROBE_MS`,
+capped at `HUSH_PROBE_MAX` per reply — without waiting for a pause that may
+never come. `hushIfNamed` checks it for his name and stops him. It changes no
+turn state; it is a listener for one word, running beside the ordinary
+endpointing. The speculative transcript, which already existed to judge whether
+a sentence sounded finished, is now checked for his name too.
+
+**A key that cannot be drowned out.** `Ctrl+Shift+X`, registered as a global
+shortcut in Rust, emits `jarvis://hush`; the page stops him and closes the
+conversation window, so silencing him does not leave the next thing said in the
+room being taken as a command. It works with the window hidden and unfocused,
+and deliberately does not raise it. The same is on the tray menu, and Escape now
+stops him before it does anything else.
+
+**Say less to begin with.** The base prompt says "Brevity is not the goal" and
+tells him to work ahead of the user, both of which are right on the website and
+wrong when every sentence is read aloud. The desktop branch now overrides them:
+a command gets a three-word confirmation and nothing else — no list of what else
+could be done there, no proposed next step, no "would you like me to" — a
+question gets its answer and a full stop, and volunteering is narrowed to things
+that would cost money or data if left unsaid.
+
+## Granting the camera once
+
+The webview remembers a camera permission in its own profile, and that profile
+lives in the app's data folder, so an answer given once survives every restart.
+It was never remembered because it was never properly *asked*: the permission
+prompt is drawn inside the window, and the window is a 180-pixel transparent
+circle with no frame, pinned above everything. A dialog has nowhere to land in
+that, so the request was dismissed by default, every time.
+
+So the first time the camera is wanted the orb goes fullscreen first, the prompt
+appears somewhere it can be read and clicked, and the answer is stored —
+`navigator.permissions` is consulted first, so a grant from a previous install
+skips the expansion entirely. A refusal is now distinguished from a missing
+camera and from one another app is holding, and the refusal message names the
+actual setting: on Windows, Settings → Privacy & security → Camera, where "Let
+desktop apps access your camera" blocks every app of this kind in one switch.
+macOS additionally requires a reason string, so `NSCameraUsageDescription` and
+`NSMicrophoneUsageDescription` are now in the bundle config.

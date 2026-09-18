@@ -14,14 +14,11 @@
         "title": "JARVIS",
         "width": 180,
         "height": 180,
-
         "decorations": false,
         "transparent": true,
         "shadow": false,
-
         "alwaysOnTop": true,
         "skipTaskbar": true,
-
         "visible": false,
         "resizable": false,
         "center": false,
@@ -40,6 +37,12 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "JARVIS looks at what you show him through the camera, and only while you have it switched on.",
+        "NSMicrophoneUsageDescription": "JARVIS listens for his name so you can talk to him instead of typing."
+      }
+    }
   }
 }

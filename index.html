@@ -139,23 +139,6 @@ kbd { display:inline-block;padding:4px 6px;border:1px solid #bcd6d12a;
   padding:7px 10px;border-radius:4px;font-size:9px;letter-spacing:1px; }
 .icon-button:hover { background:#28443e; }
 
-/* ---------- crosshair ---------- */
-#reticle {
-  position:absolute;left:50%;top:50%;width:26px;height:26px;
-  transform:translate(-50%,-50%);display:none;pointer-events:none;
-}
-#reticle::before,#reticle::after {
-  content:"";position:absolute;background:#eac589cc;box-shadow:0 0 6px #000a;
-}
-#reticle::before { left:50%;top:0;width:1px;height:100%;margin-left:-.5px; }
-#reticle::after { top:50%;left:0;height:1px;width:100%;margin-top:-.5px; }
-#reticleDot {
-  position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;
-  border-radius:50%;background:#8ce8d0;box-shadow:0 0 7px #8ce8d0;
-}
-#reticle.hostile::before,#reticle.hostile::after { background:#ff9f7ecc; }
-#reticle.hostile #reticleDot { background:#ff7d5c;box-shadow:0 0 8px #ff7d5c; }
-
 /* ---------- world-anchored HUD ---------- */
 .enemy-bar { position:absolute;width:48px;height:3px;background:#102023;
   pointer-events:none;transform:translate(-50%,-50%);display:none; }
@@ -249,7 +232,6 @@ h1 { font-family:"Barlow Condensed",sans-serif;font-size:clamp(70px,10vw,130px);
 
   <div id="toast"><strong></strong><span></span></div>
   <div id="combo"></div>
-  <div id="reticle"><i id="reticleDot"></i></div>
 
   <div id="special">
     <div id="specialLabel"><b>RAGE</b><span id="specialHint">DEFEAT ENEMIES FOR RED ORBS</span></div>
@@ -332,7 +314,7 @@ const RAGE = {
   meterMax:100,
   duration:30,
   greenOrbHeal:7,
-  redOrbCharge:5,
+  redOrbCharge:12,
   resistance:.30,
   damage:1.70,
   speed:1.40,
@@ -1546,7 +1528,7 @@ const special={meter:0,active:false,time:0,announced:false,aura:null,spark:0};
 const combat={token:null,gap:.6,swap:0,hold:0};
 /* Cached HUD strings so the DOM is only touched when something changed. */
 const hud={hp:-1,stamina:-1,special:-1,level:'',objective:'',boss:-1,
-  specialState:'',locked:null,remaining:-1,perf:0,bossGhost:1,hostile:null};
+  specialState:'',locked:null,remaining:-1,perf:0,bossGhost:1};
 
 const player={
   c:makeCharacter('rabbit'),
@@ -2157,8 +2139,9 @@ function moveInput() {
   const f=fwd/length,s=strafe/length;
   const sin=Math.sin(player.aim),cos=Math.cos(player.aim);
   // Movement is relative to where the mouse is aiming, but never steers the body.
-  moveVector.x=sin*f+cos*s;
-  moveVector.z=cos*f-sin*s;
+  // The camera sits behind the rabbit, so screen-right is (-cos, +sin).
+  moveVector.x=sin*f-cos*s;
+  moveVector.z=cos*f+sin*s;
   moveVector.moving=true;
   return moveVector;
 }
@@ -2750,7 +2733,7 @@ const DOM={
   specialFill:$('specialFill'), specialHint:$('specialHint'), special:$('special'),
   levelNumber:$('levelNumber'), levelName:$('levelName'), objective:$('objective'),
   bossFill:$('bossFill'), bossGhost:$('bossGhost'),
-  toast:$('toast'), combo:$('combo'), reticle:$('reticle'),
+  toast:$('toast'), combo:$('combo'),
   damageFlash:$('damageFlash'), perf:$('perf')
 };
 function updateHUD(dt) {
@@ -2850,13 +2833,6 @@ function updateHUD(dt) {
     damageFlash=Math.max(0,damageFlash-dt*2);
     DOM.damageFlash.style.opacity=damageFlash;
   }
-  // The crosshair turns warm when something is actually inside the swing arc.
-  const hostile=playing&&!!aimedEnemy();
-  if(hud.hostile!==hostile||hud.playing!==playing) {
-    hud.hostile=hostile;hud.playing=playing;
-    DOM.reticle.style.display=playing?'block':'none';
-    DOM.reticle.className=hostile?'hostile':'';
-  }
   hud.perf-=dt;
   if(hud.perf<=0) {
     hud.perf=.5;
@@ -2952,7 +2928,7 @@ window.addEventListener('mousemove',event=>{
   if(mode!=='play') return;
   const mx=event.movementX||0,my=event.movementY||0;
   if(!mx&&!my) return;
-  player.aim+=mx*CONFIG.aimSensitivity;
+  player.aim-=mx*CONFIG.aimSensitivity;
   if(player.aim>Math.PI) player.aim-=TAU;
   else if(player.aim<-Math.PI) player.aim+=TAU;
   camPitch=clamp(camPitch+my*CONFIG.aimSensitivity*.55,-.12,.60);

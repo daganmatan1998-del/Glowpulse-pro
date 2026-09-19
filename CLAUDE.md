@@ -63,6 +63,12 @@ The page's CSS can be checked in the pre-installed Chromium via Playwright
 `document.documentElement.className`. Wait out any transition before reading
 `getComputedStyle`, or you read the value at the start of the animation.
 
+When patching with a Python script that collects edits in a string and writes
+once at the end, an assertion failure on a later edit silently discards every
+earlier one — the "ok" lines already printed are a lie. Write the file inside
+the helper after each successful replacement, or re-grep afterwards to confirm
+what actually landed. This has cost real time three times.
+
 The page's whole script lives inside `(function(){ "use strict"; ... })()`, so
 nothing is on `window` except the handful of explicit `window.__orb*` hooks.
 Playwright cannot call `liveActive()`, `grabLiveFrame()` or `applyLanguage()` —

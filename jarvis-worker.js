@@ -657,6 +657,17 @@ function audioResponse(body, env, request, via) {
 let googleRejectsReasoningEffort = false;
 
 const MESHY_BASE = 'https://api.meshy.ai/openapi/v2/text-to-3d';
+/* A photograph is a different job to a sentence, on a different endpoint and a
+   different version, and it is a SINGLE pass: the picture already carries the
+   colour, so there is no preview-then-paint split to chain. Which of the two a
+   task belongs to has to travel in the query string on the way back, exactly
+   like `stage` does, because the worker keeps no state and cannot look a task
+   id up later to find out what kind it was. */
+const MESHY_IMAGE_BASE = 'https://api.meshy.ai/openapi/v1/image-to-3d';
+
+function meshyBaseFor(kind){
+  return kind === 'image' ? MESHY_IMAGE_BASE : MESHY_BASE;
+}
 
 /* Meshy's text-to-3D is two jobs, not one. `preview` produces the mesh: the
    right shape, but bare geometry with no surface on it. `refine` takes that
@@ -669,8 +680,8 @@ const MESHY_BASE = 'https://api.meshy.ai/openapi/v2/text-to-3d';
    Chaining is done here rather than in the page because the page must not hold
    a Meshy task id's meaning: it polls one endpoint and is told what to poll
    next. The worker stays stateless — the stage travels in the query string. */
-async function startMeshyTask(payload, env) {
-  const res = await fetch(MESHY_BASE, {
+async function startMeshyTask(payload, env, kind) {
+  const res = await fetch(meshyBaseFor(kind), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -692,8 +703,33 @@ async function handleModel3d(request, env) {
     return json({ error: '3D generation is not configured: add MESHY_API_KEY to the worker' }, 503, env, request);
   }
   const body = await request.json().catch(() => ({}));
+
+  /* A picture, if one came. Meshy takes it as a data URI, which is what the
+     page already holds for every attachment and every camera frame, so
+     nothing has to be uploaded anywhere first. */
+  const image = String((body && body.image) || '').trim();
+  if (image) {
+    if (!/^data:image\/(png|jpe?g|webp);base64,/i.test(image)) {
+      return json({ error: 'the image must be a png, jpeg or webp data URI' }, 400, env, request);
+    }
+    /* Meshy's own ceiling is generous but a request this size is worth
+       refusing early with a readable reason rather than as a 413 from
+       somewhere downstream. */
+    if (image.length > 12 * 1024 * 1024) {
+      return json({ error: 'that image is too large; send one under about 8MB' }, 413, env, request);
+    }
+    const startedImg = await startMeshyTask({
+      image_url: image,
+      enable_pbr: true,
+      should_remesh: true,
+      should_texture: true
+    }, env, 'image');
+    if (startedImg.error) return json({ error: startedImg.error }, 502, env, request);
+    return json({ taskId: startedImg.taskId, kind: 'image', stage: 'single' }, 200, env, request);
+  }
+
   const prompt = String((body && body.prompt) || '').trim().slice(0, 600);
-  if (!prompt) return json({ error: 'no prompt' }, 400, env, request);
+  if (!prompt) return json({ error: 'no prompt and no image' }, 400, env, request);
 
   const started = await startMeshyTask({
     mode: 'preview',
@@ -703,11 +739,11 @@ async function handleModel3d(request, env) {
   }, env);
   if (started.error) return json({ error: started.error }, 502, env, request);
 
-  return json({ taskId: started.taskId, stage: 'preview' }, 200, env, request);
+  return json({ taskId: started.taskId, kind: 'text', stage: 'preview' }, 200, env, request);
 }
 
-async function readMeshyTask(id, env) {
-  const res = await fetch(MESHY_BASE + '/' + encodeURIComponent(id), {
+async function readMeshyTask(id, env, kind) {
+  const res = await fetch(meshyBaseFor(kind) + '/' + encodeURIComponent(id), {
     headers: { 'Authorization': 'Bearer ' + env.MESHY_API_KEY }
   });
   const text = await res.text();
@@ -724,10 +760,13 @@ async function handleModel3dStatus(request, env) {
   const id = params.get('id');
   if (!id) return json({ error: 'missing id' }, 400, env, request);
 
+  const kind = params.get('kind') === 'image' ? 'image' : 'text';
   const stage = params.get('stage') === 'refine' ? 'refine' : 'preview';
-  const wantsTexture = params.get('refine') !== '0';
+  /* From a photograph there is only one pass, so there is nothing to chain
+     and the progress bar is the raw one. */
+  const wantsTexture = kind === 'image' ? false : params.get('refine') !== '0';
 
-  const read = await readMeshyTask(id, env);
+  const read = await readMeshyTask(id, env, kind);
   if (read.httpError) return json({ error: read.httpError }, 502, env, request);
   const data = read.data;
 
@@ -781,7 +820,11 @@ async function handleModel3dStatus(request, env) {
 
   return json({
     status: 'SUCCEEDED', stage: stage, progress: 100,
-    glb: previewGlb, textured: stage === 'refine',
+    glb: previewGlb,
+    /* A model from a photograph is textured by construction \u2014 the picture is
+       where the colour came from \u2014 so it must not be reported as a bare mesh
+       just because it never went through a refine stage. */
+    textured: kind === 'image' ? true : stage === 'refine',
     thumbnail: data.thumbnail_url || null, error: null
   }, 200, env, request);
 }
@@ -1864,8 +1907,22 @@ async function handleShopify(request, env) {
   const body = await request.json().catch(() => ({}));
   const query = String((body && body.query) || '');
   if (!query.trim()) return json({ error: 'empty query' }, 400, env, request);
-  if (containsMutation(query)) {
-    return json({ error: 'mutations are not allowed through this endpoint' }, 400, env, request);
+  /* Writes are allowed now, at the owner's explicit choice, with no approval
+     step in front of them. The guard did not go away though \u2014 it turned into
+     a declaration. A caller that means to change something has to say so, so
+     that a document which merely mentions the word cannot become a write by
+     accident, and so a read path can never be widened into a write path by a
+     prompt that talked its way into the query field.
+
+     What replaces the gate is the record: every call through here is written
+     to the action log in the app, with the document and its variables, which
+     is what makes a change reversible by hand. */
+  const isWrite = containsMutation(query);
+  if (isWrite && body.allow_writes !== true) {
+    return json({
+      error: 'this document contains a mutation, but the caller did not ask for a write. ' +
+             'Pass allow_writes: true to change the store.'
+    }, 400, env, request);
   }
 
   const requestedName = (body && body.store_name) || '';

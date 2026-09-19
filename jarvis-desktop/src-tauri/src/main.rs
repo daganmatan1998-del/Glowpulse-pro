@@ -4,6 +4,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
+    WebviewUrl, WebviewWindowBuilder,
     /* Emitter is what puts .emit() on the window, the same way Manager puts
        .get_webview_window() on the app. Without it in scope the method does
        not exist and the compiler reports no such method on the type. */
@@ -367,10 +368,67 @@ fn take_screenshot() -> Result<String, String> {
     Ok(STANDARD.encode(bytes))
 }
 
+/* A WINDOW OF ITS OWN FOR A MODEL.
+ *
+ * The orb is a 180-pixel circle with no frame, pinned above everything: a
+ * thing you glance at, not a thing you work in. A model you are judging needs
+ * the opposite — room, a frame to drag by, an edge to pull. So it gets a real
+ * window, with decorations, resizable, NOT always-on-top, which can sit beside
+ * the work it is about instead of on top of it.
+ *
+ * It points at model.html rather than at the app's own page. index.html starts
+ * a microphone, a scheduler and a hologram the moment it loads; opening a
+ * second copy of all that to look at a mesh would run the whole assistant
+ * twice.
+ *
+ * Asked for a second time, the existing window is reused: the url is replaced
+ * and it is brought forward. Otherwise every model would leave another window
+ * behind. */
+#[tauri::command]
+async fn open_model_window(app: tauri::AppHandle, url: String) -> Result<String, String> {
+    // Only ever our own viewer, with the model as a parameter. A url straight
+    // from a tool result must never become the page this window loads.
+    if url.trim().is_empty() {
+        return Err("no model url".into());
+    }
+    // Percent-encoded over the UTF-8 BYTES, not over chars: `c as u8` would
+    // truncate anything outside ASCII and quietly corrupt the url.
+    let mut encoded = String::with_capacity(url.len() * 3);
+    for b in url.trim().as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(*b as char)
+            }
+            _ => encoded.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    let page = format!("model.html?glb={}", encoded);
+
+    if let Some(existing) = app.get_webview_window("model") {
+        let _ = existing.eval(&format!("location.replace({:?})", page));
+        let _ = existing.show();
+        let _ = existing.unminimize();
+        let _ = existing.set_focus();
+        return Ok("reused".into());
+    }
+
+    WebviewWindowBuilder::new(&app, "model", WebviewUrl::App(page.into()))
+        .title("JARVIS — 3D")
+        .inner_size(760.0, 620.0)
+        .min_inner_size(320.0, 280.0)
+        .resizable(true)
+        .decorations(true)
+        .always_on_top(false)
+        .skip_taskbar(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok("opened".into())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![close_foreground_window, close_window_named, close_browser_tab, take_screenshot])
+        .invoke_handler(tauri::generate_handler![close_foreground_window, close_window_named, close_browser_tab, take_screenshot, open_model_window])
         .setup(|app| {
             let window = app
                 .get_webview_window("main")
@@ -461,6 +519,14 @@ fn main() {
             /* Closing the panel should put it away, not end the session — the
                conversation and the unlocked PIN live in the page, and killing
                the process throws both away. Quit is on the tray menu. */
+            /* Only the orb refuses to close \u2014 its conversation and unlocked PIN
+               live in the page, and killing the process throws both away. The
+               model window is a viewer with nothing in it worth keeping, so
+               its X must actually close it or it would pile up hidden windows
+               nobody can reach. */
+            if window.label() != "main" {
+                return;
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();

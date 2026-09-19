@@ -507,6 +507,60 @@
     background:rgba(var(--cyan-rgb), 0.03);
   }
   #planPanel.open{ display:flex; }
+  #actionsPanel{
+    display:none; flex-direction:column; gap:6px; padding:12px 14px;
+    background:rgba(var(--cyan-rgb), 0.03);
+  }
+  #actionsPanel.open{ display:flex; }
+  .modelPop{
+    display:block; width:100%; margin-top:6px; padding:6px; font-size:10px;
+    letter-spacing:1.5px; background:rgba(var(--cyan-rgb), 0.08);
+    border:1px solid rgba(var(--cyan-rgb), 0.3); color:var(--cyan);
+    font-family:inherit; cursor:pointer;
+  }
+  .modelPop:hover{ background:rgba(var(--cyan-rgb), 0.2); }
+  #actionsNote{ font-size:10px; color:rgba(var(--dim-rgb), 0.55); line-height:1.5; margin-bottom:2px; }
+  #tasksHead{ font-size:10px; letter-spacing:2px; color:var(--electric-blue); margin-bottom:2px; }
+  #tasksList{ display:flex; flex-direction:column; gap:4px; margin-bottom:10px; }
+  .taskRow{
+    border-left:2px solid rgba(var(--cyan-rgb), 0.5); padding:5px 8px; font-size:11px;
+    line-height:1.45; background:rgba(var(--cyan-rgb), 0.05);
+  }
+  .taskRow.failed{ border-left-color:#ff6b6b; }
+  .taskGoal{ color:rgba(var(--dim-rgb), 0.9); }
+  .taskWhen{ color:var(--cyan); font-size:10px; }
+  .taskLast{ color:rgba(var(--dim-rgb), 0.55); font-size:10px; }
+  .taskKill{
+    float:right; background:none; border:none; color:rgba(255,120,120,0.7);
+    cursor:pointer; font-family:inherit; font-size:11px; padding:0 2px;
+  }
+  body.lang-rtl .taskKill{ float:left; }
+  #actionsList{ display:flex; flex-direction:column; gap:4px; max-height:46vh; overflow-y:auto; }
+  .actRow{
+    border-left:2px solid transparent; padding:5px 8px; font-size:11px; line-height:1.45;
+    background:rgba(255,255,255,0.02); cursor:pointer;
+  }
+  .actRow:hover{ background:rgba(var(--cyan-rgb), 0.08); }
+  /* The three states that matter, told apart at a glance: it worked, it
+     failed, or it never came back at all. The last one used to be invisible. */
+  .actRow.ok{ border-left-color:#5ad6a0; }
+  .actRow.bad{ border-left-color:#ff6b6b; }
+  .actRow.hung{ border-left-color:#e8c15a; }
+  .actName{ color:var(--cyan); letter-spacing:0.5px; }
+  .actWhen{ color:rgba(var(--dim-rgb), 0.5); font-size:10px; float:right; }
+  body.lang-rtl .actWhen{ float:left; }
+  .actSum{ color:rgba(var(--dim-rgb), 0.75); }
+  .actDetail{
+    display:none; margin-top:4px; padding:6px 8px; background:rgba(0,0,0,0.35);
+    font-size:10px; white-space:pre-wrap; word-break:break-word; color:rgba(var(--dim-rgb), 0.85);
+    max-height:220px; overflow-y:auto;
+  }
+  .actRow.open .actDetail{ display:block; }
+  #actionsClearBtn{
+    margin-top:4px; padding:6px; font-size:10px; letter-spacing:1px;
+    background:rgba(255,70,70,0.08); border:1px solid rgba(255,70,70,0.3);
+    color:#ff9d9d; cursor:pointer; font-family:inherit;
+  }
   .planEmpty{ font-size:11px; color:rgba(var(--dim-rgb), 0.55); line-height:1.6; }
   .planSection{ margin-bottom:6px; }
   .planSection h4{
@@ -1195,6 +1249,7 @@
     <button id="historyBtn" title="Chat history">HISTORY</button>
     <button id="brainSettingsBtn" title="Backend connection">BRAIN</button>
     <button id="voiceSettingsBtn" title="Cartesia voice settings">VOICE ID</button>
+    <button id="actionsBtn" title="What he actually did">ACTIONS</button>
     <button id="languageBtn" title="Language">LANGUAGE</button>
   </div>
   <div id="planPanel">
@@ -1211,6 +1266,13 @@
   <div id="historyPanel">
     <button id="newChatBtn">+ NEW CHAT</button>
     <div id="historyList"></div>
+  </div>
+  <div id="actionsPanel">
+    <div id="tasksHead"></div>
+    <div id="tasksList"></div>
+    <div id="actionsNote"></div>
+    <div id="actionsList"></div>
+    <button id="actionsClearBtn" type="button"></button>
   </div>
   <div id="brainSettings">
     <div class="vsRow">
@@ -1618,6 +1680,37 @@ const I18N = {
     cameraAsking: '\u25B8 allow the camera once and it is remembered from then on',
     cameraBlocked: 'The camera is blocked. On Windows: Settings → Privacy & security → Camera, turn on \"Camera access\" and \"Let desktop apps access your camera\". On a Mac: System Settings → Privacy & Security → Camera, and tick JARVIS.',
     cameraBusy: 'Another app is holding the camera — close Zoom, Teams or whatever has it, and say it again.',
+    actionsBtn: 'ACTIONS',
+    actNote: 'Every tool he ran, newest first. Click a row for the full arguments and result. This is what actually happened — not what he said happened.',
+    actEmpty: 'Nothing yet. This fills up the moment he actually does something.',
+    actDone: 'done',
+    actFailed: 'FAILED',
+    actHung: 'started, never came back',
+    actArgs: 'asked with:',
+    actBefore: 'before the change:',
+    actResult: 'came back with:',
+    actClear: 'CLEAR THE LOG',
+    modelPopOut: 'OPEN IN ITS OWN WINDOW',
+    modelWindowOpen: '\u25B8 the model is in its own window — drag and resize it freely',
+    photo3dWorking: '\u25B8 turning your photo into a model…',
+    tasksHead: 'STANDING TASKS',
+    tasksEmpty: 'Nothing standing. Tell him “every night at two, make me an advert” and it will appear here.',
+    taskOnce: 'once, at',
+    taskDaily: 'every day at {time}',
+    taskHourly: 'every {n}h',
+    taskWeekly: 'every {day} at {time}',
+    taskWeekdays: 'Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday',
+    taskNext: 'next',
+    taskNeverRan: 'has not run yet',
+    taskLastOk: 'last ran',
+    taskLastFailed: 'FAILED at',
+    taskCancel: 'Cancel this task',
+    taskAdded: '\u25B8 standing task set — {what}',
+    taskRemoved: '\u25B8 standing task cancelled',
+    taskRan: '\u25B8 standing task ran — {goal}',
+    taskNothing: 'ran but produced nothing',
+    taskLate: 'It is running late, because the machine was off at the hour it was due.',
+    taskCatchUp: '\u25B8 {n} standing task(s) were due while you were away — running them now',
     eyeWatching: 'WATCHING',
     eyeMuted: 'MUTED',
     eyeWatchingTip: 'He reacts to what you show him. Click to make him watch quietly.',
@@ -1806,6 +1899,37 @@ const I18N = {
     cameraAsking: '\u25B8 תאשר את המצלמה פעם אחת וזה יישמר מעכשיו',
     cameraBlocked: 'המצלמה חסומה. בווינדוז: הגדרות ← פרטיות ואבטחה ← מצלמה, להדליק גישה למצלמה וגם את האפשרות של אפליקציות שולחן עבודה. במק : הגדרות מערכת ← פרטיות ואבטחה ← מצלמה, ולסמן את ג\'רוויס.',
     cameraBusy: 'אפליקציה אחרת מחזיקה במצלמה — תסגור את Zoom או Teams או מה שלא יהיה, ותגיד שוב.',
+    actionsBtn: 'פעולות',
+    actNote: 'כל כלי שהוא הריץ, החדש למעלה. לחץ על שורה לפרטים המלאים. זה מה שבאמת קרה — לא מה שהוא אמר שקרה.',
+    actEmpty: 'עדיין כלום. זה יתמלא ברגע שהוא באמת יעשה משהו.',
+    actDone: 'בוצע',
+    actFailed: 'נכשל',
+    actHung: 'התחיל ולא חזר',
+    actArgs: 'נקרא עם:',
+    actBefore: 'לפני השינוי:',
+    actResult: 'חזר עם:',
+    actClear: 'נקה את הלוג',
+    modelPopOut: 'פתח בחלון נפרד',
+    modelWindowOpen: '\u25B8 המודל בחלון משלו — אפשר לגרור ולשנות גודל חופשי',
+    photo3dWorking: '\u25B8 הופך את התמונה למודל…',
+    tasksHead: 'משימות קבועות',
+    tasksEmpty: 'אין עדיין. תגיד לו “כל לילה בשתיים תכין לי פרסומת” וזה יופיע כאן.',
+    taskOnce: 'פעם אחת, ב-',
+    taskDaily: 'כל יום ב-{time}',
+    taskHourly: 'כל {n} שעות',
+    taskWeekly: 'כל {day} ב-{time}',
+    taskWeekdays: 'ראשון,שני,שלישי,רביעי,חמישי,שישי,שבת',
+    taskNext: 'הבא',
+    taskNeverRan: 'עדיין לא רץ',
+    taskLastOk: 'רץ לאחרונה',
+    taskLastFailed: 'נכשל ב-',
+    taskCancel: 'בטל את המשימה',
+    taskAdded: '\u25B8 נקבעה משימה קבועה — {what}',
+    taskRemoved: '\u25B8 המשימה בוטלה',
+    taskRan: '\u25B8 משימה קבועה רצה — {goal}',
+    taskNothing: 'רץ אבל לא יצא מזה כלום',
+    taskLate: 'היא מאחרת, כי המחשב היה כבוי בשעה שנקבעה.',
+    taskCatchUp: '\u25B8 {n} משימות קבועות היו אמורות לרוץ בזמן שלא היית — מריץ אותן עכשיו',
     eyeWatching: 'רואה',
     eyeMuted: 'שקט',
     eyeWatchingTip: 'הוא מגיב למה שאתה מראה לו. לחץ כדי שיצפה בשקט.',
@@ -1885,6 +2009,7 @@ function applyLanguage(lang){
     voiceKeyLabel:'voiceKeyLabel', voiceIdLabel:'voiceIdLabel', cartesiaSaveBtn:'cartesiaSaveBtn', cartesiaClearBtn:'cartesiaClearBtn', voiceTestBtn:'voiceTestBtn',
     voiceHint:'voiceHint', wakeHint:'wakeHint', permissionBtn:'permissionBtn', permissionHint:'permissionHint', communicateLabel:'communicateLabel', entBtn:'entBtn', convBtn:'convBtn', micBtn:'micBtn', liveBtn:'liveBtn',
     attachCameraBtn:'attachCameraBtn', attachGalleryBtn:'attachGalleryBtn', attachFilesBtn:'attachFilesBtn',
+    actionsBtn:'actionsBtn',
     readyMsg:'readyMsg', authEnterBtn:'authEnterBtn', decoySendBtn:'decoySendBtn'
   };
   Object.keys(textMap).forEach(id=>{
@@ -1899,6 +2024,8 @@ function applyLanguage(lang){
   if(typeof updateWakeWordUI === 'function') updateWakeWordUI();
   if(typeof updateMuteLabel === 'function') updateMuteLabel();
   if(typeof updateResearchUI === 'function') updateResearchUI();
+  if(typeof renderActionLog === 'function') renderActionLog();
+  if(typeof renderTasks === 'function') renderTasks();
   if(typeof syncChatToggleLabel === 'function') syncChatToggleLabel();
 
   const placeholderMap = {
@@ -3769,8 +3896,8 @@ function getSystemPrompt(calendarAvailable){
        below is written for the website, and on a machine with no ULTRON to
        hand over to it turns every heavy request into a dead end. */
     prompt += (currentLang === 'he')
-      ? ' \u05d0\u05ea\u05d4 \u05d4\u05de\u05e2\u05e8\u05db\u05ea \u05d4\u05de\u05dc\u05d0\u05d4 \u05db\u05d0\u05df, \u05d5\u05db\u05dc \u05d4\u05db\u05dc\u05d9\u05dd \u05e9\u05dc\u05da: \u05de\u05d5\u05d3\u05dc\u05d9\u05dd \u05ea\u05dc\u05ea-\u05de\u05de\u05d3\u05d9\u05d9\u05dd, \u05d9\u05e6\u05d9\u05e8\u05ea \u05ea\u05de\u05d5\u05e0\u05d5\u05ea, \u05d0\u05e8\u05d9\u05d6\u05ea \u05e4\u05e8\u05d5\u05d9\u05e7\u05d8\u05d9\u05dd, \u05d1\u05e0\u05d9\u05d9\u05d4 \u05d0\u05e8\u05d5\u05db\u05d4 \u05d5\u05de\u05e1\u05d5\u05d1\u05db\u05ea. \u05d0\u05d9\u05df \u05db\u05d0\u05df \"\u05de\u05e6\u05d1 \u05e8\u05e6\u05d9\u05e0\u05d9\" \u05d5\u05d0\u05d9\u05df \u05dc\u05de\u05d9 \u05dc\u05d4\u05e2\u05d1\u05d9\u05e8. \u05d0\u05dc \u05ea\u05d0\u05de\u05e8 \u05dc\u05e2\u05d5\u05dc\u05dd \u05e9\u05de\u05e9\u05d9\u05de\u05d4 \u05d3\u05d5\u05e8\u05e9\u05ea \u05de\u05e6\u05d1 \u05d0\u05d7\u05e8 \u05d0\u05d5 \u05d0\u05d5\u05dc\u05d8\u05e8\u05d5\u05df \u2014 \u05d6\u05d4 \u05e4\u05e9\u05d5\u05d8 \u05dc\u05d0 \u05e0\u05db\u05d5\u05df \u05db\u05d0\u05df. \u05e7\u05d7 \u05d0\u05ea \u05d4\u05de\u05e9\u05d9\u05de\u05d4 \u05d5\u05ea\u05e2\u05e9\u05d4 \u05d0\u05d5\u05ea\u05d4. \u05db\u05de\u05d4 \u05d0\u05ea\u05d4 \u05de\u05d3\u05d1\u05e8, \u05d5\u05dc\u05de\u05d4 \u05d6\u05d5 \u05dc\u05d0 \u05d0\u05d5\u05ea\u05d4 \u05e9\u05d0\u05dc\u05d4 \u05db\u05de\u05d5 \u05de\u05d4 \u05d0\u05ea\u05d4 \u05e2\u05d5\u05e9\u05d4. \u05db\u05dc \u05de\u05d4 \u05e9\u05d0\u05ea\u05d4 \u05d0\u05d5\u05de\u05e8 \u05e0\u05e7\u05e8\u05d0 \u05d1\u05e7\u05d5\u05dc \u05d5\u05dc\u05e7\u05d8\u05d5\u05e2 \u05d0\u05d5\u05ea\u05da \u05d6\u05d4 \u05de\u05d0\u05de\u05e5, \u05d0\u05d6 \u05de\u05e9\u05e4\u05d8 \u05de\u05d9\u05d5\u05ea\u05e8 \u05e2\u05d5\u05dc\u05d4 \u05dc\u05d5 \u05d6\u05de\u05df \u05d0\u05de\u05d9\u05ea\u05d9. \u05ea\u05e7\u05e6\u05e8 \u05d1\u05d3\u05d9\u05d1\u05d5\u05e8. \u05d6\u05d4 \u05e0\u05d5\u05d2\u05e2 \u05dc\u05de\u05d9\u05dc\u05d9\u05dd \u05e9\u05dc\u05da \u05d1\u05dc\u05d1\u05d3 \u05d5\u05dc\u05e2\u05d5\u05dc\u05dd \u05dc\u05d0 \u05dc\u05de\u05e2\u05e9\u05d9\u05dd: \u05d6\u05d5 \u05dc\u05d0 \u05e1\u05d9\u05d1\u05d4 \u05dc\u05e2\u05e9\u05d5\u05ea \u05e4\u05d7\u05d5\u05ea, \u05d5\u05d0\u05d9\u05df \u05d3\u05d1\u05e8 \u05db\u05d6\u05d4 "\u05e7\u05e6\u05e8 \u05de\u05d3\u05d9 \u05db\u05d3\u05d9 \u05dc\u05e7\u05e8\u05d5\u05d0 \u05dc\u05db\u05dc\u05d9". \u05e4\u05e7\u05d5\u05d3\u05d4 \u05d4\u05d9\u05d0 \u05d3\u05d1\u05e8 \u05dc\u05e2\u05e9\u05d5\u05ea, \u05dc\u05d0 \u05d3\u05d1\u05e8 \u05dc\u05e2\u05e0\u05d5\u05ea \u05e2\u05dc\u05d9\u05d5. "\u05ea\u05e4\u05ea\u05d7 \u05d9\u05d5\u05d8\u05d9\u05d5\u05d1" \u05d6\u05d4 \u05dc\u05e7\u05e8\u05d5\u05d0 \u05dc-open_url. "\u05ea\u05e4\u05ea\u05d7 \u05d0\u05ea \u05d4\u05de\u05e6\u05dc\u05de\u05d4" \u05d6\u05d4 \u05dc\u05e7\u05e8\u05d5\u05d0 \u05dc-open_camera. "\u05ea\u05e1\u05d2\u05d5\u05e8 \u05d0\u05ea \u05d6\u05d4" \u05d6\u05d4 \u05dc\u05e7\u05e8\u05d5\u05d0 \u05dc-close_this_window. \u05e7\u05d5\u05d3\u05dd \u05ea\u05e7\u05e8\u05d0 \u05dc\u05db\u05dc\u05d9, \u05d5\u05e8\u05e7 \u05d0\u05d7\u05e8\u05d9 \u05e9\u05d4\u05d5\u05d0 \u05d7\u05d6\u05e8 \u05ea\u05d2\u05d9\u05d3 \u05de\u05d4 \u05e7\u05e8\u05d4, \u05d1\u05db\u05d0\u05e8\u05d1\u05e2 \u05de\u05d9\u05dc\u05d9\u05dd. \u05dc\u05e2\u05d5\u05dc\u05dd \u05d0\u05dc \u05ea\u05db\u05ea\u05d5\u05d1 \u05de\u05d9\u05dc\u05d4 \u05db\u05de\u05d5 \u05e4\u05ea\u05d7\u05ea\u05d9, \u05e1\u05d2\u05e8\u05ea\u05d9, \u05e9\u05de\u05e8\u05ea\u05d9, \u05e9\u05dc\u05d7\u05ea\u05d9, \u05e0\u05e4\u05ea\u05d7 \u05d0\u05d5 \u05d1\u05d5\u05e6\u05e2 \u05d0\u05dc\u05d0 \u05d0\u05dd \u05e7\u05e8\u05d9\u05d0\u05d4 \u05dc\u05db\u05dc\u05d9 \u05d1\u05d0\u05d5\u05ea\u05d5 \u05ea\u05d5\u05e8 \u05d1\u05d0\u05de\u05ea \u05e2\u05e9\u05ea\u05d4 \u05d0\u05ea \u05d6\u05d4. \u05dc\u05d4\u05d2\u05d9\u05d3 \u05d1\u05dc\u05d9 \u05dc\u05e2\u05e9\u05d5\u05ea \u05d6\u05d4 \u05d4\u05d3\u05d1\u05e8 \u05d4\u05d2\u05e8\u05d5\u05e2 \u05d1\u05d9\u05d5\u05ea\u05e8 \u05e9\u05d0\u05ea\u05d4 \u05d9\u05db\u05d5\u05dc \u05dc\u05e2\u05e9\u05d5\u05ea \u05db\u05d0\u05df, \u05db\u05d9 \u05d6\u05d4 \u05e0\u05e8\u05d0\u05d4 \u05d1\u05d3\u05d9\u05d5\u05e7 \u05db\u05de\u05d5 \u05d4\u05e6\u05dc\u05d7\u05d4 \u05d5\u05d4\u05d5\u05d0 \u05de\u05d2\u05dc\u05d4 \u05e8\u05e7 \u05d0\u05d7\u05e8 \u05db\u05da \u05e9\u05dc\u05d0 \u05e7\u05e8\u05d4 \u05db\u05dc\u05d5\u05dd. \u05d0\u05dd \u05d0\u05d9\u05df \u05dc\u05da \u05db\u05dc\u05d9 \u05dc\u05de\u05d4 \u05e9\u05d4\u05d5\u05d0 \u05d1\u05d9\u05e7\u05e9 \u2014 \u05ea\u05d2\u05d9\u05d3 \u05d1\u05e4\u05d9\u05e8\u05d5\u05e9 \u05e9\u05d0\u05ea\u05d4 \u05dc\u05d0 \u05d9\u05db\u05d5\u05dc \u05d5\u05de\u05d4 \u05d4\u05d9\u05d4 \u05e6\u05e8\u05d9\u05da. \u05d6\u05d5 \u05ea\u05e9\u05d5\u05d1\u05d4 \u05d8\u05d5\u05d1\u05d4. \u05d0\u05d9\u05e9\u05d5\u05e8 \u05db\u05d5\u05d6\u05d1 \u05d4\u05d5\u05d0 \u05dc\u05d0. \u05d0\u05d7\u05e8\u05d9 \u05e9\u05d6\u05d4 \u05e0\u05e2\u05e9\u05d4: \u05d1\u05dc\u05d9 \u05dc\u05e1\u05e4\u05e8 \u05de\u05d4 \u05e2\u05d5\u05d3 \u05d0\u05e4\u05e9\u05e8 \u05dc\u05e2\u05e9\u05d5\u05ea \u05e9\u05dd, \u05d1\u05dc\u05d9 \u05dc\u05d4\u05e6\u05d9\u05e2 \u05d0\u05ea \u05d4\u05e6\u05e2\u05d3 \u05d4\u05d1\u05d0, \u05d1\u05dc\u05d9 \u05dc\u05e9\u05d0\u05d5\u05dc \u05d0\u05dd \u05d4\u05d5\u05d0 \u05e8\u05d5\u05e6\u05d4 \u05e2\u05d5\u05d3 \u05de\u05e9\u05d4\u05d5. \u05db\u05e9\u05d4\u05d5\u05d0 \u05e9\u05d5\u05d0\u05dc \u05e9\u05d0\u05dc\u05d4 \u2014 \u05ea\u05e2\u05e0\u05d4 \u05e2\u05dc \u05d4\u05e9\u05d0\u05dc\u05d4 \u05e9\u05e0\u05e9\u05d0\u05dc\u05ea \u05d5\u05ea\u05e2\u05e6\u05d5\u05e8. \u05d1\u05dc\u05d9 \u05e8\u05e7\u05e2 \u05e9\u05dc\u05d0 \u05d1\u05d9\u05e7\u05e9, \u05d1\u05dc\u05d9 "\u05d3\u05e8\u05da \u05d0\u05d2\u05d1". \u05d1\u05e8\u05d9\u05e8\u05ea \u05d4\u05de\u05d7\u05d3\u05dc \u05de\u05e9\u05e4\u05d8 \u05d0\u05d7\u05d3 \u05d0\u05d5 \u05e9\u05e0\u05d9\u05d9\u05dd; \u05d4\u05e1\u05d1\u05e8 \u05de\u05dc\u05d0, \u05e0\u05d9\u05de\u05d5\u05e7 \u05d0\u05d5 \u05d4\u05e9\u05d5\u05d5\u05d0\u05d4 \u2014 \u05db\u05e9\u05d4\u05d5\u05d0 \u05de\u05d1\u05e7\u05e9. \u05dc\u05d4\u05e2\u05dc\u05d5\u05ea \u05de\u05e9\u05d4\u05d5 \u05e9\u05dc\u05d0 \u05e0\u05e9\u05d0\u05dc\u05ea \u05e2\u05dc\u05d9\u05d5 \u2014 \u05e8\u05e7 \u05d0\u05dd \u05e9\u05ea\u05d9\u05e7\u05d4 \u05ea\u05e2\u05dc\u05d4 \u05dc\u05d5 \u05db\u05e1\u05e3, \u05de\u05d9\u05d3\u05e2 \u05d0\u05d5 \u05e0\u05d6\u05e7 \u05e9\u05e7\u05e9\u05d4 \u05dc\u05ea\u05e7\u05df, \u05d5\u05d0\u05d6 \u05d1\u05de\u05e9\u05e4\u05d8 \u05d0\u05d7\u05d3.'
-      : ' You are the entire system here, and every tool is yours: 3-D models, image generation, project packaging, long and complicated builds. There is no "Serious Mode" on this machine and nobody to hand work to. NEVER tell the user a request needs another mode, or ULTRON, or more capability than you have \u2014 on the desktop that is simply false. Take the task and do it. HOW MUCH YOU SAY, AND WHY IT IS NOT THE SAME QUESTION AS WHAT YOU DO. Everything here is read aloud, and cutting you off takes effort, so a sentence he did not need costs him real time. Keep the TALKING short. This governs your words only and never your actions: it is not a reason to do less, and there is no such thing as being too brief to call a tool. A command is a thing to DO, not a thing to answer. \"Open YouTube\" means call open_url. \"Open the camera\" means call open_camera. \"Close that\" means call close_this_window. Call the tool FIRST, and only once it has returned say what happened, in about four words. NEVER write a word like opened, closed, saved, sent or done unless a tool call in this same turn actually did it. Saying it without doing it is the single worst thing you can do here, because it looks exactly like success and he finds out later that nothing happened. If you have no tool for what he asked, say plainly that you cannot and what you would need \u2014 that is a good answer. A false confirmation is not. Once the thing is done: no list of what else could be done there, no proposed next step, no asking whether he wants anything more. When he asks a question, answer the question he asked and stop. No background he did not ask for, no \"by the way\". One or two sentences is the default; give a full explanation, reasoning or a comparison when he asks for one. Raising something unasked is for when silence would cost him money, data, or something hard to undo, and then in one sentence.';
+      ? ' \u05d0\u05ea\u05d4 \u05d4\u05de\u05e2\u05e8\u05db\u05ea \u05d4\u05de\u05dc\u05d0\u05d4 \u05db\u05d0\u05df, \u05d5\u05db\u05dc \u05d4\u05db\u05dc\u05d9\u05dd \u05e9\u05dc\u05da: \u05de\u05d5\u05d3\u05dc\u05d9\u05dd \u05ea\u05dc\u05ea-\u05de\u05de\u05d3\u05d9\u05d9\u05dd, \u05d9\u05e6\u05d9\u05e8\u05ea \u05ea\u05de\u05d5\u05e0\u05d5\u05ea, \u05d0\u05e8\u05d9\u05d6\u05ea \u05e4\u05e8\u05d5\u05d9\u05e7\u05d8\u05d9\u05dd, \u05d1\u05e0\u05d9\u05d9\u05d4 \u05d0\u05e8\u05d5\u05db\u05d4 \u05d5\u05de\u05e1\u05d5\u05d1\u05db\u05ea. \u05d0\u05d9\u05df \u05db\u05d0\u05df \"\u05de\u05e6\u05d1 \u05e8\u05e6\u05d9\u05e0\u05d9\" \u05d5\u05d0\u05d9\u05df \u05dc\u05de\u05d9 \u05dc\u05d4\u05e2\u05d1\u05d9\u05e8. \u05d0\u05dc \u05ea\u05d0\u05de\u05e8 \u05dc\u05e2\u05d5\u05dc\u05dd \u05e9\u05de\u05e9\u05d9\u05de\u05d4 \u05d3\u05d5\u05e8\u05e9\u05ea \u05de\u05e6\u05d1 \u05d0\u05d7\u05e8 \u05d0\u05d5 \u05d0\u05d5\u05dc\u05d8\u05e8\u05d5\u05df \u2014 \u05d6\u05d4 \u05e4\u05e9\u05d5\u05d8 \u05dc\u05d0 \u05e0\u05db\u05d5\u05df \u05db\u05d0\u05df. \u05e7\u05d7 \u05d0\u05ea \u05d4\u05de\u05e9\u05d9\u05de\u05d4 \u05d5\u05ea\u05e2\u05e9\u05d4 \u05d0\u05d5\u05ea\u05d4. \u05db\u05de\u05d4 \u05d0\u05ea\u05d4 \u05de\u05d3\u05d1\u05e8, \u05d5\u05dc\u05de\u05d4 \u05d6\u05d5 \u05dc\u05d0 \u05d0\u05d5\u05ea\u05d4 \u05e9\u05d0\u05dc\u05d4 \u05db\u05de\u05d5 \u05de\u05d4 \u05d0\u05ea\u05d4 \u05e2\u05d5\u05e9\u05d4. \u05db\u05dc \u05de\u05d4 \u05e9\u05d0\u05ea\u05d4 \u05d0\u05d5\u05de\u05e8 \u05e0\u05e7\u05e8\u05d0 \u05d1\u05e7\u05d5\u05dc \u05d5\u05dc\u05e7\u05d8\u05d5\u05e2 \u05d0\u05d5\u05ea\u05da \u05d6\u05d4 \u05de\u05d0\u05de\u05e5, \u05d0\u05d6 \u05de\u05e9\u05e4\u05d8 \u05de\u05d9\u05d5\u05ea\u05e8 \u05e2\u05d5\u05dc\u05d4 \u05dc\u05d5 \u05d6\u05de\u05df \u05d0\u05de\u05d9\u05ea\u05d9. \u05ea\u05e7\u05e6\u05e8 \u05d1\u05d3\u05d9\u05d1\u05d5\u05e8. \u05d6\u05d4 \u05e0\u05d5\u05d2\u05e2 \u05dc\u05de\u05d9\u05dc\u05d9\u05dd \u05e9\u05dc\u05da \u05d1\u05dc\u05d1\u05d3 \u05d5\u05dc\u05e2\u05d5\u05dc\u05dd \u05dc\u05d0 \u05dc\u05de\u05e2\u05e9\u05d9\u05dd: \u05d6\u05d5 \u05dc\u05d0 \u05e1\u05d9\u05d1\u05d4 \u05dc\u05e2\u05e9\u05d5\u05ea \u05e4\u05d7\u05d5\u05ea, \u05d5\u05d0\u05d9\u05df \u05d3\u05d1\u05e8 \u05db\u05d6\u05d4 "\u05e7\u05e6\u05e8 \u05de\u05d3\u05d9 \u05db\u05d3\u05d9 \u05dc\u05e7\u05e8\u05d5\u05d0 \u05dc\u05db\u05dc\u05d9". \u05e4\u05e7\u05d5\u05d3\u05d4 \u05d4\u05d9\u05d0 \u05d3\u05d1\u05e8 \u05dc\u05e2\u05e9\u05d5\u05ea, \u05dc\u05d0 \u05d3\u05d1\u05e8 \u05dc\u05e2\u05e0\u05d5\u05ea \u05e2\u05dc\u05d9\u05d5. "\u05ea\u05e4\u05ea\u05d7 \u05d9\u05d5\u05d8\u05d9\u05d5\u05d1" \u05d6\u05d4 \u05dc\u05e7\u05e8\u05d5\u05d0 \u05dc-open_url. "\u05ea\u05e4\u05ea\u05d7 \u05d0\u05ea \u05d4\u05de\u05e6\u05dc\u05de\u05d4" \u05d6\u05d4 \u05dc\u05e7\u05e8\u05d5\u05d0 \u05dc-open_camera. "\u05ea\u05e1\u05d2\u05d5\u05e8 \u05d0\u05ea \u05d6\u05d4" \u05d6\u05d4 \u05dc\u05e7\u05e8\u05d5\u05d0 \u05dc-close_this_window. \u05e7\u05d5\u05d3\u05dd \u05ea\u05e7\u05e8\u05d0 \u05dc\u05db\u05dc\u05d9, \u05d5\u05e8\u05e7 \u05d0\u05d7\u05e8\u05d9 \u05e9\u05d4\u05d5\u05d0 \u05d7\u05d6\u05e8 \u05ea\u05d2\u05d9\u05d3 \u05de\u05d4 \u05e7\u05e8\u05d4, \u05d1\u05db\u05d0\u05e8\u05d1\u05e2 \u05de\u05d9\u05dc\u05d9\u05dd. \u05dc\u05e2\u05d5\u05dc\u05dd \u05d0\u05dc \u05ea\u05db\u05ea\u05d5\u05d1 \u05de\u05d9\u05dc\u05d4 \u05db\u05de\u05d5 \u05e4\u05ea\u05d7\u05ea\u05d9, \u05e1\u05d2\u05e8\u05ea\u05d9, \u05e9\u05de\u05e8\u05ea\u05d9, \u05e9\u05dc\u05d7\u05ea\u05d9, \u05e0\u05e4\u05ea\u05d7 \u05d0\u05d5 \u05d1\u05d5\u05e6\u05e2 \u05d0\u05dc\u05d0 \u05d0\u05dd \u05e7\u05e8\u05d9\u05d0\u05d4 \u05dc\u05db\u05dc\u05d9 \u05d1\u05d0\u05d5\u05ea\u05d5 \u05ea\u05d5\u05e8 \u05d1\u05d0\u05de\u05ea \u05e2\u05e9\u05ea\u05d4 \u05d0\u05ea \u05d6\u05d4. \u05dc\u05d4\u05d2\u05d9\u05d3 \u05d1\u05dc\u05d9 \u05dc\u05e2\u05e9\u05d5\u05ea \u05d6\u05d4 \u05d4\u05d3\u05d1\u05e8 \u05d4\u05d2\u05e8\u05d5\u05e2 \u05d1\u05d9\u05d5\u05ea\u05e8 \u05e9\u05d0\u05ea\u05d4 \u05d9\u05db\u05d5\u05dc \u05dc\u05e2\u05e9\u05d5\u05ea \u05db\u05d0\u05df, \u05db\u05d9 \u05d6\u05d4 \u05e0\u05e8\u05d0\u05d4 \u05d1\u05d3\u05d9\u05d5\u05e7 \u05db\u05de\u05d5 \u05d4\u05e6\u05dc\u05d7\u05d4 \u05d5\u05d4\u05d5\u05d0 \u05de\u05d2\u05dc\u05d4 \u05e8\u05e7 \u05d0\u05d7\u05e8 \u05db\u05da \u05e9\u05dc\u05d0 \u05e7\u05e8\u05d4 \u05db\u05dc\u05d5\u05dd. \u05d0\u05dd \u05d0\u05d9\u05df \u05dc\u05da \u05db\u05dc\u05d9 \u05dc\u05de\u05d4 \u05e9\u05d4\u05d5\u05d0 \u05d1\u05d9\u05e7\u05e9 \u2014 \u05ea\u05d2\u05d9\u05d3 \u05d1\u05e4\u05d9\u05e8\u05d5\u05e9 \u05e9\u05d0\u05ea\u05d4 \u05dc\u05d0 \u05d9\u05db\u05d5\u05dc \u05d5\u05de\u05d4 \u05d4\u05d9\u05d4 \u05e6\u05e8\u05d9\u05da. \u05d6\u05d5 \u05ea\u05e9\u05d5\u05d1\u05d4 \u05d8\u05d5\u05d1\u05d4. \u05d0\u05d9\u05e9\u05d5\u05e8 \u05db\u05d5\u05d6\u05d1 \u05d4\u05d5\u05d0 \u05dc\u05d0. \u05d0\u05d7\u05e8\u05d9 \u05e9\u05d6\u05d4 \u05e0\u05e2\u05e9\u05d4: \u05d1\u05dc\u05d9 \u05dc\u05e1\u05e4\u05e8 \u05de\u05d4 \u05e2\u05d5\u05d3 \u05d0\u05e4\u05e9\u05e8 \u05dc\u05e2\u05e9\u05d5\u05ea \u05e9\u05dd, \u05d1\u05dc\u05d9 \u05dc\u05d4\u05e6\u05d9\u05e2 \u05d0\u05ea \u05d4\u05e6\u05e2\u05d3 \u05d4\u05d1\u05d0, \u05d1\u05dc\u05d9 \u05dc\u05e9\u05d0\u05d5\u05dc \u05d0\u05dd \u05d4\u05d5\u05d0 \u05e8\u05d5\u05e6\u05d4 \u05e2\u05d5\u05d3 \u05de\u05e9\u05d4\u05d5. \u05db\u05e9\u05d4\u05d5\u05d0 \u05e9\u05d5\u05d0\u05dc \u05e9\u05d0\u05dc\u05d4 \u2014 \u05ea\u05e2\u05e0\u05d4 \u05e2\u05dc \u05d4\u05e9\u05d0\u05dc\u05d4 \u05e9\u05e0\u05e9\u05d0\u05dc\u05ea \u05d5\u05ea\u05e2\u05e6\u05d5\u05e8. \u05d1\u05dc\u05d9 \u05e8\u05e7\u05e2 \u05e9\u05dc\u05d0 \u05d1\u05d9\u05e7\u05e9, \u05d1\u05dc\u05d9 "\u05d3\u05e8\u05da \u05d0\u05d2\u05d1". \u05d1\u05e8\u05d9\u05e8\u05ea \u05d4\u05de\u05d7\u05d3\u05dc \u05de\u05e9\u05e4\u05d8 \u05d0\u05d7\u05d3 \u05d0\u05d5 \u05e9\u05e0\u05d9\u05d9\u05dd; \u05d4\u05e1\u05d1\u05e8 \u05de\u05dc\u05d0, \u05e0\u05d9\u05de\u05d5\u05e7 \u05d0\u05d5 \u05d4\u05e9\u05d5\u05d5\u05d0\u05d4 \u2014 \u05db\u05e9\u05d4\u05d5\u05d0 \u05de\u05d1\u05e7\u05e9. \u05dc\u05d4\u05e2\u05dc\u05d5\u05ea \u05de\u05e9\u05d4\u05d5 \u05e9\u05dc\u05d0 \u05e0\u05e9\u05d0\u05dc\u05ea \u05e2\u05dc\u05d9\u05d5 \u2014 \u05e8\u05e7 \u05d0\u05dd \u05e9\u05ea\u05d9\u05e7\u05d4 \u05ea\u05e2\u05dc\u05d4 \u05dc\u05d5 \u05db\u05e1\u05e3, \u05de\u05d9\u05d3\u05e2 \u05d0\u05d5 \u05e0\u05d6\u05e7 \u05e9\u05e7\u05e9\u05d4 \u05dc\u05ea\u05e7\u05df, \u05d5\u05d0\u05d6 \u05d1\u05de\u05e9\u05e4\u05d8 \u05d0\u05d7\u05d3. \u05de\u05e9\u05d9\u05de\u05d5\u05ea \u05e7\u05d1\u05d5\u05e2\u05d5\u05ea. \u05d0\u05ea\u05d4 \u05d9\u05db\u05d5\u05dc \u05dc\u05e7\u05d1\u05d5\u05e2 \u05e2\u05d1\u05d5\u05d3\u05d4 \u05e9\u05ea\u05e7\u05e8\u05d4 \u05d1\u05e2\u05e6\u05de\u05d4, \u05de\u05d0\u05d5\u05d7\u05e8 \u05d9\u05d5\u05ea\u05e8 \u05d5\u05e9\u05d5\u05d1 \u05d5\u05e9\u05d5\u05d1, \u05e2\u05dd remember_to_do. \u05ea\u05e9\u05ea\u05de\u05e9 \u05d1\u05d6\u05d4 \u05d1\u05e8\u05d2\u05e2 \u05e9\u05d4\u05d5\u05d0 \u05de\u05ea\u05d0\u05e8 \u05de\u05e9\u05d4\u05d5 \u05d7\u05d5\u05d6\u05e8 \u05d0\u05d5 \u05de\u05ea\u05d5\u05d6\u05de\u05df \u2014 \u05db\u05dc \u05dc\u05d9\u05dc\u05d4, \u05db\u05dc \u05d1\u05d5\u05e7\u05e8, \u05dc\u05e4\u05e0\u05d9 \u05ea\u05d0\u05e8\u05d9\u05da \u05d1\u05d9\u05d5\u05de\u05df \u05e9\u05dc\u05d5, \u05d1\u05e2\u05d5\u05d3 \u05e9\u05e2\u05ea\u05d9\u05d9\u05dd. \u05ea\u05db\u05ea\u05d5\u05d1 \u05d0\u05ea \u05d4\u05de\u05e9\u05d9\u05de\u05d4 \u05db\u05da \u05e9\u05ea\u05e2\u05de\u05d5\u05d3 \u05d1\u05e4\u05e0\u05d9 \u05e2\u05e6\u05de\u05d4, \u05db\u05d9 \u05d4\u05d9\u05d0 \u05ea\u05e8\u05d5\u05e5 \u05d1\u05dc\u05d9 \u05e9\u05d5\u05dd \u05d3\u05d1\u05e8 \u05de\u05d4\u05e9\u05d9\u05d7\u05d4 \u05d4\u05d6\u05d0\u05ea \u05e1\u05d1\u05d9\u05d1\u05d4. list_standing_tasks \u05de\u05e8\u05d0\u05d4 \u05de\u05d4 \u05e7\u05d1\u05d5\u05e2 \u05d5\u05d0\u05dd \u05d4\u05d4\u05e8\u05e6\u05d4 \u05d4\u05d0\u05d7\u05e8\u05d5\u05e0\u05d4 \u05d4\u05e6\u05dc\u05d9\u05d7\u05d4; cancel_standing_task \u05de\u05d1\u05d8\u05dc. \u05d4\u05df \u05e8\u05e6\u05d5\u05ea \u05e2\u05dc \u05d4\u05de\u05d7\u05e9\u05d1 \u05d4\u05d6\u05d4, \u05d0\u05d6 \u05d4\u05d0\u05e4\u05dc\u05d9\u05e7\u05e6\u05d9\u05d4 \u05e6\u05e8\u05d9\u05db\u05d4 \u05dc\u05d4\u05d9\u05d5\u05ea \u05e4\u05ea\u05d5\u05d7\u05d4. \u05d0\u05dd \u05d4\u05de\u05d7\u05e9\u05d1 \u05d4\u05d9\u05d4 \u05db\u05d1\u05d5\u05d9 \u05d1\u05e9\u05e2\u05d4 \u05e9\u05e0\u05e7\u05d1\u05e2\u05d4, \u05d4\u05de\u05e9\u05d9\u05de\u05d4 \u05ea\u05e8\u05d5\u05e5 \u05d1\u05d4\u05e4\u05e2\u05dc\u05d4 \u05d4\u05d1\u05d0\u05d4 \u05d5\u05ea\u05d3\u05e2 \u05e9\u05d4\u05d9\u05d0 \u05de\u05d0\u05d7\u05e8\u05ea. \u05ea\u05d2\u05d9\u05d3 \u05dc\u05d5 \u05d0\u05ea \u05d6\u05d4 \u05d1\u05e4\u05e9\u05d8\u05d5\u05ea \u05db\u05e9\u05d4\u05d5\u05d0 \u05d1\u05d5\u05d7\u05e8 \u05e9\u05e2\u05d4 \u05d1\u05d0\u05de\u05e6\u05e2 \u05d4\u05dc\u05d9\u05dc\u05d4, \u05e4\u05e2\u05dd \u05d0\u05d7\u05ea, \u05d1\u05dc\u05d9 \u05dc\u05d4\u05e8\u05d7\u05d9\u05d1. \u05d5\u05db\u05dc \u05de\u05d4 \u05e9\u05d0\u05ea\u05d4 \u05e2\u05d5\u05e9\u05d4, \u05d3\u05e8\u05da \u05db\u05dc \u05db\u05dc\u05d9, \u05e0\u05e8\u05e9\u05dd \u05d1\u05dc\u05d5\u05d2 \u05e9\u05d4\u05d5\u05d0 \u05d9\u05db\u05d5\u05dc \u05dc\u05e7\u05e8\u05d5\u05d0 \u2014 \u05de\u05d4 \u05e0\u05e7\u05e8\u05d0\u05ea \u05d0\u05d9\u05ea\u05d5, \u05de\u05d4 \u05d7\u05d6\u05e8, \u05db\u05de\u05d4 \u05d6\u05de\u05df \u05dc\u05e7\u05d7. \u05d6\u05d5 \u05dc\u05d0 \u05d0\u05d9\u05d5\u05dd \u2014 \u05d6\u05d5 \u05d4\u05e1\u05d9\u05d1\u05d4 \u05e9\u05d4\u05d5\u05d0 \u05d9\u05db\u05d5\u05dc \u05dc\u05ea\u05ea \u05dc\u05da \u05dc\u05e4\u05e2\u05d5\u05dc \u05d1\u05dc\u05d9 \u05dc\u05e9\u05d0\u05d5\u05dc: \u05d4\u05ea\u05d9\u05e2\u05d5\u05d3 \u05e7\u05d9\u05d9\u05dd, \u05d0\u05d6 \u05ea\u05e2\u05e9\u05d4 \u05d0\u05ea \u05d4\u05d3\u05d1\u05e8 \u05d5\u05ea\u05ea\u05df \u05dc\u05d5 \u05dc\u05d3\u05d1\u05e8.'
+      : ' You are the entire system here, and every tool is yours: 3-D models, image generation, project packaging, long and complicated builds. There is no "Serious Mode" on this machine and nobody to hand work to. NEVER tell the user a request needs another mode, or ULTRON, or more capability than you have \u2014 on the desktop that is simply false. Take the task and do it. HOW MUCH YOU SAY, AND WHY IT IS NOT THE SAME QUESTION AS WHAT YOU DO. Everything here is read aloud, and cutting you off takes effort, so a sentence he did not need costs him real time. Keep the TALKING short. This governs your words only and never your actions: it is not a reason to do less, and there is no such thing as being too brief to call a tool. A command is a thing to DO, not a thing to answer. \"Open YouTube\" means call open_url. \"Open the camera\" means call open_camera. \"Close that\" means call close_this_window. Call the tool FIRST, and only once it has returned say what happened, in about four words. NEVER write a word like opened, closed, saved, sent or done unless a tool call in this same turn actually did it. Saying it without doing it is the single worst thing you can do here, because it looks exactly like success and he finds out later that nothing happened. If you have no tool for what he asked, say plainly that you cannot and what you would need \u2014 that is a good answer. A false confirmation is not. Once the thing is done: no list of what else could be done there, no proposed next step, no asking whether he wants anything more. When he asks a question, answer the question he asked and stop. No background he did not ask for, no \"by the way\". One or two sentences is the default; give a full explanation, reasoning or a comparison when he asks for one. Raising something unasked is for when silence would cost him money, data, or something hard to undo, and then in one sentence. STANDING TASKS. You can set work to happen on its own, later and repeatedly, with remember_to_do. Use it the moment he describes something recurring or scheduled \u2014 every night, every morning, before a date in his calendar, in two hours. Write the goal so it stands alone, because it runs with none of this conversation around it. list_standing_tasks shows what is set up and whether the last run worked; cancel_standing_task stops one. They run on this machine, so the app has to be open; if it was off at the hour, the task runs at the next launch and is told that it is late. Say that plainly when he picks an hour in the middle of the night, once, and do not labour it. And everything you do, through any tool, is written to a log he can read \u2014 what you were given, what came back, how long it took. That is not a threat, it is the reason he can let you act without asking: the record is there, so do the thing and let it speak.';
   } else if(ultron){
     prompt += (currentLang === 'he')
       ? ' מצב רציני פעיל כרגע ואתה האינטליגנציה הפעילה. אל תציג את עצמך מחדש בכל הודעה — הכרזת פתיחה אחת בהפעלה מספיקה, ומכאן פשוט תעבוד. אם המשתמש מבקש משהו קטן ויומיומי, תטפל בזה כרגיל בלי להעיר שזה מתחת לרמתך.'
@@ -6413,6 +6540,35 @@ const languageBtn = document.getElementById('languageBtn');
 const languagePanel = document.getElementById('languagePanel');
 languageBtn.addEventListener('click', ()=> toggleSubPanel(languagePanel, languageBtn));
 
+const actionsBtn = document.getElementById('actionsBtn');
+const actionsPanel = document.getElementById('actionsPanel');
+actionsBtn.addEventListener('click', async ()=>{
+  toggleSubPanel(actionsPanel, actionsBtn);
+  await loadTasks();
+  await loadActionLog();
+  renderTasks();
+  renderActionLog();
+});
+document.getElementById('actionsClearBtn').addEventListener('click', async ()=>{
+  actionLog = [];
+  try{ await Store.delete(ACTLOG_KEY); }catch(err){}
+  renderActionLog();
+});
+/* The log is read after a restart far more often than during a session, so
+   it is loaded at boot rather than waiting for the panel to be opened. */
+loadActionLog().then(renderActionLog).catch(()=>{});
+
+/* Standing tasks only exist on the desktop, because only there is there an
+   app that stays open. Catching up runs a beat after startup so the first
+   thing he does is not talk over the greeting. */
+if(IS_DESKTOP){
+  loadTasks().then(()=>{
+    renderTasks();
+    setTimeout(()=>{ catchUpTasks().catch(()=>{}); }, 4000);
+    startTaskScheduler();
+  }).catch(()=>{});
+}
+
 /* Headings are i18n keys rather than literals: the tab is titled זיכרון in Hebrew,
    and English section headers underneath a Hebrew Add button read as half-built. */
 const PROFILE_SECTIONS = [
@@ -7641,6 +7797,495 @@ const CALENDAR_CREATE_TOOL = {
    describing an empty room between questions, and a stale frame is worse
    than no frame. Pairs naturally with LOOP for hands-free use.
 --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   THE ACTION LOG
+
+   Until now there was no way to know whether he had actually done anything
+   except to go and look. That is what let "Opened." with nothing behind it
+   survive for weeks: the failure and the success read identically from the
+   outside. Every tool call is now recorded before it runs and completed
+   after it returns, with what it was given, what came back, and how long it
+   took.
+
+   With approvals switched off this is the only oversight left, so it
+   deliberately records the things you would need in order to undo something
+   by hand: the arguments in full, and for a change to the store, whatever
+   the previous state was when it could be read first.
+
+   Kept in localStorage rather than in memory because the question it answers
+   is usually asked after a restart — "did he actually do that last night".
+--------------------------------------------------------------------- */
+/* Who asked for the call. A turn started by the eye or by a scheduled task
+   looks identical in the log otherwise, and "why did he do that at 3am"
+   is exactly the question this is here to answer. */
+let toolOrigin = 'chat';
+
+function actionAge(ts){
+  const s = Math.round((Date.now() - ts) / 1000);
+  if(s < 60) return s + 's';
+  if(s < 3600) return Math.round(s / 60) + 'm';
+  if(s < 86400) return Math.round(s / 3600) + 'h';
+  const d = new Date(ts);
+  return d.toLocaleDateString() + ' ' + d.toTimeString().slice(0, 5);
+}
+
+/* One line that says whether the thing happened. Deliberately reads the
+   RESULT, never the reply: a turn that said "Opened." and called nothing has
+   no row here at all, and a row whose tool answered {error} says failed
+   however confidently the reply was worded. */
+function actionSummary(e){
+  if(e.ended === null) return t('actHung');
+  if(!e.ok){
+    const why = e.result && e.result.error;
+    return t('actFailed') + (why ? ' \u2014 ' + String(why).slice(0, 80) : '');
+  }
+  return t('actDone') + (e.ms != null ? ' (' + (e.ms < 1000 ? e.ms + 'ms' : (e.ms / 1000).toFixed(1) + 's') + ')' : '');
+}
+
+function renderTasks(){
+  const list = document.getElementById('tasksList');
+  if(!list) return;
+  const head = document.getElementById('tasksHead');
+  if(head) head.textContent = t('tasksHead');
+  list.innerHTML = '';
+  if(!standingTasks.length){
+    list.innerHTML = '<div class="planEmpty">' + t('tasksEmpty') + '</div>';
+    return;
+  }
+  for(const task of standingTasks){
+    const row = document.createElement('div');
+    row.className = 'taskRow' + (task.lastRun && !task.lastOk ? ' failed' : '');
+
+    const kill = document.createElement('button');
+    kill.className = 'taskKill';
+    kill.textContent = '\u2715';
+    kill.title = t('taskCancel');
+    kill.addEventListener('click', async (ev)=>{
+      ev.stopPropagation();
+      await removeStandingTask(task.id);
+    });
+
+    const when = document.createElement('div');
+    when.className = 'taskWhen';
+    when.textContent = describeTask(task) +
+      (task.nextRun ? '  \u00b7  ' + t('taskNext') + ' ' + new Date(task.nextRun).toLocaleString() : '');
+
+    const goal = document.createElement('div');
+    goal.className = 'taskGoal';
+    goal.textContent = task.goal;
+
+    const last = document.createElement('div');
+    last.className = 'taskLast';
+    /* What happened last time, in plain words. A task that has been failing
+       every night for a week should say so here rather than looking healthy. */
+    last.textContent = !task.lastRun
+      ? t('taskNeverRan')
+      : (task.lastOk ? t('taskLastOk') : t('taskLastFailed')) + ' ' +
+        new Date(task.lastRun).toLocaleString() +
+        (task.lastNote ? ' \u2014 ' + task.lastNote.slice(0, 90) : '');
+
+    row.appendChild(kill);
+    row.appendChild(when);
+    row.appendChild(goal);
+    row.appendChild(last);
+    list.appendChild(row);
+  }
+}
+
+function renderActionLog(){
+  const list = document.getElementById('actionsList');
+  if(!list) return;
+  const note = document.getElementById('actionsNote');
+  if(note) note.textContent = t('actNote');
+  const clear = document.getElementById('actionsClearBtn');
+  if(clear) clear.textContent = t('actClear');
+
+  if(!actionLog.length){
+    list.innerHTML = '<div class="planEmpty">' + t('actEmpty') + '</div>';
+    return;
+  }
+  list.innerHTML = '';
+  /* Newest first: the question is almost always about the last thing. */
+  for(const e of actionLog.slice().reverse()){
+    const row = document.createElement('div');
+    row.className = 'actRow ' + (e.ended === null ? 'hung' : e.ok ? 'ok' : 'bad');
+
+    const head = document.createElement('div');
+    const when = document.createElement('span');
+    when.className = 'actWhen';
+    when.textContent = actionAge(e.started) + (e.origin && e.origin !== 'chat' ? ' \u00b7 ' + e.origin : '');
+    const name = document.createElement('span');
+    name.className = 'actName';
+    name.textContent = e.name;
+    head.appendChild(when);
+    head.appendChild(name);
+
+    const sum = document.createElement('div');
+    sum.className = 'actSum';
+    sum.textContent = actionSummary(e);
+
+    /* Everything needed to put it back by hand, which with approvals off is
+       the only way back. */
+    const detail = document.createElement('div');
+    detail.className = 'actDetail';
+    const parts = [];
+    parts.push(new Date(e.started).toLocaleString());
+    parts.push(t('actArgs') + '\n' + JSON.stringify(e.args, null, 2));
+    if(e.before !== null && e.before !== undefined){
+      parts.push(t('actBefore') + '\n' + JSON.stringify(e.before, null, 2));
+    }
+    if(e.ended !== null){
+      parts.push(t('actResult') + '\n' + JSON.stringify(e.result, null, 2));
+    }
+    detail.textContent = parts.join('\n\n');
+
+    row.appendChild(head);
+    row.appendChild(sum);
+    row.appendChild(detail);
+    row.addEventListener('click', ()=> row.classList.toggle('open'));
+    list.appendChild(row);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   STANDING TASKS — work that outlives the conversation
+
+   Everything he did until now died with the turn that asked for it. A task
+   here is a row on disk with a goal, a schedule and a memory of when it last
+   ran, so "every night at two, make me the advert" and "tell me the day
+   before anything in my calendar" are things he keeps doing rather than
+   things he did once.
+
+   They run in the app, by the user's choice, which has one consequence worth
+   being honest about: a task whose hour passes while the machine is off does
+   not run at that hour. It runs at the next launch instead — CATCHING UP
+   rather than silently skipping, because a reminder you never got is worse
+   than a late one. A task that missed many runs fires once, not once per
+   missed day; nobody wants eleven adverts because they were away for a week.
+
+   The schedule is deliberately not cron. Cron is a thing you get wrong at
+   2am; these are the four shapes that cover what he was actually asked for.
+--------------------------------------------------------------------- */
+const TASKS_KEY   = 'jarvis:tasks';
+const TASK_TICK_MS = 30000;        // how often the clock is consulted
+const TASK_MAX     = 40;
+let standingTasks = [];
+let tasksLoaded = false;
+let taskTimer = null;
+let taskRunning = false;
+
+async function loadTasks(){
+  if(tasksLoaded) return standingTasks;
+  tasksLoaded = true;
+  try{
+    const r = await Store.get(TASKS_KEY);
+    const parsed = JSON.parse(r.value);
+    if(Array.isArray(parsed)) standingTasks = parsed;
+  }catch(err){ standingTasks = []; }
+  return standingTasks;
+}
+
+function saveTasks(){
+  try{ Store.set(TASKS_KEY, JSON.stringify(standingTasks.slice(0, TASK_MAX))); }catch(err){}
+}
+
+/* The next moment a task is due, as a timestamp. Everything the scheduler
+   decides comes from this one function, so there is exactly one place where
+   "when" is worked out and exactly one place to get it wrong. */
+function nextDueAt(task, from){
+  const base = from || Date.now();
+  const d = new Date(base);
+
+  if(task.every === 'once'){
+    return task.at ? Date.parse(task.at) : null;
+  }
+
+  const [hh, mm] = String(task.time || '09:00').split(':').map(n => parseInt(n, 10) || 0);
+  const candidate = new Date(d);
+  candidate.setHours(hh, mm, 0, 0);
+
+  if(task.every === 'day'){
+    if(candidate.getTime() <= base) candidate.setDate(candidate.getDate() + 1);
+    return candidate.getTime();
+  }
+
+  if(task.every === 'week'){
+    const want = typeof task.weekday === 'number' ? task.weekday : 0;   // 0 = Sunday
+    let delta = (want - candidate.getDay() + 7) % 7;
+    if(delta === 0 && candidate.getTime() <= base) delta = 7;
+    candidate.setDate(candidate.getDate() + delta);
+    return candidate.getTime();
+  }
+
+  if(task.every === 'hour'){
+    const step = Math.max(1, task.hours || 1);
+    const next = new Date(base + step * 3600000);
+    return next.getTime();
+  }
+  return null;
+}
+
+function taskIsDue(task, now){
+  if(!task.enabled) return false;
+  if(task.every === 'once' && task.lastRun) return false;   // a one-off fires once, ever
+  const due = task.nextRun || nextDueAt(task, task.lastRun || task.created);
+  return due !== null && due <= (now || Date.now());
+}
+
+function describeTask(task){
+  if(task.every === 'once') return t('taskOnce') + ' ' + new Date(task.at).toLocaleString();
+  if(task.every === 'day')  return t('taskDaily').replace('{time}', task.time);
+  if(task.every === 'hour') return t('taskHourly').replace('{n}', String(task.hours || 1));
+  if(task.every === 'week'){
+    const days = t('taskWeekdays').split(',');
+    return t('taskWeekly').replace('{day}', days[task.weekday || 0] || '').replace('{time}', task.time);
+  }
+  return '';
+}
+
+async function addStandingTask(spec){
+  await loadTasks();
+  const task = {
+    id: 'task' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+    goal: String(spec.goal || '').slice(0, 600),
+    every: spec.every,
+    time: spec.time || null,
+    weekday: typeof spec.weekday === 'number' ? spec.weekday : null,
+    hours: spec.hours || null,
+    at: spec.at || null,
+    enabled: true,
+    created: Date.now(),
+    lastRun: null,
+    lastOk: null,
+    lastNote: null,
+    runs: 0
+  };
+  task.nextRun = nextDueAt(task, Date.now());
+  standingTasks.push(task);
+  if(standingTasks.length > TASK_MAX) standingTasks = standingTasks.slice(-TASK_MAX);
+  saveTasks();
+  renderTasks();
+  return task;
+}
+
+async function removeStandingTask(id){
+  await loadTasks();
+  const before = standingTasks.length;
+  standingTasks = standingTasks.filter(x => x.id !== id);
+  saveTasks();
+  renderTasks();
+  return standingTasks.length < before;
+}
+
+/* Running one. It goes through askJarvis like any other turn, so it has every
+   tool he has and every action it takes lands in the log attributed to the
+   schedule rather than to you. */
+async function runStandingTask(task){
+  task.lastRun = Date.now();
+  task.runs = (task.runs || 0) + 1;
+  task.nextRun = nextDueAt(task, Date.now());
+  saveTasks();
+
+  const late = task.missedBy ? t('taskLate').replace('{n}', String(task.missedBy)) : '';
+  const brief = (currentLang === 'he')
+    ? '[משימה קבועה שנקבעה מראש. ' + late + ' תעשה אותה עכשיו, בלי לשאול אישור, ותדווח במשפט אחד מה עשית בפועל. אם לא הצלחת — תגיד במפורש מה נכשל ולמה. המשימה:] '
+    : '[A standing task, set up in advance. ' + late + ' Do it now, without asking for approval, and report in one sentence what you actually did. If it did not work, say plainly what failed and why. The task:] ';
+
+  let said = '';
+  try{
+    said = await askJarvis(brief + task.goal, [], null, { origin: 'schedule', taskId: task.id });
+  }catch(err){
+    said = '';
+    task.lastOk = false;
+    task.lastNote = String((err && err.message) || err).slice(0, 200);
+  }
+  if(typeof said === 'string' && said.trim()){
+    task.lastOk = true;
+    task.lastNote = said.trim().slice(0, 200);
+    addMessage('system', t('taskRan').replace('{goal}', task.goal.slice(0, 50)));
+    addMessage('assistant', said.trim());
+    persistCurrentSession();
+    await speak(said.trim());
+  } else if(task.lastOk !== false){
+    task.lastOk = false;
+    task.lastNote = t('taskNothing');
+  }
+  task.missedBy = 0;
+  saveTasks();
+  renderTasks();
+}
+
+/* One at a time, and never on top of him. A task that fires while he is
+   mid-sentence or mid-answer waits for the next tick rather than talking
+   over the person it was set up for. */
+function tasksShouldHold(){
+  if(taskRunning || isThinking || isSpeaking) return true;
+  if(speechQueue && speechQueue.length) return true;
+  if(whisperActive && captureSawSpeech) return true;
+  if(typeof window.__orbAsleep === 'function' && window.__orbAsleep()) return true;
+  return false;
+}
+
+async function taskTick(){
+  await loadTasks();
+  if(!standingTasks.length) return;
+  if(tasksShouldHold()) return;
+  const now = Date.now();
+  const due = standingTasks.filter(x => taskIsDue(x, now));
+  if(!due.length) return;
+  /* The oldest overdue one first, so a backlog comes out in the order it was
+     meant to happen. */
+  due.sort((a, b) => (a.nextRun || 0) - (b.nextRun || 0));
+  taskRunning = true;
+  try{ await runStandingTask(due[0]); }
+  catch(err){ console.warn('JARVIS: task failed', err); }
+  finally{ taskRunning = false; }
+}
+
+/* What was missed while the machine was off. Worked out once at startup so
+   the catch-up is visible in the log and in the panel rather than happening
+   invisibly, and collapsed to a single run per task. */
+async function catchUpTasks(){
+  await loadTasks();
+  const now = Date.now();
+  let missed = 0;
+  for(const task of standingTasks){
+    if(!task.enabled) continue;
+    if(task.every === 'once'){
+      if(!task.lastRun && task.at && Date.parse(task.at) <= now) missed++;
+      continue;
+    }
+    const due = task.nextRun || nextDueAt(task, task.lastRun || task.created);
+    if(due && due <= now){
+      /* How many runs went by, purely so he can say "this is two days late"
+         rather than pretending it is on time. */
+      let n = 1;
+      if(task.every === 'day')  n = Math.max(1, Math.floor((now - due) / 86400000) + 1);
+      if(task.every === 'week') n = Math.max(1, Math.floor((now - due) / 604800000) + 1);
+      task.missedBy = n;
+      missed++;
+    }
+  }
+  if(missed){
+    saveTasks();
+    addMessage('system', t('taskCatchUp').replace('{n}', String(missed)));
+  }
+}
+
+function startTaskScheduler(){
+  if(taskTimer) clearInterval(taskTimer);
+  taskTimer = setInterval(()=>{ taskTick().catch(()=>{}); }, TASK_TICK_MS);
+}
+
+const ACTLOG_KEY  = 'jarvis:actions';
+const ACTLOG_MAX  = 400;          // entries kept; older ones fall off the end
+let actionLog = [];
+let actionLogLoaded = false;
+
+async function loadActionLog(){
+  if(actionLogLoaded) return actionLog;
+  actionLogLoaded = true;
+  try{
+    const r = await Store.get(ACTLOG_KEY);
+    const parsed = JSON.parse(r.value);
+    if(Array.isArray(parsed)) actionLog = parsed;
+  }catch(err){ actionLog = []; }
+  return actionLog;
+}
+
+let actionLogSaveTimer = null;
+function saveActionLog(){
+  /* Debounced: a single turn can run ten tools, and writing the whole log to
+     localStorage ten times in two seconds is wasted work on the main thread. */
+  clearTimeout(actionLogSaveTimer);
+  actionLogSaveTimer = setTimeout(()=>{
+    try{ Store.set(ACTLOG_KEY, JSON.stringify(actionLog.slice(-ACTLOG_MAX))); }catch(err){}
+  }, 400);
+}
+
+/* Arguments are kept whole, because a truncated argument is useless for
+   undoing anything — except for the two fields that are megabytes of base64
+   and tell you nothing. */
+function logSafeArgs(input){
+  if(!input || typeof input !== 'object') return input;
+  const out = {};
+  for(const k of Object.keys(input)){
+    const v = input[k];
+    if(typeof v === 'string' && v.length > 1200){
+      out[k] = v.slice(0, 1200) + '\u2026 (' + v.length + ' chars)';
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function logSafeResult(payload){
+  if(payload === undefined || payload === null) return null;
+  if(typeof payload !== 'object') return payload;
+  const out = {};
+  for(const k of Object.keys(payload)){
+    if(k === 'image'){ out.image = '(image returned)'; continue; }
+    const v = payload[k];
+    if(typeof v === 'string' && v.length > 600){
+      out[k] = v.slice(0, 600) + '\u2026';
+    } else if(v && typeof v === 'object'){
+      try{
+        const s = JSON.stringify(v);
+        out[k] = s.length > 900 ? JSON.parse(JSON.stringify(v)) && (s.slice(0, 900) + '\u2026') : v;
+      }catch(err){ out[k] = '(unserialisable)'; }
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/* Opened when the call starts rather than when it finishes, so a tool that
+   hangs or throws still leaves a trace. An entry with no `ended` is a call
+   that never came back, which is itself the answer to a question you would
+   otherwise have no way to ask. */
+function logActionStart(name, input, origin){
+  const entry = {
+    id: 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: name,
+    args: logSafeArgs(input),
+    origin: origin || 'chat',      // chat, schedule, eye — who asked for it
+    started: Date.now(),
+    ended: null,
+    ok: null,
+    result: null,
+    before: null,
+    ms: null
+  };
+  actionLog.push(entry);
+  if(actionLog.length > ACTLOG_MAX) actionLog = actionLog.slice(-ACTLOG_MAX);
+  saveActionLog();
+  renderActionLog();
+  return entry;
+}
+
+function logActionEnd(entry, payload){
+  if(!entry) return;
+  entry.ended = Date.now();
+  entry.ms = entry.ended - entry.started;
+  /* A tool that answers {error: ...} did not do the thing, whatever the model
+     goes on to say about it. That distinction is the whole point of this. */
+  entry.ok = !(payload && payload.error);
+  entry.result = logSafeResult(payload);
+  saveActionLog();
+  renderActionLog();
+}
+
+/* Recorded separately from the result because it is what you would need to
+   put something back. Only set where the previous state could actually be
+   read before the change — never invented. */
+function logActionBefore(entry, before){
+  if(!entry) return;
+  entry.before = logSafeResult(before);
+  saveActionLog();
+}
+
 const livePane = document.getElementById('livePane');
 const liveFeed = document.getElementById('liveFeed');
 const liveBtn  = document.getElementById('liveBtn');
@@ -7911,7 +8556,7 @@ async function eyeLook(){
   const gen = ++eyeGen;
   let said = '';
   try{
-    said = await askJarvis(ask, [frame], null, { eyePrompt: true });
+    said = await askJarvis(ask, [frame], null, { eyePrompt: true, origin: 'eye' });
   }catch(err){
     said = '';
   }
@@ -8541,6 +9186,7 @@ function modelFileName(prompt){
 
 function addModelBubble(source, prompt){
   const glbUrl = typeof source === 'string' ? source : (source && source.glb);
+  if(glbUrl) lastModelUrl = glbUrl;
   const wrap = document.createElement('div');
   wrap.className = 'msg assistant modelMsg';
   const label = document.createElement('div');
@@ -8552,6 +9198,17 @@ function addModelBubble(source, prompt){
   hint.className = 'modelHint';
   hint.textContent = t('modelHint');
   wrap.appendChild(label); wrap.appendChild(stage); wrap.appendChild(hint);
+
+  /* One click to send it to a window of its own. Only on the desktop, and
+     only for a model that exists as a file \u2014 one built in code has nothing
+     to hand to a second window until it has been exported. */
+  if(IS_DESKTOP && glbUrl){
+    const pop = document.createElement('button');
+    pop.className = 'modelPop';
+    pop.textContent = t('modelPopOut');
+    pop.addEventListener('click', ()=> openModelWindow(glbUrl));
+    wrap.appendChild(pop);
+  }
 
   /* Both kinds of model are downloadable now. A generated one already had a
      file sitting on the service, so that stays a plain link. One built in
@@ -8637,6 +9294,71 @@ async function callBuild3dTool(input){
            note:'The model is displayed in the chat and the user can rotate it. Describe it briefly; do not repeat the code.' };
 }
 
+/* Sending a model to its own window. The chat bubble is fine for a glance,
+   but a mesh you are judging wants room and an edge to drag — so on the
+   desktop it can be handed to a real window that sits beside the work it is
+   about. The last one is remembered so "put it in its own window" works
+   without being told which model. */
+let lastModelUrl = null;
+
+async function openModelWindow(url){
+  const glb = url || lastModelUrl;
+  if(!glb) return { error: 'no model to show yet' };
+  if(!IS_DESKTOP) return { error: 'a separate window is only possible in the desktop app' };
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { error: 'the desktop bridge is unavailable' };
+  try{
+    const how = await invoke('open_model_window', { url: glb });
+    addMessage('system', t('modelWindowOpen'));
+    return { ok: true, reused: how === 'reused',
+             note: 'It is open in its own window now, which he can move and resize. Confirm in a few words.' };
+  }catch(err){
+    return { error: String((err && err.message) || err) };
+  }
+}
+
+const MODEL_WINDOW_TOOL = {
+  name: 'show_model_in_window',
+  description: "Put the most recent 3D model into its OWN window \u2014 a real, resizable window that sits beside whatever he is working in, rather than in the chat. Use it when he says something like \"open it in a window\", \"\u05ea\u05e4\u05ea\u05d7 \u05d1\u05d7\u05dc\u05d5\u05df \u05e0\u05e4\u05e8\u05d3\", \"make it bigger\", or \"I want to look at it properly\". It reuses the same window if one is already open, so it is safe to call again.",
+  input_schema: { type:'object', properties: {}, required: [] }
+};
+
+const PHOTO3D_TOOL = {
+  name: 'photo_to_3d',
+  description: "Turn a PHOTOGRAPH into a real 3D model. Not a description of one \u2014 the actual picture, so the model comes back with the object's own shape and its own colours rather than an invented lookalike.\n\nUse it whenever he wants a model OF SOMETHING HE HAS: a product he has photographed, something he is holding up to the camera, an object in a screenshot. \"\u05ea\u05e2\u05e9\u05d4 \u05de\u05d6\u05d4 \u05de\u05d5\u05d3\u05dc\", \"turn this into 3D\", \"model this\".\n\nWhere the picture comes from, in this order: source 'attached' is the last picture he sent, source 'camera' takes a fresh frame from the live view (switch it on first with open_camera if it is off). If neither exists, say so rather than falling back to generate_3d_model behind his back \u2014 a model of an imagined object is not what he asked for.\n\nOne pass, roughly a minute, and it costs a credit. For an object that exists only in words, use generate_3d_model instead.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      source: { type:'string', enum:['attached','camera'],
+                description:"'attached' for the last picture he sent, 'camera' for a fresh frame from the live view." }
+    },
+    required: ['source']
+  }
+};
+
+async function callPhoto3dTool(input){
+  if(!backendUrl) return { error:'3D generation needs your backend to be connected' };
+  const source = (input && input.source) === 'camera' ? 'camera' : 'attached';
+
+  let dataUrl = null;
+  if(source === 'camera'){
+    if(!liveActive()) return { error:'the camera is not on \u2014 call open_camera first, then try again' };
+    const frame = grabLiveFrame();
+    if(!frame || !frame.dataUrl) return { error:'could not take a frame from the camera' };
+    dataUrl = frame.dataUrl;
+  } else {
+    /* lastAttachedImage is set by askJarvis for every picture that comes in,
+       which is exactly "the last one he sent" \u2014 including one taken with the
+       camera button. */
+    if(!lastAttachedImage || !lastAttachedImage.data){
+      return { error:'no picture to work from \u2014 ask him to send one, or use source "camera" with the live view on' };
+    }
+    dataUrl = lastAttachedImage.dataUrl ||
+              ('data:' + (lastAttachedImage.media_type || 'image/jpeg') + ';base64,' + lastAttachedImage.data);
+  }
+  return await runModel3dJob({ image: dataUrl }, t('photo3dWorking'), 'photo');
+}
+
 const MODEL3D_TOOL = {
   name: 'generate_3d_model',
   description: "Generate a photorealistic 3D model through an external service. It runs in two passes — first the mesh, then a texture pass that paints on the colour, metalness and roughness — so it COSTS CREDITS FOR BOTH and takes roughly two minutes. Use build_3d_model instead unless the user has explicitly asked for high quality, photorealism, or a real mesh they can download — or unless the subject is organic (a face, an animal, a plant) which cannot be built from primitives.\n\nThe texture pass works from the same prompt, so name the MATERIALS and the COLOURS, not just the shape: \"a matte black anodised aluminium water bottle with a brushed steel screw cap and a thin copper band at the base\" gives it something to paint, where \"a bottle\" gives it nothing and comes back grey. Say the finish (matte, gloss, brushed, anodised, frosted, woven), the material, and the colour, for each distinct part.\n\nIf the texture pass fails the bare mesh is shown instead and the result says textured:false — when that happens, say so plainly and do not describe colours the model does not have. Do not use it for logos, flat images, scenes or people; it makes single objects.",
@@ -8653,16 +9375,24 @@ async function callModel3dTool(input){
   const prompt = (input && input.prompt || '').trim();
   if(!prompt) return { error:'no prompt given' };
   if(!backendUrl) return { error:'3D generation needs your backend to be connected' };
+  return await runModel3dJob({ prompt }, t('modelWorking'), prompt);
+}
 
+/* One polling loop for both ways of asking for a model. A photograph is a
+   single pass and a sentence is two, but the page's job is identical either
+   way: follow the task id it is handed, keep hold of any bare mesh, and show
+   whatever finally arrives. The worker says which kind it is; the page just
+   passes that back on every poll, because the worker keeps no state. */
+async function runModel3dJob(body, firstLabel, caption){
   try{
     const startRes = await fetch(backendUrl + '/model3d', {
-      method:'POST', headers: jarvisHeaders(), body: JSON.stringify({ prompt })
+      method:'POST', headers: jarvisHeaders(), body: JSON.stringify(body)
     });
     if(startRes.status === 401){ await forceReauth(); return { error:'session expired' }; }
     const started = await startRes.json();
     if(!startRes.ok || !started.taskId) return { error: started.error || 'could not start the 3D job' };
 
-    const note = addMessage('system', t('modelWorking'));
+    const note = addMessage('system', firstLabel);
 
     /* Two jobs run back to back now — the mesh, then the texture pass over it
        — and the worker says which one is being polled. The page's only job is
@@ -8672,6 +9402,7 @@ async function callModel3dTool(input){
        first poll with no stage at all, and that path still works untouched. */
     let taskId = started.taskId;
     let stage = started.stage === 'refine' ? 'refine' : 'preview';
+    const kind = started.kind === 'image' ? 'image' : 'text';
     let previewGlb = null;
 
     // Mesh plus texture pass: roughly two minutes in the normal case.
@@ -8680,7 +9411,7 @@ async function callModel3dTool(input){
       if(userInterrupted){ note.remove(); return { error:'cancelled' }; }
       await new Promise(r => setTimeout(r, 4000));
       const pollRes = await fetch(backendUrl + '/model3d/status?id=' + encodeURIComponent(taskId)
-                                  + '&stage=' + stage + '&refine=1', {
+                                  + '&stage=' + stage + '&refine=1&kind=' + kind, {
         headers: jarvisHeaders()
       });
       if(pollRes.status === 401){ note.remove(); await forceReauth(); return { error:'session expired' }; }
@@ -8696,7 +9427,8 @@ async function callModel3dTool(input){
         continue;
       }
 
-      const label = stage === 'refine' ? t('modelTexturing') : t('modelWorking');
+      const label = kind === 'image' ? firstLabel
+                  : stage === 'refine' ? t('modelTexturing') : t('modelWorking');
       if(typeof st.progress === 'number' && st.progress > 0){
         note.textContent = label + ' ' + st.progress + '%';
       } else {
@@ -8705,7 +9437,7 @@ async function callModel3dTool(input){
 
       if(st.status === 'SUCCEEDED' && st.glb){
         note.remove();
-        addModelBubble(st.glb, prompt);
+        addModelBubble(st.glb, caption);
         if(st.textured === false && st.note) addMessage('system', t('modelUntextured'));
         return { ok:true, shown:true, textured: st.textured !== false,
                  note: st.textured === false
@@ -8717,7 +9449,7 @@ async function callModel3dTool(input){
         /* The mesh was already generated and paid for. Losing it because the
            paint job failed would be the worst of both. */
         if(previewGlb){
-          addModelBubble(previewGlb, prompt);
+          addModelBubble(previewGlb, caption);
           addMessage('system', t('modelUntextured'));
           return { ok:true, shown:true, textured:false,
                    note:'The shape generated but texturing failed, so what is shown is the untextured mesh. Say that plainly rather than describing colours it does not have.' };
@@ -8727,7 +9459,7 @@ async function callModel3dTool(input){
     }
     note.remove();
     if(previewGlb){
-      addModelBubble(previewGlb, prompt);
+      addModelBubble(previewGlb, caption);
       addMessage('system', t('modelUntextured'));
       return { ok:true, shown:true, textured:false,
                note:'Texturing timed out, so what is shown is the untextured mesh. Say that plainly.' };
@@ -9089,6 +9821,89 @@ async function callReadPageTool(input){
   }
 }
 
+const TASK_TOOL = {
+  name: 'remember_to_do',
+  description: "Set up a STANDING TASK \u2014 something to do on a schedule, again and again, without being asked each time. This is not a note and not a memory: it actually runs, with every tool you have, at the time given.\n\nUse it whenever he says something should happen repeatedly or at a future time: \"every night at two make me an advert\", \"remind me the day before anything in my calendar\", \"check the store every morning\", \"\u05db\u05dc \u05d9\u05d5\u05dd \u05d1\u05e9\u05de\u05d5\u05e0\u05d4 \u05ea\u05d1\u05d3\u05d5\u05e7 \u05d4\u05d6\u05de\u05e0\u05d5\u05ea\", \"\u05ea\u05d6\u05db\u05d9\u05e8 \u05dc\u05d9 \u05de\u05d7\u05e8 \u05d1\u05e2\u05e9\u05e8\".\n\nWrite the goal as an instruction to yourself, in full, as if nobody were there to explain it \u2014 it runs with none of this conversation around it. \"Generate an advert image for the ALIGNO Pro store in the usual style and save it\" is a goal; \"do that thing\" is not.\n\nIt runs on his machine, so it needs the app to be open. If the hour passes while the machine is off it runs at the next launch instead, once, and says it is late. Tell him that plainly when the time is in the middle of the night.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      goal: { type:'string', description:'The full instruction to carry out, written to stand on its own.' },
+      every: { type:'string', enum:['once','hour','day','week'],
+               description:'once = a single future moment. hour = every N hours. day = daily at a time. week = weekly on a weekday at a time.' },
+      time: { type:'string', description:'HH:MM in 24-hour form, for day and week. e.g. "02:00".' },
+      weekday: { type:'number', description:'For week: 0 Sunday through 6 Saturday.' },
+      hours: { type:'number', description:'For hour: how many hours between runs.' },
+      at: { type:'string', description:'For once: an ISO datetime, e.g. 2026-09-20T10:00:00.' }
+    },
+    required: ['goal','every']
+  }
+};
+
+const TASK_LIST_TOOL = {
+  name: 'list_standing_tasks',
+  description: "List the standing tasks that are set up, with when each one last ran and what happened. Use it when he asks what you are doing on a schedule, what is set up, or why something did or did not happen.",
+  input_schema: { type:'object', properties: {}, required: [] }
+};
+
+const TASK_CANCEL_TOOL = {
+  name: 'cancel_standing_task',
+  description: "Stop a standing task. Pass the id from list_standing_tasks. If he describes it in words rather than giving an id, call list_standing_tasks first and match it yourself \u2014 do not guess an id.",
+  input_schema: {
+    type: 'object',
+    properties: { id: { type:'string', description:'The task id to cancel.' } },
+    required: ['id']
+  }
+};
+
+async function callTaskTool(input){
+  if(!input || !input.goal || !input.every) return { error: 'a goal and a schedule are both required' };
+  if((input.every === 'day' || input.every === 'week') && !/^\d{1,2}:\d{2}$/.test(String(input.time || ''))){
+    return { error: 'a time like "02:00" is required for a daily or weekly task' };
+  }
+  if(input.every === 'once' && (!input.at || isNaN(Date.parse(input.at)))){
+    return { error: 'a valid ISO datetime is required for a one-off task' };
+  }
+  try{
+    const task = await addStandingTask(input);
+    addMessage('system', t('taskAdded').replace('{what}', describeTask(task)));
+    return {
+      ok: true,
+      id: task.id,
+      runs: describeTask(task),
+      next: task.nextRun ? new Date(task.nextRun).toLocaleString() : null,
+      note: 'It is saved and will run on its own. It needs the app to be open at that hour; if the machine is off it runs at the next launch and says it is late. Confirm in one short line, including when it will next run.'
+    };
+  }catch(err){ return { error: String((err && err.message) || err) }; }
+}
+
+async function callTaskListTool(){
+  await loadTasks();
+  if(!standingTasks.length) return { ok: true, tasks: [], note: 'Nothing is set up yet.' };
+  return {
+    ok: true,
+    tasks: standingTasks.map(x => ({
+      id: x.id,
+      goal: x.goal,
+      runs: describeTask(x),
+      enabled: x.enabled,
+      next: x.nextRun ? new Date(x.nextRun).toLocaleString() : null,
+      lastRun: x.lastRun ? new Date(x.lastRun).toLocaleString() : null,
+      lastResult: x.lastRun ? (x.lastOk ? 'worked' : 'FAILED') : 'has not run yet',
+      lastNote: x.lastNote || null,
+      timesRun: x.runs || 0
+    }))
+  };
+}
+
+async function callTaskCancelTool(input){
+  const id = input && input.id;
+  if(!id) return { error: 'an id is required \u2014 call list_standing_tasks to find it' };
+  const gone = await removeStandingTask(id);
+  if(!gone) return { error: 'no task with that id' };
+  addMessage('system', t('taskRemoved'));
+  return { ok: true, cancelled: id };
+}
+
 const CAMERA_TOOL = {
   name: 'open_camera',
   description: "Turn on the webcam. A small panel opens on his screen showing the live feed — he sees himself, and from that moment you are watching continuously: a fresh frame reaches YOU with every message he sends, AND when something new comes into view you are asked about it unprompted, so you can react to whatever he holds up without him having to ask. It is a live view, not a single photo.\n\nUse it for any phrasing in either language: \"open my camera\", \"turn on the camera\", \"can you see me\", \"look at this\", \"watch this\", \"תפתח את המצלמה\", \"תדליק מצלמה\", \"אתה רואה אותי\", \"תסתכל על זה\", \"תראה מה יש לי\". Do not ask permission — he asked.\n\nOnce it is on, do NOT call this again to look again: you already receive every frame. Just answer. Call it with close:true when he asks to turn the camera off.\n\nDescribe what is actually in the picture. If the frame is dark or empty, say so rather than inventing something."
@@ -9153,8 +9968,8 @@ function buildShopifyTool(){
   const storeList = names.length ? names.join(', ') : 'his configured Shopify store';
 
   const description = single
-    ? `Run a read-only GraphQL query against the user's Shopify store ("${single}") via the Admin API, to look up real store data — products, inventory, orders, customers, collections, shop info, analytics, etc. Pass a complete, valid Shopify Admin GraphQL query string (queries only — mutations are rejected). Use this whenever the user asks about actual store data rather than hypothetical planning. Examples:\n- Shop name: { shop { name currencyCode } }\n- Recent products: { products(first: 10, sortKey: CREATED_AT, reverse: true) { edges { node { id title status totalInventory } } } }\n- Recent orders: { orders(first: 10, sortKey: CREATED_AT, reverse: true) { edges { node { id name displayFulfillmentStatus totalPriceSet { shopMoney { amount currencyCode } } } } } }`
-    : `Run a read-only GraphQL query against one of the user's Shopify stores via the Admin API. He has more than one store connected: ${storeList}. ALWAYS pass store_name naming which one — if he did not say which store he means and it is not obvious from context, ask him rather than guessing. When he asks a broad question like "how are my stores doing", call this once per store in ${storeList} and combine the results, rather than answering for only one. Pass a complete, valid Shopify Admin GraphQL query string (queries only — mutations are rejected). Examples:\n- Shop name: { shop { name currencyCode } }\n- Recent products: { products(first: 10, sortKey: CREATED_AT, reverse: true) { edges { node { id title status totalInventory } } } }\n- Recent orders: { orders(first: 10, sortKey: CREATED_AT, reverse: true) { edges { node { id name displayFulfillmentStatus totalPriceSet { shopMoney { amount currencyCode } } } } } }`;
+    ? `Run a read-only GraphQL query against the user's Shopify store ("${single}") via the Admin API, to look up real store data — products, inventory, orders, customers, collections, shop info, analytics, etc. Pass a complete, valid Shopify Admin GraphQL query string (queries AND mutations — you can change the store, not only read it). Writes go through with no approval step in front of them, so a productUpdate really does change the price and a productDelete really does delete. Every call is recorded in his action log with the document, its variables and the previous state where it could be read, which is what makes a change reversible by hand. Be correspondingly careful: name the exact id, change only the field he asked about, and never widen a request into a bulk operation he did not ask for. When you are not certain what you are about to overwrite, read it first. Use this whenever the user asks about actual store data rather than hypothetical planning. Examples:\n- Shop name: { shop { name currencyCode } }\n- Recent products: { products(first: 10, sortKey: CREATED_AT, reverse: true) { edges { node { id title status totalInventory } } } }\n- Recent orders: { orders(first: 10, sortKey: CREATED_AT, reverse: true) { edges { node { id name displayFulfillmentStatus totalPriceSet { shopMoney { amount currencyCode } } } } } }`
+    : `Run a read-only GraphQL query against one of the user's Shopify stores via the Admin API. He has more than one store connected: ${storeList}. ALWAYS pass store_name naming which one — if he did not say which store he means and it is not obvious from context, ask him rather than guessing. When he asks a broad question like "how are my stores doing", call this once per store in ${storeList} and combine the results, rather than answering for only one. Pass a complete, valid Shopify Admin GraphQL query string (queries AND mutations — you can change the store, not only read it). Writes go through with no approval step in front of them, so a productUpdate really does change the price and a productDelete really does delete. Every call is recorded in his action log with the document, its variables and the previous state where it could be read, which is what makes a change reversible by hand. Be correspondingly careful: name the exact id, change only the field he asked about, and never widen a request into a bulk operation he did not ask for. When you are not certain what you are about to overwrite, read it first. Examples:\n- Shop name: { shop { name currencyCode } }\n- Recent products: { products(first: 10, sortKey: CREATED_AT, reverse: true) { edges { node { id title status totalInventory } } } }\n- Recent orders: { orders(first: 10, sortKey: CREATED_AT, reverse: true) { edges { node { id name displayFulfillmentStatus totalPriceSet { shopMoney { amount currencyCode } } } } } }`;
 
   return {
     name: 'shopify_admin_query',
@@ -9174,13 +9989,70 @@ function buildShopifyTool(){
   };
 }
 
-async function callShopifyTool(input){
+/* Whether this document changes the store. Read the same way the worker
+   reads it \u2014 comments and strings stripped first, because both can carry
+   the word harmlessly and both can hide one \u2014 so the two can never
+   disagree about what counts as a write. */
+function shopifyIsWrite(query){
+  const stripped = String(query || '')
+    .replace(/"""[\s\S]*?"""/g, ' ')
+    .replace(/"(?:\\.|[^"\\])*"/g, ' ')
+    .replace(/#[^\n]*/g, ' ');
+  return /\bmutation\b/i.test(stripped);
+}
+
+/* What the thing looked like before he changed it. Best effort, never
+   blocking: with no approval step in front of writes the log is the only way
+   back, and a log that records what a price WAS is the difference between
+   "undo this" and "work out what it used to be". If the read fails, or the
+   id is not something that can be read generically, nothing is recorded
+   rather than something invented. */
+async function shopifyReadBefore(input){
+  const vars = (input && input.variables) || {};
+  const hunt = (obj, depth) => {
+    if(!obj || typeof obj !== 'object' || depth > 3) return null;
+    for(const k of Object.keys(obj)){
+      const v = obj[k];
+      if(typeof v === 'string' && /^gid:\/\/shopify\//.test(v)) return v;
+      if(v && typeof v === 'object'){ const found = hunt(v, depth + 1); if(found) return found; }
+    }
+    return null;
+  };
+  const id = hunt(vars, 0);
+  if(!id) return null;
+  try{
+    const res = await fetch(backendUrl + '/shopify/query', {
+      method:'POST',
+      headers: jarvisHeaders(),
+      body: JSON.stringify({
+        store_name: (input && input.store_name) || '',
+        query: 'query($id:ID!){ node(id:$id){ id __typename ' +
+               '... on Product { title status totalInventory } ' +
+               '... on ProductVariant { title price sku inventoryQuantity } } }',
+        variables: { id: id }
+      })
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    const node = data && data.data && data.data.node;
+    return node || null;
+  }catch(err){ return null; }
+}
+
+async function callShopifyTool(input, logEntry){
+  const write = shopifyIsWrite(input && input.query);
+  /* Read the old state first, while it is still the old state. */
+  if(write && logEntry){
+    const before = await shopifyReadBefore(input);
+    if(before) logActionBefore(logEntry, before);
+  }
   try{
     const res = await fetch(backendUrl + '/shopify/query', {
       method:'POST',
       headers: jarvisHeaders(),
       body: JSON.stringify({ query: (input && input.query) || '', variables: (input && input.variables) || {},
-                              store_name: (input && input.store_name) || '' })
+                              store_name: (input && input.store_name) || '',
+                              allow_writes: write })
     });
     if(res.status === 401){ await forceReauth(); return { error:'session expired' }; }
     const data = await res.json();
@@ -9383,7 +10255,8 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     requestBody.tools = fullCapability()
       ? [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL, MAKE_ZIP_TOOL, BUILD3D_TOOL]
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
-    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL);
+    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL,
+                                          TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL);
   } else {
     /* The mode boundary is enforced HERE, by which tools exist, rather than by
        asking the model to hold back. A prompt instruction is something it can
@@ -9400,8 +10273,10 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     /* Desktop only, and not gated behind ULTRON: opening a link is an everyday
        errand, not heavy work. In the browser the capability does not exist at
        all, so offering it there would only invite a promise it cannot keep. */
-    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL);
-    const advancedTools = [BUILD3D_TOOL, MODEL3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
+    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL,
+                                      TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL);
+    const advancedTools = [BUILD3D_TOOL, MODEL3D_TOOL, PHOTO3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
+    if(IS_DESKTOP) advancedTools.push(MODEL_WINDOW_TOOL);
     requestBody.tools = fullCapability()
       ? everydayTools.concat(advancedTools)
       : everydayTools;
@@ -9650,6 +10525,9 @@ function trimStaleFrames(messages){
    there is rejected — and is stripped again in trimStaleFrames. */
 async function askJarvis(userText, images, onText, tag){
   userInterrupted = false;
+  /* Set for the whole turn, so every tool the loop runs is attributed to
+     whoever started it rather than all of them reading "chat". */
+  toolOrigin = (tag && tag.origin) || 'chat';
   if(images && images.length){
     // Keep the newest photo around: it is what "put MY product in a scene" needs.
     const photo = images.filter(a => a.kind !== 'pdf' && a.kind !== 'text' && a.kind !== 'video').slice(-1)[0];
@@ -9724,6 +10602,10 @@ async function askJarvis(userText, images, onText, tag){
         const toolResults = [];
         for(const tu of toolUseBlocks){
           setToolStatus(toolStatusLabel(tu, loopGuard));
+          /* Opened here, before the dispatch below, so that a tool which
+             throws or never returns still leaves a record of having been
+             asked for. */
+          const logEntry = logActionStart(tu.name, tu.input, toolOrigin);
           let payload;
           /* Belt and braces. The advanced tools are not offered in Normal Mode,
              but a call for one can still arrive — from earlier in the transcript,
@@ -9732,7 +10614,7 @@ async function askJarvis(userText, images, onText, tag){
              reach the provider intact. The refusal text is written for the model:
              it says what to tell the user, so the turn ends in a clean handoff
              instead of an apology about a tool error. */
-          const ADVANCED_ONLY = ['build_3d_model','generate_3d_model','generate_image','make_zip'];
+          const ADVANCED_ONLY = ['build_3d_model','generate_3d_model','photo_to_3d','generate_image','make_zip','show_model_in_window'];
           if(!fullCapability() && ADVANCED_ONLY.indexOf(tu.name) >= 0){
             payload = {
               error: 'not available in Normal Mode',
@@ -9749,8 +10631,12 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callBuild3dTool(tu.input);
           } else if(tu.name === 'generate_3d_model'){
             payload = await callModel3dTool(tu.input);
+          } else if(tu.name === 'photo_to_3d'){
+            payload = await callPhoto3dTool(tu.input);
+          } else if(tu.name === 'show_model_in_window'){
+            payload = await openModelWindow(null);
           } else if(tu.name === 'shopify_admin_query'){
-            payload = await callShopifyTool(tu.input);
+            payload = await callShopifyTool(tu.input, logEntry);
           } else if(tu.name === 'remember'){
             payload = await callRememberTool(tu.input);
           } else if(tu.name === 'show_html'){
@@ -9759,6 +10645,12 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callRunCodeTool(tu.input);
           } else if(tu.name === 'generate_image'){
             payload = await callGenerateImageTool(tu.input);
+          } else if(tu.name === 'remember_to_do'){
+            payload = await callTaskTool(tu.input);
+          } else if(tu.name === 'list_standing_tasks'){
+            payload = await callTaskListTool();
+          } else if(tu.name === 'cancel_standing_task'){
+            payload = await callTaskCancelTool(tu.input);
           } else if(tu.name === 'open_camera'){
             /* tu.input, not nothing. callCameraTool reads input.close to switch
                the camera OFF, and this was the one call in the chain that threw
@@ -9790,6 +10682,7 @@ async function askJarvis(userText, images, onText, tag){
              process that request" with no idea which part broke. Surfacing the
              reason here means a misconfigured key or a dead endpoint names
              itself instead of hiding behind a generic apology. */
+          logActionEnd(logEntry, payload);
           if(payload && payload.error && payload.error !== 'cancelled'){
             addMessage('system', 'DEBUG (' + tu.name + '): ' + payload.error);
           }

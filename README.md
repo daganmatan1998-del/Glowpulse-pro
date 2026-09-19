@@ -467,3 +467,54 @@ in the same turn is forbidden outright. The detector gained bare past
 participles in both languages — with a Hebrew word boundary written as
 `(?![֐-׿])`, because `\b` is defined on ASCII and never matches after
 a Hebrew letter, so a pattern written with it silently never fires.
+
+## From assistant to agent
+
+Four things he could not do before: keep a record of what he did, do anything
+without being asked, turn a photograph into an object, or change the store.
+
+**The action log** is the foundation and the reason the rest is safe. Every
+tool call is recorded before it runs and completed after it returns, with its
+arguments, its result and how long it took, kept on disk because the question
+it answers is usually asked after a restart. Three states are told apart at a
+glance: it worked, it failed, or it started and never came back — that last one
+used to be invisible. It reads the RESULT, never the reply, which is what makes
+it the answer to the bug we spent a week on: a turn that said "Opened." and
+called nothing leaves no row at all, and an empty log under a confident
+confirmation is the evidence that the confirmation was false.
+
+**Standing tasks** are work that outlives the conversation: a row on disk with
+a goal, a schedule and a memory of when it last ran. "Every night at two, make
+the advert." "Tell me the day before anything in my calendar." They run in the
+app, which has one honest consequence: an hour that passes while the machine is
+off does not fire at that hour — it fires at the next launch instead, once,
+saying it is late. A week away produces one advert, not seven. They never speak
+over him, they go through the ordinary tool loop so they have everything he has,
+and every action they take is logged as coming from the schedule rather than
+from you.
+
+**A photograph into a model.** Meshy's image endpoint is a different version, a
+different URL and a single pass — the picture already carries the colour, so
+there is no preview-then-paint chain — and which kind a task is has to travel
+in the query string, because the worker keeps no state and cannot look a task
+id up later to find out. It takes the last picture he sent or a fresh frame off
+the live camera, and it refuses to fall back to inventing an object when there
+is no picture, because a model of an imagined thing is not what was asked for.
+
+**A window of its own** for looking at one properly: a real window, framed,
+resizable, deliberately not pinned above everything, that can sit beside the
+work it is about. It loads `model.html` rather than the app's own page —
+index.html starts a microphone, a scheduler and a hologram the moment it loads,
+and opening a second copy of all that to look at a mesh would run the whole
+assistant twice. Asked again, the existing window is reused. Its X really
+closes it; only the orb refuses to close, because its conversation lives in the
+page.
+
+**And writes are open**, at the owner's explicit choice, with no approval step.
+The read-only guard did not disappear, it became a declaration: a caller that
+means to change something has to say so, so that a document merely mentioning
+the word cannot become a write by accident and a read path cannot be widened
+into a write path by a prompt that talked its way into the query field. What
+replaces the gate is the record — and for a write, the previous state is read
+first, while it is still the previous state, so the log says what a price WAS.
+That is the difference between "undo this" and "work out what it used to be".

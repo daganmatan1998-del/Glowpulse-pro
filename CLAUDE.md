@@ -75,6 +75,15 @@ Playwright cannot call `liveActive()`, `grabLiveFrame()` or `applyLanguage()` �
 drive the DOM instead (click the real buttons, read `srcObject`, read classes),
 or slice the function out by string index and run it in a harness.
 
+`tauri.conf.json` being valid JSON proves nothing — validate it against Tauri's
+own schema, which ships inside the CLI package: `npm pack @tauri-apps/cli@2`,
+then `package/config.schema.json`. `bundle.macOS.infoPlist` is a *path to* a
+plist, so an inline object there is good JSON that fails the build on every
+platform. Reason strings go in `src-tauri/Info.plist`, which Tauri picks up on
+its own. And never let PowerShell write the file: `Set-Content -Encoding UTF8`
+adds a BOM in 5.1, and serde rejects a BOM as "expected value at line 1
+column 1".
+
 Serve `dist/` over http for anything touching storage — `localStorage` throws on
 `file://`. The auth gate can be set aside with
 `document.getElementById('authGate').style.display='none'`; everything behind it

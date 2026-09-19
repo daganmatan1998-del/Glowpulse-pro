@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS asks for a reason string before it will hand an app the camera or the
+  microphone, and refuses silently without one.
+
+  This lives as its own file rather than inside tauri.conf.json because the
+  config's `bundle.macOS.infoPlist` key is a PATH to a plist, not a plist —
+  an inline object there fails validation and takes the Windows build down
+  with it, which is exactly what happened. Tauri merges this file
+  automatically when it finds it beside tauri.conf.json, and ignores it
+  entirely on Windows.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSCameraUsageDescription</key>
+  <string>JARVIS looks at what you show him through the camera, and only while you have it switched on.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>JARVIS listens for his name so you can talk to him instead of typing.</string>
+</dict>
+</plist>

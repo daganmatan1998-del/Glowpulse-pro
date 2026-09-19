@@ -63,6 +63,12 @@ The page's CSS can be checked in the pre-installed Chromium via Playwright
 `document.documentElement.className`. Wait out any transition before reading
 `getComputedStyle`, or you read the value at the start of the animation.
 
+The page's whole script lives inside `(function(){ "use strict"; ... })()`, so
+nothing is on `window` except the handful of explicit `window.__orb*` hooks.
+Playwright cannot call `liveActive()`, `grabLiveFrame()` or `applyLanguage()` —
+drive the DOM instead (click the real buttons, read `srcObject`, read classes),
+or slice the function out by string index and run it in a harness.
+
 Serve `dist/` over http for anything touching storage — `localStorage` throws on
 `file://`. The auth gate can be set aside with
 `document.getElementById('authGate').style.display='none'`; everything behind it

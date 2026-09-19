@@ -423,3 +423,47 @@ actual setting: on Windows, Settings → Privacy & security → Camera, where "L
 desktop apps access your camera" blocks every app of this kind in one switch.
 macOS additionally requires a reason string, so `NSCameraUsageDescription` and
 `NSMicrophoneUsageDescription` are now in the bundle config.
+
+## Hearing a third of what was said, and doing none of it
+
+Three faults, compounding, and two of them were introduced by the fix before
+this one.
+
+**The echo guard was eating the commands.** It asked whether most of the words
+that came back had appeared anywhere in his last four hundred characters. In a
+real conversation that is true of almost everything you say, because you answer
+someone using the words they just used. Measured against the running code, it
+threw away "turn on the camera" immediately after he said "the camera is on
+now" — which is exactly the report that he used to be able to open the camera
+and no longer could. It also matched on substrings, so `open` was found inside
+`opened`; and it treated every utterance under four characters as an echo,
+silently deleting כן, לא and ok.
+
+An echo is not a paraphrase. It is his own sentence recorded through the
+speaker, so it comes back as a contiguous run of his words in his order. The
+test is now exactly that: whole words, and a verbatim run of four of them (or
+the entire utterance, when it is shorter). The short-utterance rule is gone.
+
+**And every turn was marked suspect before it began.** `captureSawSpeech` was
+seeded with `Date.now() - lastSpokeEndedAt < 1500`, while conversation mode
+reopens the microphone 400ms after he finishes — so the flag was true at the
+start of every single conversational turn, and every turn was then at the mercy
+of the test above. The window is now 250ms, shorter than any restart that
+follows speech. There is a check in the suite that fails if it ever grows past
+one again.
+
+**He was told to say "Opened."** The desktop brevity rule offered it as an
+example of a complete answer, which taught him to confirm without calling
+anything. Worse, `claimsAnAction` — the corrective pass that exists to catch
+precisely this — missed it: the English pattern requires an "I" before the verb
+and the gerund pattern only knows `-ing` forms, so `Opened.` `Closed.` `Saved.`
+and `Sent.` all went through unchecked. The one phrasing the prompt taught him
+was the one phrasing the safety net could not see.
+
+The rule now separates the two questions it had conflated: brevity governs how
+much he SAYS and never whether he ACTS, a command is named as a thing to do
+with the tool named for it, and writing *opened* without a tool call having run
+in the same turn is forbidden outright. The detector gained bare past
+participles in both languages — with a Hebrew word boundary written as
+`(?![֐-׿])`, because `\b` is defined on ASCII and never matches after
+a Hebrew letter, so a pattern written with it silently never fires.

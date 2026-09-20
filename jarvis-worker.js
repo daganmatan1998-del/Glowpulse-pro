@@ -1588,6 +1588,57 @@ const WHISPER_MODELS = [
   '@cf/openai/whisper'                    // original, last resort
 ];
 
+/* What Whisper says when it has nothing to say.
+ 
+   Given silence, a fragment, or audio in a language it has been told not to
+   expect, Whisper does not fail and does not return empty \u2014 it emits the
+   phrase it saw most often in training. The list is small, famous, and almost
+   entirely drawn from the end of YouTube videos, which is what the training
+   data was.
+ 
+   Filtered only for SHORT audio: if he genuinely says "thanks" in a long
+   sentence it survives, and a short standalone "thank you" is not a command,
+   so dropping it costs nothing and mis-hearing it costs a whole turn. */
+const WHISPER_NOISE = [
+  'thank you', 'thanks', 'thank you very much', 'thank you so much',
+  'thanks for watching', 'thank you for watching', 'thanks for watching!',
+  'please subscribe', 'subscribe', 'like and subscribe', 'see you next time',
+  'bye', 'bye bye', 'goodbye', 'you', 'the', 'so', 'okay', 'ok', 'uh', 'um',
+  'music', 'applause', 'silence', 'blank_audio', 'inaudible', 'foreign',
+  '\u05ea\u05d5\u05d3\u05d4', '\u05ea\u05d5\u05d3\u05d4 \u05e8\u05d1\u05d4', '\u05ea\u05d5\u05d3\u05d4 \u05e9\u05e6\u05e4\u05d9\u05ea\u05dd',
+  '\u05dc\u05d4\u05ea\u05e8\u05d0\u05d5\u05ea', '\u05e9\u05dc\u05d5\u05dd', '\u05db\u05df',
+  'amara.org', 'subtitles by the amara.org community', 'www.amara.org'
+];
+
+/* Roughly a second and a half of opus. Under this, a result matching the list
+   above is far more likely to be the noise than the words. */
+const WHISPER_SHORT_BYTES = 14000;
+
+function whisperBare(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[\[\]()*_~♪♩·]/g, ' ')
+    .replace(/[.,!?;:…׳״'"-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/* The list, put through the same normaliser as the transcript.
+
+   Written by hand it could not have worked: "amara.org" and "blank_audio"
+   both lose their punctuation on the way in, so the entries as typed were
+   unreachable and [BLANK_AUDIO] sailed straight through as a command.
+   Normalising both sides is the only version of this that stays correct
+   when someone adds a phrase with an apostrophe in it. */
+const WHISPER_NOISE_SET = WHISPER_NOISE.map(whisperBare);
+
+function isWhisperHallucination(text, byteLength) {
+  const bare = whisperBare(text);
+  if (!bare) return true;
+  if (byteLength >= WHISPER_SHORT_BYTES) return false;   // long enough to be real speech
+  return WHISPER_NOISE_SET.indexOf(bare) >= 0;
+}
+
 async function handleStt(request, env) {
   if (!env.AI) {
     return json({ error: 'Workers AI is not bound: add the AI binding in the dashboard' }, 503, env, request);
@@ -1607,41 +1658,60 @@ async function handleStt(request, env) {
   }
   b64 = btoa(b64);
 
-  /* A language hint, when the caller supplies one. Nothing was sent before,
-     so Whisper guessed from a few seconds of audio — and language detection
-     on a short utterance is unreliable. Guessing English on Hebrew speech
-     produces confident nonsense, which is the failure being reported.
-
-     A hint, not a lock: Whisper still transcribes English words inside a
-     Hebrew sentence, which matters because that is how this user actually
-     speaks. */
+  /* THE LANGUAGE, AND WHY IT IS NO LONGER A LOCK.
+ 
+     Every transcription used to arrive carrying ?language=he, because that is
+     what the interface was set to. Say "open youtube" in English into a
+     Hebrew-locked Whisper and it does not return empty and it does not return
+     English — it returns, with complete confidence, its single most common
+     training phrase. Usually "Thank you." So the assistant was answering
+     "you're welcome" to a request to open YouTube, and the fallbacks below
+     never ran, because a hallucination is not an empty string.
+ 
+     This user speaks both languages and mixes them inside one sentence; his
+     own prompt says so. Locking either one is wrong for him by construction.
+ 
+     So: detect first, and keep the hint only as a second opinion for when
+     detection comes back with nothing usable. */
   const url = new URL(request.url);
   const hint = url.searchParams.get('language');
   const lang = (hint === 'he' || hint === 'en') ? hint : null;
   const withLang = (input) => lang ? { ...input, language: lang } : input;
 
   const attempts = [
-    { model: WHISPER_MODELS[0], input: withLang({ audio: b64 }) },
-    { model: WHISPER_MODELS[1], input: withLang({ audio: b64 }) },
-    { model: WHISPER_MODELS[2], input: withLang({ audio: [...bytes] }) },
-    { model: WHISPER_MODELS[1], input: { audio: [...bytes] } }   // last resort: no hint
+    { model: WHISPER_MODELS[0], input: { audio: b64 } },                 // detect
+    { model: WHISPER_MODELS[1], input: { audio: b64 } },                 // detect, faster model
+    { model: WHISPER_MODELS[0], input: withLang({ audio: b64 }) },       // second opinion
+    { model: WHISPER_MODELS[2], input: { audio: [...bytes] } },
+    { model: WHISPER_MODELS[1], input: withLang({ audio: [...bytes] }) }
   ];
 
   const tried = [];
+  let firstDropped = null;
   for (const attempt of attempts) {
     try {
       const out = await env.AI.run(attempt.model, attempt.input);
-      const text = (out && (out.text || out.transcription || '')) || '';
-      if (text.trim()) {
-        return json({ ok: true, text: text.trim(), model: attempt.model }, 200, env, request);
+      const text = ((out && (out.text || out.transcription || '')) || '').trim();
+      if (!text) { tried.push(attempt.model + ': empty result'); continue; }
+      if (isWhisperHallucination(text, bytes.length)) {
+        /* Not a transcript \u2014 the noise Whisper makes when it has nothing.
+           Treated as silence so the next model gets a turn, and reported, so
+           this never becomes invisible again. */
+        if (!firstDropped) firstDropped = text;
+        tried.push(attempt.model + ': hallucination (' + text.slice(0, 40) + ')');
+        continue;
       }
-      tried.push(attempt.model + ': empty result');
+      return json({
+        ok: true, text: text, model: attempt.model,
+        detected: out && out.language ? out.language : null,
+        dropped: firstDropped
+      }, 200, env, request);
     } catch (err) {
       tried.push(attempt.model + ': ' + String((err && err.message) || err).slice(0, 140));
     }
   }
   // Silence is a legitimate outcome, not a failure — the caller just ignores it.
-  return json({ ok: true, text: '', tried: tried }, 200, env, request);
+  return json({ ok: true, text: '', tried: tried, dropped: firstDropped }, 200, env, request);
 }
 
 /* Searching, without needing Anthropic.

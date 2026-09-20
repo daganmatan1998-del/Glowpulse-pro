@@ -1630,6 +1630,7 @@ const I18N = {
     permissionHint: 'Grant once and the browser remembers it for this site, so he stops asking. On iPhone, add the page to your Home Screen first - Safari forgets permissions for ordinary tabs every session.',
     micDenied: 'Microphone permission was refused. Allow it from the padlock icon in the address bar, then try again.',
     sttFailed: 'Could not transcribe: {why}',
+    sttOldWorker: 'Your Cloudflare worker is the old one, which forces Whisper into one language and is why requests come back as "Thank you". Run: wrangler deploy',
     captureReset: 'The microphone had stopped responding. Reopened it.',
     doingItForReal: '▸ actually doing it…',
     stalledReleased: 'That request never came back. Listening again.',
@@ -1849,6 +1850,7 @@ const I18N = {
     permissionHint: 'תאשר פעם אחת והדפדפן יזכור לאתר הזה, כך שהוא יפסיק לשאול. באייפון - תוסיף קודם את הדף למסך הבית, כי ספארי שוכח הרשאות של לשונית רגילה בכל פעם מחדש.',
     micDenied: 'ההרשאה למיקרופון נדחתה. תאשר דרך אייקון המנעול בשורת הכתובת ותנסה שוב.',
     sttFailed: 'לא הצלחתי לתמלל: {why}',
+    sttOldWorker: 'ה-worker ב-Cloudflare הוא הישן — הוא כופה על Whisper שפה אחת, וזו הסיבה שבקשות חוזרות כמו "Thank you". הרץ: wrangler deploy',
     captureReset: 'המיקרופון הפסיק להגיב. פתחתי אותו מחדש.',
     doingItForReal: '▸ מבצע בפועל…',
     stalledReleased: 'הבקשה הזו לא חזרה. מקשיב שוב.',
@@ -5104,7 +5106,15 @@ async function startWhisperCapture(){
       hushProbeAt = now;
       hushProbes++;
       hushProbeBusy = true;
-      const probe = new Blob(chunks.slice(-6), { type: chunks[0] ? chunks[0].type : 'audio/webm' });
+      /* From the START of the recording, not the last few chunks. A webm
+         stream's EBML header lives in chunk 0 and nowhere else, so a slice
+         off the tail is a headerless fragment that no decoder can open.
+         Whisper, handed something it cannot decode, does not error — it
+         returns its commonest training phrase. This probe was therefore a
+         steady source of invented sentences, and it ran up to eight times
+         per reply. The speculative pass a few lines below always sliced from
+         the start; this one should have too. */
+      const probe = new Blob(chunks.slice(), { type: chunks[0] ? chunks[0].type : 'audio/webm' });
       if(probe.size > 1200){
         transcribeOnly(probe)
           .then(heard => { if(heard) hushIfNamed(heard); })
@@ -5556,6 +5566,57 @@ async function restoreLangMode(){
 function conversationIsOpen(){ return Date.now() - lastWakeAt < WAKE_WINDOW_MS; }
 function closeConversation(){ lastWakeAt = 0; }
 
+/* WHAT WHISPER SAYS WHEN IT HAS NOTHING TO SAY.
+
+   Handed silence, a clipped fragment, or speech in a language it was told
+   not to expect, Whisper does not fail and does not return an empty string.
+   It returns the phrase it saw most often in training — nearly always
+   something from the end of a YouTube video. "Thank you." "Thanks for
+   watching." In Hebrew, "תודה".
+
+   That is the whole of the oldest bug in this project. Say "open youtube"
+   and get back "Thank you", and he answers the thanks. The request is never
+   seen, by anything, at any layer.
+
+   The worker drops these too, which is the real fix. This copy exists
+   because the worker has to be deployed and the page does not: until
+   `wrangler deploy` runs, this is the only thing standing between a
+   hallucination and an answer to it.
+
+   Filtered only for SHORT audio. A genuine "thanks" inside a sentence is
+   longer than this and survives; a standalone one-word "thank you" is not a
+   command, so dropping it costs nothing. */
+const STT_NOISE = [
+  'thank you', 'thanks', 'thank you very much', 'thank you so much',
+  'thanks for watching', 'thank you for watching',
+  'please subscribe', 'subscribe', 'like and subscribe', 'see you next time',
+  'bye', 'bye bye', 'goodbye', 'you', 'the', 'so', 'uh', 'um',
+  'music', 'applause', 'silence', 'blank_audio', 'inaudible', 'foreign',
+  '\u05ea\u05d5\u05d3\u05d4', '\u05ea\u05d5\u05d3\u05d4 \u05e8\u05d1\u05d4', '\u05ea\u05d5\u05d3\u05d4 \u05e9\u05e6\u05e4\u05d9\u05ea\u05dd',
+  '\u05dc\u05d4\u05ea\u05e8\u05d0\u05d5\u05ea',
+  'amara.org', 'subtitles by the amara.org community', 'www.amara.org'
+];
+/* Roughly a second and a half of opus. */
+const STT_SHORT_BYTES = 14000;
+let warnedOldWorker = false;   // said once a session, not once a sentence
+function sttBare(text){
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[\[\]()*_~♪♩·]/g, ' ')
+    .replace(/[.,!?;:…׳״'\"-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+/* Normalised on both sides. Typed as written, "amara.org" and "blank_audio"
+   could never match a transcript that has just had its punctuation stripped. */
+const STT_NOISE_SET = STT_NOISE.map(sttBare);
+function sttIsNoise(text, byteLength){
+  const bare = sttBare(text);
+  if(!bare) return true;
+  if(!(byteLength < STT_SHORT_BYTES)) return false;   // long enough to be real speech
+  return STT_NOISE_SET.indexOf(bare) >= 0;
+}
+
 /* Just the transcription, with none of the deciding. Split out so the
    speculative pass can call it without triggering a send, and so both paths
    go through identical request handling. */
@@ -5568,7 +5629,13 @@ async function transcribeOnly(blob){
   });
   if(!res.ok) throw new Error('stt ' + res.status);
   const data = await res.json().catch(()=> ({}));
-  return (data.text || '').trim();
+  const heard = (data.text || '').trim();
+  if(data.dropped) console.info('JARVIS: worker dropped a hallucination —', data.dropped);
+  if(sttIsNoise(heard, blob && blob.size ? blob.size : 0)){
+    console.info('JARVIS: ignored Whisper noise —', heard);
+    return '';
+  }
+  return heard;
 }
 
 async function transcribeAndSend(blob, sawSpeech){
@@ -5641,7 +5708,24 @@ async function transcribeAndSend(blob, sawSpeech){
       return;
     }
     sttFailures = 0;                       // a clean round clears the count
-    return handleTranscript((data.text || '').trim(), sawSpeech);
+    /* The fix for the oldest bug in this project lives in the worker, and a
+       worker has to be deployed. Every new response carries a `dropped` key,
+       even when it is null; the old one has no such key. So this is a exact
+       test for "you are still running the version that forces Hebrew onto
+       English audio", said once, rather than leaving him quietly broken. */
+    if(!warnedOldWorker && !('dropped' in data)){
+      warnedOldWorker = true;
+      console.warn('JARVIS: this worker predates the STT language fix — run wrangler deploy');
+      addMessage('system', t('sttOldWorker'));
+    }
+    const heard = (data.text || '').trim();
+    if(data.dropped) console.info('JARVIS: worker dropped a hallucination —', data.dropped);
+    if(sttIsNoise(heard, blob && blob.size ? blob.size : 0)){
+      console.info('JARVIS: ignored Whisper noise —', heard);
+      if(conversationMode && !isThinking) setTimeout(startListening, 250);
+      return;
+    }
+    return handleTranscript(heard, sawSpeech);
   }catch(err){
     addMessage('system', t('sttFailed').replace('{why}', (err && err.message) || String(err)));
     if(conversationMode && !isThinking) setTimeout(startListening, 600);

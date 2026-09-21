@@ -10697,6 +10697,28 @@ async function setLiveFullScreen(on){
   return { ok: true, live_full_screen: true };
 }
 
+/* LEAVING, ONE LAYER AT A TIME.
+
+   There are two full screens now \u2014 his camera filling the display, and
+   this interface filling it \u2014 and "exit full screen" was collapsing both
+   in one go. Said while his camera is blown up, it should put the camera
+   back and leave him in the environment he was working in; said again, it
+   should leave the environment. Two states, two steps, and the same
+   sentence gets you all the way out if you say it twice.
+
+   setFullScreen(false) still clears both, because leaving the window's
+   full screen with a full-screen camera still marked would strand a black
+   rectangle. That is the floor under this, not a competing rule. */
+async function exitFullScreenLayer(){
+  const root = document.documentElement;
+  if(root.classList.contains('live-full')){
+    root.classList.remove('live-full');
+    return { ok: true, left: 'camera', full_screen: true, live_full_screen: false };
+  }
+  const res = await setFullScreen(false);
+  return res.ok ? Object.assign({}, res, { left: 'interface' }) : res;
+}
+
 async function setFullScreen(on){
   const want = !!on;
   /* Coming out of full screen takes the full-screen camera with it. The
@@ -10737,7 +10759,7 @@ async function setFullScreen(on){
 
 const FULLSCREEN_TOOL = {
   name: 'set_full_screen',
-  description: "Put JARVIS into his full-screen environment, or bring him back out of it. Use it whenever he asks, in either language: \"go full screen\", \"jarvis full screen\", \"מסך מלא\", \"תעבור למסך מלא\" — and with on=false for \"exit full screen\", \"צא ממסך מלא\". Answer in one short line; there is nothing to explain.",
+  description: "Put JARVIS into his full-screen environment, or bring him back out of it. Use it whenever he asks, in either language: \"go full screen\", \"jarvis full screen\", \"מסך מלא\", \"תעבור למסך מלא\" — and with on=false for \"exit full screen\", \"צא ממסך מלא\". Leaving unwinds ONE layer: if his camera is filling the screen it goes back to its panel and the interface stays full screen, and only a second call leaves the interface. The result says which in `left`, so say which one actually happened. Answer in one short line; there is nothing to explain.",
   input_schema: {
     type: 'object',
     properties: { on: { type:'boolean', description:'true to enter full screen, false to leave it. Defaults to true.' } },
@@ -10766,8 +10788,10 @@ async function callLiveFullTool(input){
 
 async function callFullScreenTool(input){
   const on = !(input && input.on === false);
-  const res = await setFullScreen(on);
-  if(res.ok) addMessage('system', '▸ ' + (on ? 'full screen' : 'back to the orb'));
+  const res = on ? await setFullScreen(true) : await exitFullScreenLayer();
+  if(res.ok) addMessage('system', '▸ ' + (on ? 'full screen'
+                        : res.left === 'camera' ? 'camera back, still full screen'
+                        : 'back to the orb'));
   return res.ok
     ? Object.assign({}, res, { note: 'Say one short line. Do not describe the interface.' })
     : res;
@@ -10807,7 +10831,11 @@ async function runWorkflowCommand(flow, text){
 
   if(flow === 'fullscreen' || flow === 'fullscreen_exit'){
     const on = flow === 'fullscreen';
-    const res = await setFullScreen(on);
+    const res = on ? await setFullScreen(true) : await exitFullScreenLayer();
+    if(res.ok && res.left === 'camera'){
+      say(he ? '\u05d4\u05d7\u05d6\u05e8\u05ea\u05d9 \u05d0\u05d5\u05ea\u05da. \u05e2\u05d3\u05d9\u05d9\u05df \u05d1\u05de\u05e1\u05da \u05de\u05dc\u05d0.' : 'Camera back. Still full screen.');
+      return true;
+    }
     if(res.error){
       say(he ? ('לא הצלחתי לעבור למסך מלא: ' + res.error)
              : ('I could not switch to full screen: ' + res.error));
@@ -12032,6 +12060,34 @@ async function askJarvis(userText, images, onText, tag){
   }catch(err){
     clearToolStatus();
     if(err.name === 'AbortError' || userInterrupted){
+      /* THE TURN WAS CUT OFF, AND THE HISTORY HAS TO SAY SO.
+
+         The user's request went into chatHistory at the top of this
+         function; the assistant's reply is pushed at the end, which this
+         return never reaches. So an interrupted turn left a request
+         sitting in the record with nothing under it \u2014 and the next time
+         the model read the conversation it saw an instruction it had
+         apparently accepted and never answered, and tidied that up by
+         saying it had done it. Nothing had run. Nothing could have: the
+         request was abandoned before any tool was reached.
+
+         This is why it came back after sleep. Going to sleep calls
+         stopJarvis(), which aborts whatever was in flight \u2014 so every
+         sleep during a turn planted one of these, and "jarvis wake up"
+         was simply the next time the model got to read it.
+
+         A line saying it did not happen is worth more than deleting the
+         request: the record stays true, and the model is told plainly
+         that the action was not performed rather than being left to
+         infer it. */
+      const last = chatHistory[chatHistory.length - 1];
+      if(last && last.role === 'user'){
+        const note = currentLang === 'he'
+          ? '\u05e0\u05e7\u05d8\u05e2\u05ea\u05d9 \u05dc\u05e4\u05e0\u05d9 \u05e9\u05d4\u05e1\u05e4\u05e7\u05ea\u05d9 \u05dc\u05e2\u05e9\u05d5\u05ea \u05d0\u05ea \u05d6\u05d4 \u2014 \u05d4\u05e4\u05e2\u05d5\u05dc\u05d4 \u05dc\u05d0 \u05d1\u05d5\u05e6\u05e2\u05d4.'
+          : 'Interrupted before I could act on that \u2014 it did not happen.';
+        chatHistory.push({ role:'assistant', content: note });
+        persistCurrentSession();
+      }
       return null; // user hit Stop — no error to show, no reply to speak
     }
     /* The technical detail still goes on screen where it can be read and

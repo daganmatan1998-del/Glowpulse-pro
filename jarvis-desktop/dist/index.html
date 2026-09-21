@@ -1847,6 +1847,7 @@ const I18N = {
     micDenied: 'Microphone permission was refused. Allow it from the padlock icon in the address bar, then try again.',
     sttFailed: 'Could not transcribe: {why}',
     seeing: 'Looking at: {what}',
+    cameraDescribed: 'Note: no engine on your worker takes pictures directly, so anything you show him is described by a vision model first and he answers from the description. Fine detail — small print, exact shades — may not survive that. Set ANTHROPIC_API_KEY, or point the chain at a model that sees, for him to look at it himself.',
     cameraBlind: 'The camera is on, but no engine connected to your worker can see pictures — the worker strips them out on the way, so what you hold up will not reach him. Fix it on Cloudflare: set ANTHROPIC_API_KEY, or point the chain at a model that can see (Gemini, GPT-4o, Grok, Llama 4), or add that model to VISION_ENGINES.',
     sttOldWorker: 'Your Cloudflare worker is the old one, which forces Whisper into one language and is why requests come back as "Thank you". Run: wrangler deploy',
     captureReset: 'The microphone had stopped responding. Reopened it.',
@@ -2069,6 +2070,7 @@ const I18N = {
     micDenied: 'ההרשאה למיקרופון נדחתה. תאשר דרך אייקון המנעול בשורת הכתובת ותנסה שוב.',
     sttFailed: 'לא הצלחתי לתמלל: {why}',
     seeing: 'מסתכל על: {what}',
+    cameraDescribed: 'שים לב: אף מנוע ב-worker שלך לא מקבל תמונות ישירות, אז כל מה שתראה לו עובר קודם תיאור על ידי מודל ראייה, והוא עונה מהתיאור. פרטים עדינים — אותיות קטנות, גוונים מדויקים — עלולים לא לשרוד. להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה, כדי שיסתכל בעצמו.',
     cameraBlind: 'המצלמה פתוחה, אבל אף מנוע שמחובר ל-worker שלך לא יכול לראות תמונות — ה-worker מסנן אותן בדרך, ומה שתרים לא יגיע אליו. לתקן ב-Cloudflare: להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה (Gemini, GPT-4o, Grok, Llama 4), או להוסיף אותו ל-VISION_ENGINES.',
     sttOldWorker: 'ה-worker ב-Cloudflare הוא הישן — הוא כופה על Whisper שפה אחת, וזו הסיבה שבקשות חוזרות כמו "Thank you". הרץ: wrangler deploy',
     captureReset: 'המיקרופון הפסיק להגיב. פתחתי אותו מחדש.',
@@ -8726,6 +8728,16 @@ async function startLive(){
 let warnedNothingSees = false;
 function warnIfNothingCanSee(){
   if(warnedNothingSees) return;
+  /* He CAN see, but through a describer rather than with his own eyes: no
+     engine in the chain takes pictures, so a vision model writes down what
+     is in them first. Worth saying once, because it is the difference
+     between "he missed the small print" being a bug and being the expected
+     limit of a description. */
+  if(backendCapabilities && backendCapabilities.vision_via === 'described'){
+    warnedNothingSees = true;
+    addMessage('system', t('cameraDescribed'));
+    return;
+  }
   /* Only when the worker has ANSWERED and said no. An older worker does
      not carry the field at all, and silence there must not be read as a
      refusal — saying "he cannot see" to someone whose engine can is worse
@@ -9132,26 +9144,54 @@ function setEye(on){
 --------------------------------------------------------------------- */
 const LIVE_POS_KEY = 'jarvis:livepos';
 
-function clampPane(x, y){
+/* How far the pane can travel in the window it is in right now. */
+const PANE_EDGE = 8;
+function paneTravel(){
   const r = livePane.getBoundingClientRect();
   const w = r.width  || 168;
   const h = r.height || 160;
-  /* A margin, not zero. Flush against the edge it looks like a rendering
-     fault, and on the desktop the window edge is where the resize handles
-     live. */
   return {
-    x: Math.max(8, Math.min(x, window.innerWidth  - w - 8)),
-    y: Math.max(8, Math.min(y, window.innerHeight - h - 8))
+    w: w, h: h,
+    maxX: Math.max(0, window.innerWidth  - w - PANE_EDGE * 2),
+    maxY: Math.max(0, window.innerHeight - h - PANE_EDGE * 2)
   };
 }
 
+function clampPane(x, y){
+  /* A margin, not zero. Flush against the edge it looks like a rendering
+     fault, and on the desktop the window edge is where the resize handles
+     live. */
+  const t = paneTravel();
+  return {
+    x: Math.max(PANE_EDGE, Math.min(x, PANE_EDGE + t.maxX)),
+    y: Math.max(PANE_EDGE, Math.min(y, PANE_EDGE + t.maxY))
+  };
+}
+
+/* STORED AS A FRACTION OF THE ROOM AVAILABLE, NOT AS PIXELS.
+
+   Pixels were the snapping-back bug, and it was not one bug but every one
+   he listed. The position is written as left/top in pixels and clamped to
+   the window — and the window is 180px square as an orb and the whole
+   display in full screen. A position chosen in one is meaningless in the
+   other, so entering full screen, leaving it, or simply reopening the
+   camera clamped a saved position into the top-left corner. From the
+   outside that is "it jumped back on its own".
+
+   A fraction survives all of it: the same corner of the same screen on a
+   laptop and on a 4K monitor, in full screen and out of it. */
 function placePane(x, y, remember){
   const at = clampPane(x, y);
   livePane.classList.add('placed');
   livePane.style.left = at.x + 'px';
   livePane.style.top  = at.y + 'px';
   if(remember){
-    try{ localStorage.setItem(LIVE_POS_KEY, JSON.stringify(at)); }catch(err){}
+    const t = paneTravel();
+    const spot = {
+      fx: t.maxX ? (at.x - PANE_EDGE) / t.maxX : 0,
+      fy: t.maxY ? (at.y - PANE_EDGE) / t.maxY : 0
+    };
+    try{ localStorage.setItem(LIVE_POS_KEY, JSON.stringify(spot)); }catch(err){}
   }
   return at;
 }
@@ -9165,14 +9205,40 @@ function resetPanePlace(){
 function restorePanePlace(){
   let saved = null;
   try{ saved = JSON.parse(localStorage.getItem(LIVE_POS_KEY) || 'null'); }catch(err){}
-  if(!saved || typeof saved.x !== 'number' || typeof saved.y !== 'number') return;
+  if(!saved) return;
   /* Measured, not assumed: the pane has no size until it is displayed, and
      clamping against a zero box would put it in the top-left corner. */
   const wasOpen = livePane.classList.contains('open');
   if(!wasOpen){ livePane.style.visibility = 'hidden'; livePane.classList.add('open'); }
-  placePane(saved.x, saved.y, false);
+  const t = paneTravel();
+  let x = null, y = null;
+  if(typeof saved.fx === 'number' && typeof saved.fy === 'number'){
+    x = PANE_EDGE + saved.fx * t.maxX;
+    y = PANE_EDGE + saved.fy * t.maxY;
+  } else if(typeof saved.x === 'number' && typeof saved.y === 'number'){
+    /* Written by a version that stored pixels. Honoured once, and the next
+       drag rewrites it as a fraction. */
+    x = saved.x; y = saved.y;
+  }
+  if(x !== null) placePane(x, y, false);
   if(!wasOpen){ livePane.classList.remove('open'); livePane.style.visibility = ''; }
 }
+
+/* THE WINDOW CHANGED SHAPE. PUT IT BACK WHERE HE PUT IT.
+
+   Going full screen, coming out of it, moving to another monitor, opening
+   the camera — every one of these changes innerWidth, and a pane holding a
+   pixel position it was given in a different window is exactly what looked
+   like it moving on its own. Re-placed proportionally instead, so it stays
+   in the corner he chose rather than the coordinates he chose.
+
+   Debounced, because a full-screen transition fires a burst of these. */
+let paneResizeTimer = null;
+window.addEventListener('resize', ()=>{
+  if(!livePane || !livePane.classList.contains('placed')) return;
+  clearTimeout(paneResizeTimer);
+  paneResizeTimer = setTimeout(()=>{ try{ restorePanePlace(); }catch(err){} }, 120);
+});
 
 (function makePaneDraggable(){
   const grip = livePane;
@@ -9225,12 +9291,17 @@ document.addEventListener('jarvis:languagechange', ()=>{
 });
 
 /* A window that shrank, or a phone that rotated, can leave it off-screen
-   entirely — and a pane you cannot reach is a pane you cannot move back. */
-window.addEventListener('resize', ()=>{
-  if(!livePane.classList.contains('placed')) return;
-  const r = livePane.getBoundingClientRect();
-  placePane(r.left, r.top, true);
-});
+   entirely — and a pane you cannot reach is a pane you cannot move back.
+   That is handled by the debounced listener beside restorePanePlace, which
+   puts it back at the FRACTION he chose.
+
+   What used to be here instead was the snap-back itself, and it is worth
+   naming: on every resize it read wherever the pane currently was and
+   saved that as his preference. So a full-screen transition clamped the
+   pane into the corner of a window it no longer belonged to, and then
+   wrote the corner down as the position he had chosen. His actual choice
+   was destroyed by the act of changing window size, permanently, and no
+   amount of dragging it back survived the next transition. */
 
 restorePanePlace();
 
@@ -10146,7 +10217,25 @@ const FLOW_RULES = [
       /\u05ea\u05d2\u05d3\u05d9\u05dc \u05d0\u05d5\u05ea\u05d9/
     ], bare: [] },
 
-  { flow: 'fullscreen_exit', strong: [
+  { flow: 'fullscreen_exit',
+    /* Only when there is a full screen to leave. */
+    needs: (st) => st.fullScreen,
+    contextual: [
+      /\bgo\s+back\b/,
+      /\bback\s+to\s+(normal|the\s+(normal|usual|small))\b/,
+      /\b(take|put|get)\s+me\s+back\b/,
+      /\bminimi[sz]e\b/,
+      /\bshrink\s+back\b/,
+      /\bnormal\s+(view|screen|mode|size)\b/,
+      /\bsmall\s+again\b/,
+      /(\u05ea\u05d7\u05d6\u05d5\u05e8|\u05d7\u05d6\u05d5\u05e8)[\s\S]{0,16}(\u05e8\u05d2\u05d9\u05dc|\u05dc\u05de\u05e1\u05da|\u05d0\u05d7\u05d5\u05e8\u05d4|\u05dc\u05e7\u05d8\u05df|\u05dc\u05de\u05e6\u05d1)/,
+      /\u05dc\u05de\u05e1\u05da \u05d4\u05e8\u05d2\u05d9\u05dc/,
+      /\u05dc\u05de\u05e6\u05d1 \u05d4\u05e8\u05d2\u05d9\u05dc/,
+      /^\u05d7\u05d6\u05e8\u05d4$/,
+      /^\u05d0\u05d7\u05d5\u05e8\u05d4$/,
+      /\u05ea\u05de\u05d6\u05e2\u05e8/
+    ],
+    strong: [
       /\b(exit|leave|quit|close|out\s+of|get\s+out\s+of)\b[\s\S]{0,12}\bfull[\s-]?screen\b/,
       /\bfull[\s-]?screen\b[\s\S]{0,8}\b(off|down)\b/,
       /(צא|תצא|לצאת|סגור|תסגור|תבטל)[\s\S]{0,12}ה?מסך ה?מלא/,
@@ -10194,13 +10283,33 @@ const FLOW_RULES = [
     ], bare: [] }
 ];
 
+/* WHAT IS ON SCREEN RIGHT NOW.
+
+   "Go back" is not a command. It is a command ONLY when there is
+   somewhere to go back from — and then it is unmistakable. Same for
+   "minimise", "תחזור לרגיל", "back to normal": short, natural, and far
+   too vague to match on their own. Read against the state of the screen
+   they stop being vague, which is the difference between matching strings
+   and reading intent.
+
+   Passed in by the tests, read off the document in the app. */
+function flowState(state){
+  if(state) return state;
+  const cls = (typeof document !== 'undefined' && document.documentElement.className) || '';
+  return {
+    fullScreen: /\borb-expanded\b/.test(cls),
+    liveFull:   /\blive-full\b/.test(cls)
+  };
+}
+
 /* Hebrew or not. What decides the reply, rather than the interface setting:
    he switches languages inside a conversation and the setting does not. */
 function flowLang(text){ return /[֐-׿]/.test(String(text || '')) ? 'he' : 'en'; }
 
 /* Which of the three, if any. Returns null for everything else, which is
    almost everything — this runs on every message he sends. */
-function detectWorkflowCommand(text){
+function detectWorkflowCommand(text, state){
+  const st = flowState(state);
   const raw = String(text || '').trim();
   if(!raw) return null;
 
@@ -10249,8 +10358,16 @@ function detectWorkflowCommand(text){
   if(words.length <= 4){
     for(const rule of FLOW_RULES){
       if(asking && !rule.ignoresAsking) continue;
-      for(const re of rule.bare){ if(re.test(rest)) return rule.flow; }
+      for(const re of (rule.bare || [])){ if(re.test(rest)) return rule.flow; }
     }
+  }
+  /* And last, the ones that only mean something given what is on screen.
+     Last on purpose: a phrasing that names what it wants should always
+     win over one that has to be inferred from the state of the window. */
+  for(const rule of FLOW_RULES){
+    if(!rule.contextual || !rule.needs || !rule.needs(st)) continue;
+    if(asking && !rule.ignoresAsking) continue;
+    for(const re of rule.contextual){ if(re.test(rest) || re.test(restNamed)) return rule.flow; }
   }
   return null;
 }

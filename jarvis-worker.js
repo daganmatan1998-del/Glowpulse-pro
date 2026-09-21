@@ -127,7 +127,7 @@ function cors(env, request) {
        fallen back to another model, that an image was dropped — arrived and was
        then discarded by the browser. That is why the debug line said
        "engine=unknown" while the worker knew perfectly well which engine it was. */
-    'Access-Control-Expose-Headers': 'X-Jarvis-Engine, X-Jarvis-Fallback, X-Jarvis-Voice, X-Jarvis-Blind',
+    'Access-Control-Expose-Headers': 'X-Jarvis-Engine, X-Jarvis-Fallback, X-Jarvis-Voice, X-Jarvis-Blind, X-Jarvis-Vision',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };
@@ -235,7 +235,13 @@ async function health(env) {
        than letting him hold something up, wait, and be told afterwards
        that it never arrived. The name of the first seeing engine comes
        with it, because "which one" is the next question. */
-    vision: chain.some(e => e.vendor === 'anthropic' || engineSeesImages(e, env)),
+    /* Two ways to see, and the page needs to know which it has: an engine
+       that looks at the pixels itself, or a vision model writing a
+       description for one that cannot. Both beat "I cannot see images";
+       they are not the same thing and are not reported as the same. */
+    vision: chain.some(e => e.vendor === 'anthropic' || engineSeesImages(e, env)) || !!env.AI,
+    vision_via: chain.some(e => e.vendor === 'anthropic' || engineSeesImages(e, env))
+      ? 'engine' : (env.AI ? 'described' : false),
     vision_engine: (chain.find(e => e.vendor === 'anthropic' || engineSeesImages(e, env)) || {}).label || null,
     voice: !!(env.CARTESIA_API_KEY || env.AI),
     voice_via: env.CARTESIA_API_KEY ? 'cartesia' : (env.AI ? 'workers-ai' : false),
@@ -293,10 +299,17 @@ async function handleMessages(request, env) {
 
   const hasImage = (body.messages || []).some(m =>
     Array.isArray(m.content) && m.content.some(b => b && b.type === 'image'));
+  let describedBy = null;
   if (hasImage) {
     const seeing = chain.filter(e => e.vendor === 'anthropic' || engineSeesImages(e, env));
     if (seeing.length) {
       chain = seeing.concat(chain.filter(e => seeing.indexOf(e) < 0));
+    } else {
+      /* Nothing here can look at it. Rather than strip the picture and
+         apologise, have a model that CAN see write down what is in it, and
+         hand that to the one that is answering. Done once, before any
+         engine is tried, so a failover does not re-describe. */
+      describedBy = await describeImagesInBody(body, env);
     }
   }
 
@@ -320,7 +333,7 @@ async function handleMessages(request, env) {
   for (const group of [awake, resting]) {
     for (let i = 0; i < group.length; i++) {
       const engine = group[i];
-      const attempt = await callEngine(engine, body, env, request, group !== awake || i > 0);
+      const attempt = await callEngine(engine, body, env, request, group !== awake || i > 0, describedBy);
       if (attempt.ok) { clearCooldown(engine); return attempt.response; }
 
       if (!attempt.retriable) return attempt.response;
@@ -385,10 +398,10 @@ function systemText(system) {
   return String(system);
 }
 
-async function callEngine(engine, body, env, request, announce) {
+async function callEngine(engine, body, env, request, announce, describedBy) {
   /* Workers AI is a binding, not an endpoint: no fetch, no key, no streaming
      to convert. Handled up front so the HTTP path below stays untouched. */
-  if (engine.vendor === 'workers-ai') return await callWorkersAI(engine, body, env, request, announce);
+  if (engine.vendor === 'workers-ai') return await callWorkersAI(engine, body, env, request, announce, describedBy);
   let upstream;
   try {
     upstream = engine.vendor === 'anthropic'
@@ -464,7 +477,7 @@ async function callEngine(engine, body, env, request, announce) {
         engine.model = picked;
         engine.label = engine.vendor + '/' + picked;
         engine.repicked = true;
-        return await callEngine(engine, body, env, request, announce);
+        return await callEngine(engine, body, env, request, announce, describedBy);
       }
     }
 
@@ -489,6 +502,7 @@ async function callEngine(engine, body, env, request, announce) {
   /* The reply will talk about an image it never received. Without this the page
      has no way to know that, and the user is left thinking the app is lying. */
   if (imageWillBeDropped(engine, body, env)) headers['X-Jarvis-Blind'] = engine.label;
+  if (describedBy) headers['X-Jarvis-Vision'] = describedBy;
 
   if (engine.vendor === 'anthropic') {
     const contentType = upstream.headers.get('Content-Type') || '';
@@ -529,7 +543,7 @@ const MELO_MODEL = '@cf/myshell-ai/melotts';
    Tools are not offered here: these models handle function calling
    inconsistently, and a mangled tool call is worse than a plain answer from
    an engine whose only job is to keep something responding. */
-async function callWorkersAI(engine, body, env, request, announce) {
+async function callWorkersAI(engine, body, env, request, announce, describedBy) {
   const messages = [];
   { const sys = systemText(body.system); if (sys) messages.push({ role: 'system', content: sys }); }
   for (const m of (body.messages || [])) {
@@ -549,6 +563,7 @@ async function callWorkersAI(engine, body, env, request, announce) {
     const headers = { ...cors(env, request), 'X-Jarvis-Engine': engine.label };
     if (announce) headers['X-Jarvis-Fallback'] = engine.model;
     if (imageWillBeDropped(engine, body, env)) headers['X-Jarvis-Blind'] = engine.label;
+    if (describedBy) headers['X-Jarvis-Vision'] = describedBy;
     const shaped = {
       content: [{ type: 'text', text: stripLeadingThinkingBlock(String(text)) }],
       stop_reason: 'end_turn',
@@ -1030,6 +1045,97 @@ function engineSeesImages(provider, env) {
   if (vendor === 'anthropic') return true;     // every Claude sees
   if (vendor === 'google')    return true;     // every Gemini sees
   return VISION_MODELS.some(re => re.test(model));
+}
+
+/* WHEN NOTHING IN THE CHAIN CAN SEE.
+
+   Until now a picture sent to a text-only engine was simply removed, and
+   the assistant then explained that it could not see images. That was
+   honest and completely useless: the picture existed, the user was
+   looking at it, and the one thing standing between them was that the
+   model answering happened to be text-only.
+
+   Workers AI has vision models, and the binding is already here for
+   speech. So the picture is DESCRIBED first, by a model that can see,
+   and the description goes to the text model in its place. It is not as
+   good as a model looking at the pixels itself — and it never claims to
+   be: the replacement block says out loud that it is a description, and
+   tells the model to say so rather than guess if what it needs is not in
+   there.
+
+   Costs one extra Workers AI call per picture and needs no new key. */
+const VISION_DESCRIBERS = [
+  '@cf/meta/llama-3.2-11b-vision-instruct',
+  '@cf/llava-hf/llava-1.5-7b-hf'
+];
+
+const DESCRIBE_PROMPT =
+  'Describe this image for someone who cannot see it. Name what is in it, ' +
+  'read out any text exactly as it appears, and give colours, materials, ' +
+  'quantities and anything else specific. Be factual and concrete. Do not ' +
+  'speculate about what is not visible.';
+
+/* At most this many pictures per request get described. A turn carrying
+   more is a gallery, not a question, and describing all of them would cost
+   more time than the answer is worth. */
+const DESCRIBE_MAX = 3;
+
+function base64ToBytes(b64) {
+  const bin = atob(String(b64 || ''));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function describeOneImage(block, env) {
+  let bytes;
+  try {
+    bytes = base64ToBytes(block.source && block.source.data);
+  } catch (e) { return null; }
+  if (!bytes.length) return null;
+  const asArray = [...bytes];
+  for (const model of VISION_DESCRIBERS) {
+    try {
+      const out = await env.AI.run(model, {
+        image: asArray,
+        prompt: DESCRIBE_PROMPT,
+        max_tokens: 512
+      });
+      const text = String((out && (out.description || out.response || out.result || '')) || '').trim();
+      if (text) return { text: text, model: model };
+    } catch (err) { /* try the next describer */ }
+  }
+  return null;
+}
+
+/* Replaces image blocks in place. Returns the model that did the work, or
+   null if nothing could be described — in which case the old behaviour
+   stands and the picture is stripped further down, as before. */
+async function describeImagesInBody(body, env) {
+  if (!env || !env.AI) return null;
+  let used = null, done = 0;
+  for (const message of (body.messages || [])) {
+    if (!Array.isArray(message.content)) continue;
+    for (let i = 0; i < message.content.length; i++) {
+      const block = message.content[i];
+      if (!block || block.type !== 'image') continue;
+      if (done >= DESCRIBE_MAX) continue;
+      const got = await describeOneImage(block, env);
+      if (!got) continue;
+      done++;
+      used = got.model;
+      message.content[i] = {
+        type: 'text',
+        text: '[A picture he sent. The model answering this request cannot see ' +
+              'pictures, so it was described by a vision model first. This is the ' +
+              'description, not the picture:\n\n' + got.text +
+              '\n\nAnswer from this description. If what he is asking about is not ' +
+              'in it, say that you are working from a description and ask him ' +
+              'what you need — do not invent a detail that is not written above.]'
+      };
+    }
+  }
+  return used;
 }
 
 /* Did this request carry a picture that this engine will not be shown? */
@@ -1704,12 +1810,32 @@ async function handleStt(request, env) {
   const lang = (hint === 'he' || hint === 'en') ? hint : null;
   const withLang = (input) => lang ? { ...input, language: lang } : input;
 
+  /* THE WORDS HE ACTUALLY SAYS.
+
+     Whisper takes a prompt of expected vocabulary and leans towards it.
+     Without one it has never heard of this user's world, so "Shopify" comes
+     back as "shopfly", "TikTok" as "tick tock", and his own assistant's name
+     as almost anything. These are the words that appear in his commands more
+     than any others, in both scripts, and naming them costs nothing.
+
+     Add to it without touching this file by setting STT_VOCAB on the worker:
+     product names, a brand, a supplier — whatever he says that a general
+     model would not expect.
+
+     Only the turbo model documents initial_prompt, so only it is given one,
+     and a plain attempt at the same model follows in case it is refused. */
+  const vocab = ('JARVIS, Shopify, Instagram, TikTok, Claude, Cloudflare, API, ' +
+                 'GlowPulse, \u05d2\u05f3\u05e8\u05d5\u05d5\u05d9\u05e1, \u05e9\u05d5\u05e4\u05d9\u05e4\u05d9\u05d9, \u05d0\u05d9\u05e0\u05e1\u05d8\u05d2\u05e8\u05dd, \u05d8\u05d9\u05e7\u05d8\u05d5\u05e7, \u05e7\u05dc\u05d0\u05d5\u05d3' +
+                 (env.STT_VOCAB ? ', ' + String(env.STT_VOCAB).slice(0, 400) : '') + '.');
+  const withVocab = (input) => ({ ...input, initial_prompt: vocab });
+
   const attempts = [
-    { model: WHISPER_MODELS[0], input: { audio: b64 } },                 // detect
-    { model: WHISPER_MODELS[1], input: { audio: b64 } },                 // detect, faster model
-    { model: WHISPER_MODELS[0], input: withLang({ audio: b64 }) },       // second opinion
+    { model: WHISPER_MODELS[0], input: { audio: b64 } },                          // detect
+    { model: WHISPER_MODELS[1], input: withVocab({ audio: b64 }) },               // detect, told his words
+    { model: WHISPER_MODELS[1], input: { audio: b64 } },                          // detect, plain
+    { model: WHISPER_MODELS[0], input: withLang({ audio: b64 }) },                // second opinion
     { model: WHISPER_MODELS[2], input: { audio: [...bytes] } },
-    { model: WHISPER_MODELS[1], input: withLang({ audio: [...bytes] }) }
+    { model: WHISPER_MODELS[1], input: withLang(withVocab({ audio: [...bytes] })) }
   ];
 
   const tried = [];

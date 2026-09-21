@@ -238,6 +238,12 @@ async function health(env) {
     read_page: true,          // present only on workers that carry /fetch
     search: true,             // /search — engine-agnostic, needs no Anthropic key
     stt_language_hint: true,   // present only on workers that accept ?language=
+    /* Present only on workers that DETECT the language first and treat the
+       hint as a second opinion. The page gates on this: an older worker
+       feeds ?language= straight to Whisper as a lock, which is what made
+       English spoken into a Hebrew-set interface come back as "Thank you".
+       So the page sends the hint only where it is safe to send. */
+    stt_detect_first: true,
     fallback: chain.length > 1 ? chain[1].model : false,
     fallback_via: chain.length > 1 ? chain[1].vendor : false,
     mcp: Object.keys(env)

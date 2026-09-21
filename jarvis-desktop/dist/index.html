@@ -5780,11 +5780,34 @@ function sttIsNoise(text, byteLength){
   return STT_NOISE_SET.indexOf(bare) >= 0;
 }
 
+/* WHETHER TO SEND THE LANGUAGE AT ALL.
+
+   The hint is only safe on a worker that detects the language first and
+   consults the hint afterwards. An older worker hands ?language= straight
+   to Whisper as a LOCK — and Whisper, locked to the wrong language on a
+   short utterance, does not fail and does not return empty. It returns the
+   phrase it saw most often in training. That is the whole of "I say open
+   youtube and he answers the thanks".
+
+   So the hint is sent only where it is safe to send, and withheld
+   everywhere else. That matters more than it sounds: it means the fix
+   arrives with the app, not with the deploy. Install the build against the
+   worker already running and the microphone stops mishearing him, because
+   nothing is forcing Whisper into a language any more. Deploying the new
+   worker then adds the hint back as a genuine second opinion.
+
+   The flag is the worker's own, so this can never be guessed wrong. */
+function sttLangQuery(){
+  if(typeof langMode === 'undefined' || !IS_DESKTOP) return '';
+  const safe = !!(backendCapabilities && backendCapabilities.stt_detect_first);
+  return safe ? ('?language=' + langMode) : '';
+}
+
 /* Just the transcription, with none of the deciding. Split out so the
    speculative pass can call it without triggering a send, and so both paths
    go through identical request handling. */
 async function transcribeOnly(blob){
-  const langQuery = (typeof langMode !== 'undefined' && IS_DESKTOP) ? ('?language=' + langMode) : '';
+  const langQuery = sttLangQuery();
   const res = await fetch(backendUrl + '/stt' + langQuery, {
     method: 'POST',
     headers: Object.assign(jarvisHeaders(), { 'Content-Type': 'application/octet-stream' }),
@@ -5835,9 +5858,7 @@ async function transcribeAndSend(blob, sawSpeech){
     return handleTranscript(text, sawSpeech);
   }
   try{
-    /* Pass the language mode through, so Whisper is told what to expect
-       instead of guessing from the audio alone. */
-    const langQuery = (typeof langMode !== 'undefined' && IS_DESKTOP) ? ('?language=' + langMode) : '';
+    const langQuery = sttLangQuery();
     const res = await fetch(backendUrl + '/stt' + langQuery, {
       method: 'POST',
       headers: Object.assign(jarvisHeaders(), { 'Content-Type': 'application/octet-stream' }),

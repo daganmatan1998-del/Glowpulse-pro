@@ -244,6 +244,19 @@ async function health(env) {
       .filter(k => /^MCP_[A-Z0-9_]+_URL$/.test(k))
       .map(k => k.slice(4, -4).toLowerCase()),
     shopify: shopifyStores(env).map(s => s.name),
+    /* The admin handle beside the friendly name, so a deep link can be built
+       instead of guessed. admin.shopify.com/store/<handle> needs the
+       myshopify subdomain, and with SHOPIFY_STORES the configured name is a
+       label \u2014 "Glowpulse" \u2014 which is not it. Without this the page
+       has to ask him for a URL it already knows, which was exactly what he
+       asked never to be asked for.
+
+       Not a secret: the handle is in the address bar of every admin page he
+       has open. The token, which is the secret, stays here. */
+    shopify_stores: shopifyStores(env).map(s => ({
+      name: s.name,
+      handle: String(s.store || '').trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0].replace(/\.myshopify\.com$/, '')
+    })),
     calendar: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN),
     missing: missing
   };

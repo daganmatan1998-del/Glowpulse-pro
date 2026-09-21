@@ -425,10 +425,208 @@ async fn open_model_window(app: tauri::AppHandle, url: String) -> Result<String,
     Ok("opened".into())
 }
 
+/* ------------------------------------------------------------------
+   THE WORKSPACE
+
+   Three services, side by side, arranged to a layout rather than left
+   wherever the window manager drops them.
+
+   They are OUR windows, not browser tabs, and that is a deliberate
+   trade. tauri_plugin_opener hands a link to whatever browser Windows
+   has registered and then has no further say: three links become three
+   tabs in one window, which cannot be tiled at all. A window we own can
+   be placed to the pixel, reused instead of duplicated, and closed as a
+   set. The cost is that each service needs signing into once, in this
+   webview, because it keeps its own cookie jar — after that WebView2
+   persists it like any browser profile.
+------------------------------------------------------------------ */
+
+/* The only place each service is allowed to load.
+
+   This is the same rule as open_model_window's: a URL that arrived from
+   a tool result must never become the page a window loads. Suffix
+   matched on a label boundary, so admin.shopify.com passes and
+   shopify.com.example.net does not. */
+fn workspace_domain(service: &str) -> Option<&'static str> {
+    match service {
+        "shopify" => Some("shopify.com"),
+        "instagram" => Some("instagram.com"),
+        "tiktok" => Some("tiktok.com"),
+        _ => None,
+    }
+}
+
+fn host_within(host: &str, domain: &str) -> bool {
+    host == domain || host.ends_with(&format!(".{}", domain))
+}
+
+/* The usable desktop — the screen minus the taskbar.
+
+   Tauri's monitor gives the whole panel, so a layout built on it puts the
+   bottom row underneath the taskbar, where the last row of a window is
+   exactly the part you need to click. Windows reports the real figure and
+   is asked for it here; everywhere else falls back to the monitor, which
+   is wrong by the height of a taskbar and still better than nothing.
+
+   Physical pixels, matching set_position and set_size below, so nothing
+   has to be scaled twice. */
+#[tauri::command]
+fn work_area(app: tauri::AppHandle) -> Result<Vec<i32>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::Foundation::RECT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{SystemParametersInfoW, SPI_GETWORKAREA};
+        let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        let got = unsafe {
+            SystemParametersInfoW(
+                SPI_GETWORKAREA,
+                0,
+                &mut rect as *mut RECT as *mut core::ffi::c_void,
+                0,
+            )
+        };
+        if got != 0 && rect.right > rect.left && rect.bottom > rect.top {
+            return Ok(vec![
+                rect.left,
+                rect.top,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+            ]);
+        }
+    }
+
+    let window = app
+        .get_webview_window("main")
+        .ok_or("the main window is missing")?;
+    let monitor = window
+        .current_monitor()
+        .map_err(|e| e.to_string())?
+        .ok_or("no monitor is attached")?;
+    let pos = monitor.position();
+    let size = monitor.size();
+    Ok(vec![pos.x, pos.y, size.width as i32, size.height as i32])
+}
+
+/* One service, at an exact rectangle.
+
+   Reused rather than reopened when it is already there, and on reuse the
+   page is left alone: he may be three clicks into an order, and throwing
+   that away to reload the dashboard would be its own bug. Only the
+   geometry is reapplied. */
+#[tauri::command]
+async fn open_service_window(
+    app: tauri::AppHandle,
+    service: String,
+    url: String,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> Result<String, String> {
+    let service = service.trim().to_lowercase();
+    let domain = workspace_domain(&service)
+        .ok_or_else(|| format!("\"{}\" is not one of the workspace services", service))?;
+
+    let parsed = tauri::Url::parse(url.trim()).map_err(|_| format!("not a url: {}", url))?;
+    if parsed.scheme() != "https" {
+        return Err("refused: the workspace only loads https".into());
+    }
+    let host = parsed.host_str().unwrap_or("").to_lowercase();
+    if !host_within(&host, domain) {
+        return Err(format!(
+            "refused: {} is not part of {}",
+            if host.is_empty() { "that url" } else { &host },
+            domain
+        ));
+    }
+
+    let label = format!("ws-{}", service);
+    let title = match service.as_str() {
+        "shopify" => "Shopify \u{2014} JARVIS workspace",
+        "instagram" => "Instagram \u{2014} JARVIS workspace",
+        _ => "TikTok \u{2014} JARVIS workspace",
+    };
+
+    // A pane too small to use is not a pane. The caller does the layout;
+    // this is the floor under it.
+    let w = w.max(320);
+    let h = h.max(260);
+
+    if let Some(existing) = app.get_webview_window(&label) {
+        let _ = existing.unminimize();
+        let _ = existing.set_position(tauri::PhysicalPosition { x, y });
+        let _ = existing.set_size(tauri::PhysicalSize {
+            width: w as u32,
+            height: h as u32,
+        });
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        return Ok("reused".into());
+    }
+
+    /* The builder's position and size are LOGICAL; the rectangle here is
+       physical, because that is what the work area is measured in. So the
+       window is built and then placed, rather than placed by the builder
+       and silently scaled on a high-DPI screen. */
+    let win = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(parsed))
+        .title(title)
+        .min_inner_size(320.0, 260.0)
+        .resizable(true)
+        .decorations(true)
+        .always_on_top(false)
+        .skip_taskbar(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let _ = win.set_position(tauri::PhysicalPosition { x, y });
+    let _ = win.set_size(tauri::PhysicalSize {
+        width: w as u32,
+        height: h as u32,
+    });
+    let _ = win.show();
+    Ok("opened".into())
+}
+
+/* Which of the three are open right now. Asked before anything is opened,
+   so "already open" can be reported as reuse rather than as a fresh
+   window, and asked after, so the answer he is given is what actually
+   happened rather than what was attempted. */
+#[tauri::command]
+fn workspace_open(app: tauri::AppHandle) -> Vec<String> {
+    ["shopify", "instagram", "tiktok"]
+        .iter()
+        .filter(|s| app.get_webview_window(&format!("ws-{}", s)).is_some())
+        .map(|s| s.to_string())
+        .collect()
+}
+
+/* Put the workspace away again — the three panes, and only those. */
+#[tauri::command]
+fn close_workspace(app: tauri::AppHandle) -> Vec<String> {
+    let mut closed = Vec::new();
+    for s in ["shopify", "instagram", "tiktok"] {
+        if let Some(win) = app.get_webview_window(&format!("ws-{}", s)) {
+            if win.close().is_ok() {
+                closed.push(s.to_string());
+            }
+        }
+    }
+    closed
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![close_foreground_window, close_window_named, close_browser_tab, take_screenshot, open_model_window])
+        .invoke_handler(tauri::generate_handler![
+            close_foreground_window,
+            close_window_named,
+            close_browser_tab,
+            take_screenshot,
+            open_model_window,
+            work_area,
+            open_service_window,
+            workspace_open,
+            close_workspace
+        ])
         .setup(|app| {
             let window = app
                 .get_webview_window("main")

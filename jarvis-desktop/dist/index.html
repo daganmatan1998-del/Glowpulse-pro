@@ -204,6 +204,18 @@
   }
 
 
+  /* The 24-hour store card. A report printed through textContent collapses
+     into one grey paragraph under the default white-space, which is the
+     opposite of "readable at a glance" — it needs to keep its own lines. */
+  .msg.reportCard{
+    white-space:pre-wrap;
+    font-family:'Courier New', Consolas, monospace;
+    font-size:12.5px; line-height:1.65;
+    letter-spacing:0.02em;
+    border-left:2px solid var(--cyan);
+    padding-left:12px;
+  }
+
   /* ---------------- Desktop orb ----------------
      The desktop build is not the site in a smaller window — it is a different
      thing for a different purpose. The site is where you sit down and work:
@@ -335,6 +347,128 @@
     font-size:10px; letter-spacing:2px; text-transform:uppercase;
     color:rgba(127,168,184,0.85); z-index:96; pointer-events:none;
   }
+  /* ------------------------------------------------------------------
+     THE FULL-SCREEN ENVIRONMENT
+
+     Not a maximised window: a different state, with its own frame. The
+     orb stays exactly what it is in the middle — this is the chrome
+     around it, and it is a READOUT, not a control surface, so it takes
+     no pointer events and adds no buttons to remember.
+
+     Everything in it is true. The four telemetry lines are the worker's
+     real status, the real engine, the real microphone state and the real
+     version. The reference art carries a fifth reading that a laptop has
+     no sensor for, so that slot is simply not drawn: a panel that invents
+     its own numbers is decoration, and he asked never to be shown a
+     figure that was made up.
+  ------------------------------------------------------------------ */
+  #hudFrame{ display:none; }
+  html.tauri.orb-expanded #hudFrame{
+    display:block; position:fixed; inset:0; z-index:90;
+    pointer-events:none;
+    font-family:'Courier New', Consolas, monospace;
+    color:rgba(196,232,248,0.92);
+  }
+
+  /* Full screen gets a floor to stand on. The orb window is transparent so
+     the hologram can sit over the desktop; expanded, that would leave the
+     HUD floating over whatever happened to be behind it. Higher
+     specificity than the transparent rule above, which is why it wins. */
+  html.tauri.orb-expanded, html.tauri.orb-expanded body{
+    background:
+      radial-gradient(62vmin 62vmin at 50% 47%, rgba(22,96,150,0.30), rgba(3,8,16,0) 72%),
+      linear-gradient(180deg, #050e18 0%, #01040a 100%) !important;
+  }
+  /* And with a floor, the circular clip is no longer needed — it exists only
+     to keep a square of canvas off the desktop. Removing it lets the glow
+     and the outer rings reach their full extent, which is most of what the
+     hologram is. */
+  html.tauri.orb-expanded #scene-canvas{
+    clip-path:none; -webkit-clip-path:none;
+  }
+
+  html.tauri.orb-expanded #hudIdent{
+    position:absolute; left:clamp(28px, 4.2vw, 76px); top:clamp(26px, 4vh, 68px);
+  }
+  html.tauri.orb-expanded #hudTelem{
+    position:absolute; right:clamp(28px, 4.2vw, 76px); top:clamp(26px, 4vh, 68px);
+    text-align:right;
+  }
+  .hudName{
+    font-size:clamp(17px, 2.1vw, 30px);
+    letter-spacing:0.38em;
+    color:#dff4ff;
+    text-shadow:0 0 18px rgba(90,190,245,0.55);
+    margin-bottom:0.85em;
+  }
+  .hudLine{
+    font-size:clamp(9.5px, 0.78vw, 13px);
+    letter-spacing:0.24em; text-transform:uppercase;
+    color:rgba(150,205,232,0.80);
+    line-height:1.95;
+    white-space:nowrap;
+  }
+  .hudLine b{ font-weight:normal; color:#cfeeff; }
+  .hudDash{
+    width:22px; height:1px; margin-top:1.1em;
+    background:rgba(120,195,235,0.55);
+  }
+  html.tauri.orb-expanded #hudTelem .hudDash{ margin-left:auto; }
+
+  /* The corner brackets. Two lines each, drawn with borders so they stay
+     one physical pixel at any scale factor. */
+  .hudBracket{
+    position:absolute; width:clamp(26px, 2.6vw, 44px); height:clamp(26px, 2.6vw, 44px);
+    border:1px solid rgba(125,200,240,0.55);
+    opacity:0.85;
+  }
+  html.tauri.orb-expanded .hudBracket.tl{
+    left:clamp(14px, 2vw, 40px); top:clamp(14px, 2vh, 36px);
+    border-right:none; border-bottom:none;
+  }
+  html.tauri.orb-expanded .hudBracket.tr{
+    right:clamp(14px, 2vw, 40px); top:clamp(14px, 2vh, 36px);
+    border-left:none; border-bottom:none;
+  }
+  /* Top corners only, as in the reference — the bottom of the frame is
+     closed by the wordmark, not by more brackets. A pair down there also
+     landed straight on the microphone readout, which is the one thing in
+     this view he would actually look at. */
+
+  html.tauri.orb-expanded #hudFoot{
+    position:absolute; left:0; right:0; bottom:clamp(30px, 5.5vh, 78px);
+    display:flex; align-items:center; justify-content:center; gap:clamp(12px, 2vw, 34px);
+  }
+  .hudRule{
+    display:block; height:1px; width:clamp(48px, 11vw, 190px);
+    background:linear-gradient(90deg, rgba(120,195,235,0) 0%, rgba(120,195,235,0.65) 100%);
+  }
+  .hudRule + .hudFootName + .hudRule{
+    background:linear-gradient(90deg, rgba(120,195,235,0.65) 0%, rgba(120,195,235,0) 100%);
+  }
+  .hudFootName{
+    font-size:clamp(13px, 1.5vw, 22px);
+    letter-spacing:0.42em;
+    color:#dff4ff;
+    text-shadow:0 0 16px rgba(90,190,245,0.5);
+  }
+
+  /* The only motion: the frame breathing, slowly enough to read as alive
+     rather than as something blinking for attention. */
+  @keyframes hudBreathe{
+    0%,100%{ opacity:0.55; }
+    50%    { opacity:0.95; }
+  }
+  html.tauri.orb-expanded .hudBracket{ animation:hudBreathe 7s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce){
+    html.tauri.orb-expanded .hudBracket{ animation:none; opacity:0.8; }
+  }
+
+  /* The mic readout, lined up with the identity block's left edge rather
+     than hard against the window, so the frame reads as one composition. */
+  html.tauri.orb-expanded #micDot{ left:clamp(28px, 4.2vw, 76px); bottom:clamp(28px, 3.4vh, 58px); }
+  html.tauri.orb-expanded #micLabel{ left:calc(clamp(28px, 4.2vw, 76px) + 22px); bottom:clamp(23px, 2.9vh, 53px); }
+
   /* Filled and pulsing only while capture is genuinely open. */
   html.tauri.mic-open #micDot{
     background:var(--cyan);
@@ -1214,6 +1348,35 @@
 <div id="orbDrag" data-tauri-drag-region></div>
 <div id="orbHit"></div>
 <div id="orbMenu"></div>
+<!-- The full-screen environment's frame. Present always, painted only in
+     .orb-expanded, and pointer-events:none throughout — it is something to
+     read, never something to click, so it cannot swallow a click meant for
+     the orb underneath it. The strapline from the reference poster is
+     deliberately absent: this is an operating environment, not a poster. -->
+<div id="hudFrame" aria-hidden="true">
+  <span class="hudBracket tl"></span>
+  <span class="hudBracket tr"></span>
+  <div id="hudIdent">
+    <div class="hudName">J.A.R.V.I.S.</div>
+    <div class="hudLine">AI ASSISTANT</div>
+    <div class="hudLine">PERSONAL COMPANION</div>
+    <div class="hudLine">BUILT FOR YOU</div>
+    <div class="hudDash"></div>
+  </div>
+  <div id="hudTelem">
+    <div class="hudLine">STATUS: <b id="hudStatus">—</b></div>
+    <div class="hudLine">ENGINE: <b id="hudEngine">—</b></div>
+    <div class="hudLine">MIC: <b id="hudMic">—</b></div>
+    <div class="hudLine">VERSION: <b id="hudVersion">—</b></div>
+    <div class="hudDash"></div>
+  </div>
+  <div id="hudFoot">
+    <span class="hudRule"></span>
+    <span class="hudFootName">J.A.R.V.I.S.</span>
+    <span class="hudRule"></span>
+  </div>
+</div>
+
 <div id="vignette"></div>
 <div id="grain"></div>
 
@@ -9707,6 +9870,803 @@ async function callOpenUrlTool(input){
   }
 }
 
+/* ==================================================================
+   THE WORKING DAY
+
+   Three things asked for often enough that they should not need a model
+   round trip: open the workspace, say how the store is doing, go full
+   screen.
+
+   Each exists TWICE, deliberately. As a tool, so a phrasing nobody
+   anticipated still routes correctly through the model. And as a local
+   matcher, so the phrasings he actually uses fire instantly, work when
+   every engine is down, and cannot be reinterpreted into a paragraph
+   about what could be opened. Same reasoning as detectModeCommand, and
+   the same shape.
+
+   Both languages, throughout. The reply follows the language of the
+   sentence that asked rather than the interface setting, because he
+   switches mid-conversation and the interface does not.
+   ================================================================== */
+
+/* A sentence that names a time is a plan, not an instruction. Without this,
+   "remind me to check how the store is doing tomorrow" runs the report now
+   and schedules nothing. */
+const FLOW_LATER = /\b(remind|later|tonight|tomorrow|schedule|scheduled|every\s+day|each\s+day|in\s+an?\s+hour|at\s+\d)\b|תזכיר|מחר|אחר כך|בעוד|כל יום|הערב|בשעה/;
+
+/* And a sentence that says not to. */
+const FLOW_NOT = /\b(don'?t|do\s+not|never|without)\b|אל ת|לא ל|תבטל/;
+
+/* ...or that asks what the thing is rather than asking for it. "how's the
+   store doing" opens with a question word too, so this is narrow on purpose:
+   only the forms that are unmistakably about the feature itself. */
+const FLOW_ASKING = /^(what|why|how\s+do(es)?|can\s+you\s+explain|tell\s+me\s+about|remind\s+me\s+what)\b|^(מה זה|למה|איך זה)/;
+
+/* STRONG patterns carry their own verb and are safe in a whole sentence.
+   BARE ones are the command said alone — "workspace", "מסך מלא" — and only
+   count when almost nothing else was said, or every sentence mentioning a
+   screen would go full screen. */
+const FLOW_RULES = [
+  { flow: 'fullscreen_exit', strong: [
+      /\b(exit|leave|quit|close|out\s+of|get\s+out\s+of)\b[\s\S]{0,12}\bfull[\s-]?screen\b/,
+      /\bfull[\s-]?screen\b[\s\S]{0,8}\b(off|down)\b/,
+      /(צא|תצא|לצאת|סגור|תסגור|תבטל)[\s\S]{0,12}ה?מסך ה?מלא/,
+      /ה?מסך ה?מלא[\s\S]{0,8}(חזור|בחזרה)/,
+      /תחזור לקטן/
+    ], bare: [] },
+
+  { flow: 'fullscreen', strong: [
+      /\b(go|goes|going|enter|entering|activate|switch|open|show|make\s+it|put\s+(it|yourself))\b[\s\S]{0,16}\bfull[\s-]?screen\b/,
+      /\bfull[\s-]?screen\b[\s\S]{0,10}\b(mode|please|now)\b/,
+      /\bmaximi[sz]e\s+(yourself|jarvis)\b/,
+      /(תעבור|עבור|לעבור|תפתח|תפרוש|פתח|תיכנס|כנס)[\s\S]{0,16}ה?מסך ה?מלא/,
+      /מצב ה?מסך ה?מלא/,
+      /למסך ה?מלא/
+    ], bare: [ /\bfull[\s-]?screen\b/, /ה?מסך ה?מלא/ ] },
+
+  { flow: 'workspace', strong: [
+      /\b(let'?s|lets|shall\s+we|time\s+to|ready\s+to)\b[\s\S]{0,14}\b(start|get\s+to|begin)\b[\s\S]{0,10}\bwork(ing)?\b/,
+      /\b(start|begin)\s+(working|work|the\s+work\s?day|my\s+day)\b/,
+      /\b(let'?s|lets)\s+get\s+to\s+(work|it)\b/,
+      /\b(open|set\s+up|bring\s+up|prepare|get\s+me)\b[\s\S]{0,14}\bwork\s?space\b/,
+      /\b(open|set\s+up|bring\s+up|prepare)\b[\s\S]{0,14}\b(shopify\s+and\s+instagram|my\s+dashboards?)\b/,
+      /\bset\s+me\s+up\s+(for|to)\s+work\b/,
+      /נתחיל\s*(ל?עבוד|עבודה)/,
+      /מתחילים\s*(ל?עבוד|עבודה)/,
+      /בוא\s*נעבוד/,
+      /יאללה[\s\S]{0,14}(עבוד|עבודה)/,
+      /(תפתח|פתח|תכין|הכן|תסדר)[\s\S]{0,16}סביבת ה?עבודה/,
+      /זמן לעבודה/
+    ], bare: [ /\bwork\s?space\b/, /סביבת ה?עבודה/ ] },
+
+  { flow: 'store_report', strong: [
+      /\bhow('?s|\s+is|\s+are)\b[\s\S]{0,18}\b(store|shop|we|things|sales|business)\b[\s\S]{0,14}\bdoing\b/,
+      /\bhow('?s|\s+is)\b[\s\S]{0,14}\b(the|my)\s+(store|shop)\b/,
+      /\bhow\s+are\s+we\s+doing\b/,
+      /\b(store|shop|sales)\s+(performance|update|numbers|stats|statistics|report|summary)\b/,
+      /\b(give|show|get)\s+me\b[\s\S]{0,20}\b(store|shop|sales)\b[\s\S]{0,20}\b(update|performance|numbers|report|stats|data|today)\b/,
+      /\b(what|how\s+much)\b[\s\S]{0,16}\b(did\s+we|have\s+we)\s+(sell|make)\b/,
+      /איך[\s\S]{0,16}ה?חנות/,
+      /מה ה?מצב[\s\S]{0,16}ה?חנות/,
+      /ה?חנות[\s\S]{0,12}(מתפקדת|הולכת|עובדת)/,
+      /(עדכון|נתונים|דוח|ביצועים|מכירות)[\s\S]{0,16}ה?חנות/,
+      /ה?חנות[\s\S]{0,16}(עדכון|נתונים|ביצועים|מכירות)/,
+      /כמה מכרנו/
+    ], bare: [] }
+];
+
+/* Hebrew or not. What decides the reply, rather than the interface setting:
+   he switches languages inside a conversation and the setting does not. */
+function flowLang(text){ return /[֐-׿]/.test(String(text || '')) ? 'he' : 'en'; }
+
+/* Which of the three, if any. Returns null for everything else, which is
+   almost everything — this runs on every message he sends. */
+function detectWorkflowCommand(text){
+  const raw = String(text || '').trim();
+  if(!raw) return null;
+
+  /* A long message is work that mentions a workspace, not a request to open
+     one. Twelve words is roughly twice the longest phrasing on his list. */
+  const norm = normaliseHeard(raw);
+  if(!norm) return null;
+  let words = norm.split(' ').filter(Boolean);
+  if(words.length > 12) return null;
+
+  /* "ג'רוויס, מסך מלא" opens by addressing him. The name is not part of
+     the command, and leaving it in makes every pattern need a prefix. */
+  while(words.length > 1 && (wordIsName(words[0]) || WAKE_FILLER.indexOf(words[0]) >= 0)){
+    words = words.slice(1);
+  }
+  const rest = words.join(' ');
+  if(!rest) return null;
+
+  if(FLOW_LATER.test(rest) || FLOW_NOT.test(rest) || FLOW_ASKING.test(rest)) return null;
+
+  for(const rule of FLOW_RULES){
+    for(const re of rule.strong){ if(re.test(rest)) return rule.flow; }
+  }
+  /* The bare forms, and only when that really is all he said. */
+  if(words.length <= 4){
+    for(const rule of FLOW_RULES){
+      for(const re of rule.bare){ if(re.test(rest)) return rule.flow; }
+    }
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------------
+   THE WORKSPACE: Shopify, Instagram and TikTok, arranged
+
+   These are OUR windows, not browser tabs, and that is the whole reason
+   the layout is possible. tauri_plugin_opener hands a link to whatever
+   browser Windows has registered and then has no further say — three
+   links become three tabs in one window, which cannot be tiled at all.
+   A window we own can be placed to the pixel and reused rather than
+   duplicated.
+
+   The cost, stated plainly because it must never be hidden from him:
+   each service is signed into once inside this webview, which keeps its
+   own cookies. After that WebView2 remembers them like any browser
+   profile. Nothing here can see whether he is signed in, so nothing here
+   ever says that he is.
+------------------------------------------------------------------ */
+
+/* The admin handle for a deep link. The worker now sends it beside the
+   name; an older worker sends names only, and when the name IS the
+   myshopify domain — which is how a single-store setup is configured —
+   the handle is already in it. Either way he is never asked for a URL
+   the system already knows. */
+function shopifyHandles(){
+  const out = [];
+  const rich = (backendCapabilities && Array.isArray(backendCapabilities.shopify_stores))
+    ? backendCapabilities.shopify_stores : [];
+  for(const s of rich){
+    if(s && s.handle) out.push({ name: String(s.name || s.handle), handle: String(s.handle) });
+  }
+  if(out.length) return out;
+  const names = (backendCapabilities && Array.isArray(backendCapabilities.shopify))
+    ? backendCapabilities.shopify : [];
+  for(const n of names){
+    const m = /^([a-z0-9][a-z0-9-]*)\.myshopify\.com$/i.exec(String(n || '').trim());
+    if(m) out.push({ name: String(n), handle: m[1].toLowerCase() });
+  }
+  return out;
+}
+
+/* Where each pane opens.
+
+   With exactly one store, straight into its admin. With several and no
+   name given, Shopify's own store picker — which is honest, needs no
+   question, and is one click from either. */
+function workspaceUrl(service, storeName){
+  if(service === 'instagram') return 'https://www.instagram.com/';
+  if(service === 'tiktok')    return 'https://www.tiktok.com/';
+  const stores = shopifyHandles();
+  const want = String(storeName || '').trim().toLowerCase();
+  let pick = null;
+  if(want) pick = stores.find(s => s.name.toLowerCase() === want || s.handle === want) || null;
+  if(!pick && stores.length === 1) pick = stores[0];
+  return pick ? ('https://admin.shopify.com/store/' + pick.handle) : 'https://admin.shopify.com';
+}
+
+/* The layout he drew: Shopify across the top, Instagram and TikTok side
+   by side beneath it. Shares rather than pixels, so a laptop and a 4K
+   monitor both get something usable, and every pane is inside the work
+   area with a gap between — no pane can cover another by construction.
+
+   0.56 is "slightly more space", not double: the two below still need to
+   be readable, which is the other half of what he asked for. */
+const WS_TOP_SHARE = 0.56;
+
+function workspaceLayout(area){
+  const x = Math.round(area[0]), y = Math.round(area[1]);
+  const w = Math.round(area[2]), h = Math.round(area[3]);
+  /* A gap that is a visible seam on a big screen and almost nothing on a
+     small one, where every pixel is needed for the content. */
+  const gap = w >= 1600 ? 10 : (w >= 1100 ? 6 : 2);
+  const topH  = Math.round((h - gap) * WS_TOP_SHARE);
+  const botH  = h - gap - topH;
+  const leftW = Math.round((w - gap) / 2);
+  const rightW = w - gap - leftW;
+  return [
+    { service:'shopify',   x: x,                y: y,              w: w,      h: topH },
+    { service:'instagram', x: x,                y: y + topH + gap, w: leftW,  h: botH },
+    { service:'tiktok',    x: x + leftW + gap,  y: y + topH + gap, w: rightW, h: botH }
+  ];
+}
+
+const WORKSPACE_TOOL = {
+  name: 'open_workspace',
+  description: "Prepare his business workspace: Shopify admin, Instagram and TikTok, opened together and arranged on screen so all three are visible at once — Shopify across the top, Instagram and TikTok side by side below it. Desktop only.\n\nUSE IT when he says he is starting work, in either language and any phrasing: \"let's start working\", \"open my workspace\", \"בוא נתחיל לעבוד\", \"תפתח לי את סביבת העבודה\". Do not list what you are about to do and do not ask him to confirm — open it.\n\nAlready-open panes are REUSED and re-arranged, never duplicated, and a reused pane keeps whatever page he was on.\n\nWHAT YOU CANNOT SEE. The result tells you a window was created, and nothing more. You cannot see whether a page loaded, and you cannot see whether he is signed in — each service is signed into once inside this window, which keeps its own cookies. So never say he is logged in, never describe what is on screen, and if a service comes back with an error, say which one failed and why, rather than reporting the set as ready.\n\nWHEN IT WORKS, SAY ALMOST NOTHING. \"Workspace ready.\" / \"סביבת העבודה מוכנה.\" is the whole answer. Explain only what failed.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      store: { type:'string', description:'Which Shopify store, when he has more than one and said which. Omit otherwise.' }
+    },
+    required: []
+  }
+};
+
+async function callWorkspaceTool(input){
+  if(!IS_DESKTOP){
+    return { error: 'the workspace needs the desktop app; in the browser there are no windows to arrange' };
+  }
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { error: 'the desktop bridge is unavailable' };
+
+  let area;
+  try{
+    area = await invoke('work_area');
+  }catch(err){
+    return { error: 'could not measure the screen: ' + ((err && err.message) || err) +
+                    ' — this build of JARVIS may predate the workspace; rebuild the app' };
+  }
+  if(!Array.isArray(area) || area.length < 4 || !(area[2] > 200) || !(area[3] > 200)){
+    return { error: 'the screen measured as ' + JSON.stringify(area) + ', which cannot be right' };
+  }
+
+  const panes = workspaceLayout(area);
+  const opened = [], reused = [], failed = [];
+  for(const pane of panes){
+    const url = workspaceUrl(pane.service, input && input.store);
+    try{
+      const how = await invoke('open_service_window', {
+        service: pane.service, url: url,
+        x: pane.x, y: pane.y, w: pane.w, h: pane.h
+      });
+      (how === 'reused' ? reused : opened).push(pane.service);
+    }catch(err){
+      failed.push({ service: pane.service, why: String((err && err.message) || err) });
+    }
+  }
+
+  const done = opened.concat(reused);
+  if(done.length) addMessage('system', '▸ workspace: ' + done.join(', ') +
+                             (failed.length ? ' — failed: ' + failed.map(f => f.service).join(', ') : ''));
+
+  if(!done.length){
+    return { error: 'not one of the three would open',
+             failed: failed,
+             tell_the_user: 'Say that the workspace did not open and give the reason for the first failure. Do not say it is ready.' };
+  }
+  if(failed.length){
+    return { ok: false, opened: opened, reused: reused, failed: failed,
+             tell_the_user: 'Name which service did not open and why. Do not call the workspace ready when part of it is missing.' };
+  }
+  return { ok: true, opened: opened, reused: reused,
+           layout: 'shopify across the top, instagram bottom-left, tiktok bottom-right',
+           note: 'All three windows exist and are placed. You cannot see their contents and cannot tell whether he is signed in — do not claim either. Answer with "Workspace ready." or "סביבת העבודה מוכנה." and nothing else.' };
+}
+
+/* ------------------------------------------------------------------
+   THE STORE, OVER THE LAST 24 HOURS
+
+   The arithmetic is done HERE, not by the model. Asking a model to
+   compose the GraphQL, add up the orders and work out the percentage
+   change is three chances to be confidently wrong about his money. This
+   fetches, sums and compares; the model gets finished numbers and says
+   what they mean.
+
+   And what is NOT here is named rather than filled in. Shopify's Admin
+   API carries orders, not sessions: visitors, conversion rate,
+   add-to-cart, abandonment and every ad metric live in Shopify Analytics
+   and in the ad platforms, neither of which this has a connection to. So
+   they come back marked unavailable, every time, with the reason. An
+   invented conversion rate is worse than an absent one.
+------------------------------------------------------------------ */
+
+/* Shopify prices a query by the size you ASK for, not the size you get, so
+   a page of 250 orders each carrying 50 line items is refused outright for
+   cost. Forty by ten fits comfortably; six pages of it is 240 orders in a
+   day, and past that he is told the report was truncated rather than shown
+   a total that quietly is not one. */
+const REPORT_PAGE = 40;
+const REPORT_MAX_PAGES = 6;
+
+async function shopifyGql(query, variables, storeName){
+  const res = await fetch(backendUrl + '/shopify/query', {
+    method: 'POST',
+    headers: jarvisHeaders(),
+    body: JSON.stringify({ store_name: storeName || '', query: query, variables: variables || {} })
+  });
+  const data = await res.json().catch(()=> null);
+  if(!res.ok) throw new Error(String((data && data.error) || ('shopify ' + res.status)).slice(0, 220));
+  if(data && data.errors && data.errors.length){
+    throw new Error(data.errors.map(e => e && e.message).filter(Boolean).join('; ').slice(0, 220));
+  }
+  return data && data.data;
+}
+
+/* Two shapes of the same question. The rich one asks for attribution,
+   refunds, tax and shipping; the plain one asks only for fields that have
+   been on Order for years. A single unrecognised field fails the WHOLE
+   GraphQL document, so without the fallback one deprecation takes the
+   entire report down rather than one line of it. */
+function reportOrdersQuery(rich){
+  const extra = rich ? `
+      currentTotalTaxSet { shopMoney { amount } }
+      currentTotalDiscountsSet { shopMoney { amount } }
+      totalShippingPriceSet { shopMoney { amount } }
+      totalRefundedSet { shopMoney { amount } }
+      customerJourneySummary { firstVisit { sourceType source referrerUrl } lastVisit { sourceType source referrerUrl } }` : '';
+  const cust = rich ? 'customer { id numberOfOrders }' : 'customer { id }';
+  return `query($q: String!, $after: String) {
+  orders(first: ${REPORT_PAGE}, after: $after, query: $q, sortKey: CREATED_AT) {
+    pageInfo { hasNextPage endCursor }
+    edges { node {
+      id
+      name
+      createdAt
+      test
+      currentTotalPriceSet { shopMoney { amount currencyCode } }
+      currentSubtotalPriceSet { shopMoney { amount } }${extra}
+      ${cust}
+      lineItems(first: 10) {
+        pageInfo { hasNextPage }
+        edges { node {
+          quantity
+          title
+          product { id title }
+        } }
+      }
+    } }
+  }
+}`;
+}
+
+function shopifyWindowQuery(fromIso, toIso){
+  return 'created_at:>=' + fromIso + ' AND created_at:<' + toIso;
+}
+
+async function fetchOrderWindow(fromIso, toIso, storeName, rich){
+  const q = shopifyWindowQuery(fromIso, toIso);
+  const nodes = [];
+  let after = null, pages = 0, truncated = false, lineItemsTruncated = false;
+  while(pages < REPORT_MAX_PAGES){
+    const data = await shopifyGql(reportOrdersQuery(rich), { q: q, after: after }, storeName);
+    const conn = data && data.orders;
+    if(!conn) break;
+    for(const edge of (conn.edges || [])){
+      if(edge && edge.node){
+        nodes.push(edge.node);
+        const li = edge.node.lineItems;
+        if(li && li.pageInfo && li.pageInfo.hasNextPage) lineItemsTruncated = true;
+      }
+    }
+    pages++;
+    if(!(conn.pageInfo && conn.pageInfo.hasNextPage)) break;
+    after = conn.pageInfo.endCursor;
+    if(pages >= REPORT_MAX_PAGES) truncated = true;
+  }
+  return { nodes: nodes, truncated: truncated, lineItemsTruncated: lineItemsTruncated };
+}
+
+const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+const money = (set) => num(set && set.shopMoney && set.shopMoney.amount);
+
+/* Where an order came from, read off its customer journey. Grouped into
+   the handful of names that mean something to him rather than left as
+   Shopify's raw source strings, and anything unrecognised stays "other"
+   instead of being forced into a bucket it does not belong in. */
+function attributeOrder(node){
+  const j = node && node.customerJourneySummary;
+  if(!j) return null;
+  const visit = j.lastVisit || j.firstVisit;
+  if(!visit) return null;
+  const hay = [visit.source, visit.sourceType, visit.referrerUrl].filter(Boolean).join(' ').toLowerCase();
+  if(!hay) return 'direct';
+  if(/instagram|\big\b/.test(hay))       return 'instagram';
+  if(/tiktok/.test(hay))                 return 'tiktok';
+  if(/facebook|fb\.com|meta/.test(hay))  return 'facebook';
+  if(/google|youtube/.test(hay))         return 'google';
+  if(/bing|duckduckgo|yahoo|search/.test(hay)) return 'search';
+  if(/whatsapp/.test(hay))               return 'whatsapp';
+  if(/direct|none|^$/.test(hay))         return 'direct';
+  if(/email|klaviyo|mailchimp|newsletter/.test(hay)) return 'email';
+  return 'other';
+}
+
+function summariseOrders(nodes){
+  const out = {
+    orders: 0, revenue: 0, netSales: 0, discounts: 0, tax: 0, shipping: 0, refunds: 0,
+    units: 0, currency: null,
+    products: [], customers: { total: 0, new: 0, returning: 0, known: 0 },
+    sources: {}, attributed: 0
+  };
+  const byProduct = new Map();
+  const seenCustomers = new Set();
+
+  for(const node of nodes){
+    /* A test order is not a sale. Counting them inflates a quiet day into a
+       good one, which is the single most misleading thing this could do. */
+    if(node.test) continue;
+    out.orders++;
+    const total = money(node.currentTotalPriceSet);
+    out.revenue  += total;
+    out.netSales += money(node.currentSubtotalPriceSet);
+    out.tax      += money(node.currentTotalTaxSet);
+    out.discounts+= money(node.currentTotalDiscountsSet);
+    out.shipping += money(node.totalShippingPriceSet);
+    out.refunds  += money(node.totalRefundedSet);
+    if(!out.currency && node.currentTotalPriceSet && node.currentTotalPriceSet.shopMoney){
+      out.currency = node.currentTotalPriceSet.shopMoney.currencyCode || null;
+    }
+
+    for(const edge of ((node.lineItems && node.lineItems.edges) || [])){
+      const li = edge && edge.node;
+      if(!li) continue;
+      const qty = num(li.quantity);
+      out.units += qty;
+      const title = (li.product && li.product.title) || li.title || 'untitled';
+      const row = byProduct.get(title) || { title: title, units: 0 };
+      row.units += qty;
+      byProduct.set(title, row);
+    }
+
+    const cust = node.customer;
+    if(cust && cust.id && !seenCustomers.has(cust.id)){
+      seenCustomers.add(cust.id);
+      out.customers.total++;
+      if(cust.numberOfOrders !== undefined && cust.numberOfOrders !== null){
+        out.customers.known++;
+        if(num(cust.numberOfOrders) <= 1) out.customers.new++;
+        else out.customers.returning++;
+      }
+    }
+
+    const src = attributeOrder(node);
+    if(src){
+      out.attributed++;
+      out.sources[src] = (out.sources[src] || 0) + 1;
+    }
+  }
+
+  out.avgOrderValue = out.orders ? out.revenue / out.orders : 0;
+  out.products = Array.from(byProduct.values()).sort((a, b) => b.units - a.units).slice(0, 5);
+  return out;
+}
+
+/* A change, or an honest refusal to state one. Percentage change off a base
+   of zero is not "infinite growth", it is undefined — and printing 100% or
+   ∞ there would be inventing a figure. */
+function reportDelta(now, before){
+  if(!isFinite(now) || !isFinite(before)) return null;
+  if(before === 0) return now === 0 ? { pct: 0, from: 0, to: now } : { pct: null, from: 0, to: now, note: 'no comparable figure: the previous period was zero' };
+  return { pct: ((now - before) / before) * 100, from: before, to: now };
+}
+
+const CURRENCY_MARK = { ILS:'₪', USD:'$', EUR:'€', GBP:'£' };
+function moneyText(v, currency){
+  const mark = CURRENCY_MARK[currency] || '';
+  const n = Math.round(v * 100) / 100;
+  const shown = Math.abs(n - Math.round(n)) < 0.005 ? String(Math.round(n)) : n.toFixed(2);
+  const grouped = shown.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return mark ? (mark + grouped) : (grouped + (currency ? ' ' + currency : ''));
+}
+function deltaText(d){
+  if(!d) return '';
+  if(d.pct === null) return '  (no previous figure)';
+  if(Math.abs(d.pct) < 0.05) return '  → 0%';
+  const arrow = d.pct > 0 ? '↑' : '↓';
+  return '  ' + arrow + ' ' + Math.abs(d.pct).toFixed(Math.abs(d.pct) < 10 ? 1 : 0) + '%';
+}
+
+/* The card he reads. Built here so the layout is the same every time and
+   cannot drift with the model's mood. */
+function renderStoreReport(r, lang){
+  const he = lang === 'he';
+  const L = he ? {
+    head:'החנות — 24 השעות האחרונות', rev:'הכנסות', net:'מכירות נטו',
+    ord:'הזמנות', aov:'ערך הזמנה ממוצע', units:'פריטים שנמכרו',
+    disc:'הנחות', tax:'מע"ם', ship:'משלוח', ref:'זיכויים',
+    cust:'לקוחות', newc:'חדשים', retc:'חוזרים',
+    top:'מוצרים מובילים', src:'מאיפה הגיעו ההזמנות',
+    na:'לא זמין', none:'לא היו הזמנות ב-24 השעות האחרונות', units_s:'יח\'' 
+  } : {
+    head:'STORE — LAST 24 HOURS', rev:'Revenue', net:'Net sales',
+    ord:'Orders', aov:'Average order value', units:'Items sold',
+    disc:'Discounts', tax:'Tax', ship:'Shipping', ref:'Refunds',
+    cust:'Customers', newc:'new', retc:'returning',
+    top:'TOP PRODUCTS', src:'WHERE THE ORDERS CAME FROM',
+    na:'Data unavailable', none:'No orders in the last 24 hours', units_s:''
+  };
+  const a = r.now, b = r.previous, cur = a.currency || (b && b.currency) || null;
+  const lines = [];
+  lines.push(L.head);
+  lines.push('');
+  const row = (label, value, delta) => lines.push(label + ': ' + value + deltaText(delta));
+
+  row(L.rev, moneyText(a.revenue, cur), b ? reportDelta(a.revenue, b.revenue) : null);
+  row(L.net, moneyText(a.netSales, cur), b ? reportDelta(a.netSales, b.netSales) : null);
+  row(L.ord, String(a.orders), b ? reportDelta(a.orders, b.orders) : null);
+  row(L.aov, moneyText(a.avgOrderValue, cur), b ? reportDelta(a.avgOrderValue, b.avgOrderValue) : null);
+  row(L.units, String(a.units) + (L.units_s ? ' ' + L.units_s : ''), b ? reportDelta(a.units, b.units) : null);
+  if(r.rich){
+    row(L.disc, moneyText(a.discounts, cur), b ? reportDelta(a.discounts, b.discounts) : null);
+    row(L.tax,  moneyText(a.tax, cur),       b ? reportDelta(a.tax, b.tax) : null);
+    row(L.ship, moneyText(a.shipping, cur),  b ? reportDelta(a.shipping, b.shipping) : null);
+    row(L.ref,  moneyText(a.refunds, cur),   b ? reportDelta(a.refunds, b.refunds) : null);
+  }
+  if(a.customers.known){
+    lines.push(L.cust + ': ' + a.customers.total +
+               '  (' + a.customers.new + ' ' + L.newc + ', ' + a.customers.returning + ' ' + L.retc + ')');
+  } else if(a.customers.total){
+    lines.push(L.cust + ': ' + a.customers.total);
+  }
+
+  if(a.products.length){
+    lines.push('');
+    lines.push(L.top);
+    a.products.forEach((p, i) => lines.push('  ' + (i + 1) + '. ' + p.title + ' — ' + p.units));
+  }
+
+  if(a.attributed){
+    lines.push('');
+    lines.push(L.src);
+    const entries = Object.keys(a.sources).map(k => [k, a.sources[k]]).sort((x, y) => y[1] - x[1]);
+    for(const [k, n] of entries){
+      lines.push('  ' + k + ' — ' + Math.round((n / a.attributed) * 100) + '%  (' + n + ')');
+    }
+  }
+
+  if(!a.orders) lines.push('\n' + L.none + '.');
+
+  if(r.unavailable && r.unavailable.length){
+    lines.push('');
+    lines.push(L.na + ': ' + r.unavailable.join(', '));
+  }
+  return lines.join('\n');
+}
+
+/* A card of its own, because a report read as a wall of collapsed
+   whitespace is not "easy to understand at a glance". */
+function addReportCard(text){
+  const div = document.createElement('div');
+  div.className = 'msg system reportCard';
+  div.textContent = text;
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+const STORE_REPORT_TOOL = {
+  name: 'store_report',
+  description: "How his store has done over the last 24 hours, against the 24 before it. Reads his real Shopify orders and does the arithmetic here, so the numbers you receive are finished — totals, averages and percentage changes are already correct and must be repeated as given, never recomputed.\n\nUSE IT for any version of the question, in either language: \"how's the store doing\", \"store performance\", \"give me a store update\", \"how are we doing\", \"איך החנות מתפקדת\", \"מה המצב של החנות\", \"תן לי עדכון על החנות\".\n\nTHE CARD IS ALREADY ON HIS SCREEN. The full table is printed for him the moment this returns, so do NOT read the numbers back one by one. Say two or three things that are TRUE OF THESE NUMBERS and worth knowing — what moved, what moved against it, which product carried the day.\n\nSEPARATE FACT FROM CAUSE. \"Revenue rose 18% while orders rose 27%, so the average order was smaller\" is arithmetic and you may say it. \"Sales dropped because your TikTok content is weak\" is a guess about something you cannot see. If you want to name a cause, name the correlation and say plainly that it does not establish one.\n\nWHAT IS MISSING IS LISTED IN `unavailable`. Sessions, visitors, conversion rate, add-to-cart, abandonment and every advertising figure are not in the Shopify Admin API and are therefore not here. Say \"data unavailable\" for those if he asks. NEVER estimate, extrapolate or supply a conversion rate from anywhere.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      store: { type:'string', description:'Which store, when he has more than one. Omit if he has only one.' }
+    },
+    required: []
+  }
+};
+
+async function callStoreReportTool(input){
+  const stores = (backendCapabilities && Array.isArray(backendCapabilities.shopify))
+    ? backendCapabilities.shopify : [];
+  if(!backendUrl || !stores.length){
+    return { error: 'no Shopify store is connected to the worker',
+             tell_the_user: 'Say that you could not retrieve the store’s 24-hour figures because no store is connected, rather than describing how it is doing.' };
+  }
+  const storeName = (input && input.store) || (stores.length === 1 ? stores[0] : '');
+  if(!storeName && stores.length > 1){
+    return { error: 'more than one store is connected and none was named',
+             stores: stores,
+             tell_the_user: 'Ask which store he means. Name the options.' };
+  }
+
+  const now = new Date();
+  const dayAgo  = new Date(now.getTime() - 24 * 3600 * 1000);
+  const twoAgo  = new Date(now.getTime() - 48 * 3600 * 1000);
+  const iso = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+  /* The rich query first; on any GraphQL complaint, the plain one. A field
+     that has been deprecated away should cost the report its attribution
+     column, not the whole thing. */
+  let rich = true, current, previous = null;
+  try{
+    current = await fetchOrderWindow(iso(dayAgo), iso(now), storeName, true);
+  }catch(err){
+    rich = false;
+    try{
+      current = await fetchOrderWindow(iso(dayAgo), iso(now), storeName, false);
+    }catch(err2){
+      return { error: 'could not read the orders: ' + String((err2 && err2.message) || err2),
+               tell_the_user: 'Say that you could not retrieve the store’s 24-hour analytics, and give this reason. Do not describe how the store is doing.' };
+    }
+  }
+  try{
+    previous = await fetchOrderWindow(iso(twoAgo), iso(dayAgo), storeName, rich);
+  }catch(err){ previous = null; }   // the comparison is optional; the report is not
+
+  const a = summariseOrders(current.nodes);
+  const b = previous ? summariseOrders(previous.nodes) : null;
+
+  /* Named, not guessed at. Every one of these is a real metric he asked for
+     that the Admin API genuinely does not carry. */
+  const unavailable = [
+    'visitors / sessions', 'conversion rate', 'add-to-cart rate',
+    'checkout started / completed', 'cart & checkout abandonment',
+    'traffic by source', 'product page views',
+    'ad spend', 'ROAS', 'clicks', 'CTR'
+  ];
+  if(!rich) unavailable.push('discounts', 'tax', 'shipping', 'refunds', 'order attribution', 'new vs returning');
+  else if(!a.attributed) unavailable.push('order attribution (Shopify reported no customer journey)');
+
+  let lowStock = null;
+  try{
+    const ls = await shopifyGql('{ products(first: 10, query: "status:active inventory_total:<5") { edges { node { id title totalInventory } } } }', {}, storeName);
+    lowStock = ((ls && ls.products && ls.products.edges) || [])
+      .map(e => e && e.node).filter(Boolean)
+      .map(n => ({ title: n.title, left: n.totalInventory }));
+  }catch(err){ lowStock = null; }
+
+  const report = { now: a, previous: b, rich: rich, unavailable: unavailable };
+  const lang = (typeof currentLang !== 'undefined' && currentLang === 'he') ? 'he' : 'en';
+  const card = renderStoreReport(report, lang);
+  addReportCard(card);
+
+  return {
+    ok: true,
+    window: { from: iso(dayAgo), to: iso(now) },
+    compared_with: previous ? { from: iso(twoAgo), to: iso(dayAgo) } : null,
+    store: storeName || stores[0],
+    currency: a.currency || (b && b.currency) || null,
+    last_24h: a,
+    previous_24h: b,
+    change: b ? {
+      revenue: reportDelta(a.revenue, b.revenue),
+      orders: reportDelta(a.orders, b.orders),
+      average_order_value: reportDelta(a.avgOrderValue, b.avgOrderValue),
+      items: reportDelta(a.units, b.units)
+    } : null,
+    low_stock: lowStock,
+    truncated: current.truncated || (previous && previous.truncated) || false,
+    line_items_truncated: current.lineItemsTruncated || false,
+    customers_note: rich
+      ? 'New vs returning is approximate: it reads each customer’s lifetime order count as it stands now, not as it stood at the moment of the order.'
+      : null,
+    unavailable: unavailable,
+    card_already_shown: true,
+    note: 'The full card is already printed on his screen. Do not read it back line by line — give two or three observations that follow from these numbers, and mark anything in `unavailable` as unavailable rather than estimating it.'
+  };
+}
+
+/* ------------------------------------------------------------------
+   FULL SCREEN
+
+   The orb already knew how to fill the screen — double-clicking it has
+   always done this. What was missing was a way to ASK for it, and
+   anything to look at once you were there. The HUD that appears in this
+   state is defined in the stylesheet beside the rest of the orb.
+------------------------------------------------------------------ */
+
+async function setFullScreen(on){
+  const want = !!on;
+  if(IS_DESKTOP){
+    if(typeof window.__orbExpand !== 'function'){
+      return { error: 'the orb is not mounted yet' };
+    }
+    const already = (typeof window.__orbExpanded === 'function') && window.__orbExpanded() === want;
+    if(already) return { ok: true, already: true, full_screen: want };
+    try{
+      await window.__orbExpand(want);
+      return { ok: true, already: false, full_screen: want };
+    }catch(err){
+      return { error: 'the window refused: ' + ((err && err.message) || err) };
+    }
+  }
+  /* In the browser it is the page that goes full screen, and the browser
+     may simply say no — it only allows it off a real interaction. Reported
+     rather than assumed, because an assumed success here is exactly the
+     kind of claim he asked never to hear. */
+  try{
+    if(want){
+      const el = document.documentElement;
+      const go = el.requestFullscreen || el.webkitRequestFullscreen;
+      if(!go) return { error: 'this browser does not offer full screen' };
+      await go.call(el);
+    } else if(document.fullscreenElement || document.webkitFullscreenElement){
+      const out = document.exitFullscreen || document.webkitExitFullscreen;
+      if(out) await out.call(document);
+    }
+    return { ok: true, already: false, full_screen: want };
+  }catch(err){
+    return { error: 'the browser refused full screen: ' + ((err && err.message) || err) };
+  }
+}
+
+const FULLSCREEN_TOOL = {
+  name: 'set_full_screen',
+  description: "Put JARVIS into his full-screen environment, or bring him back out of it. Use it whenever he asks, in either language: \"go full screen\", \"jarvis full screen\", \"מסך מלא\", \"תעבור למסך מלא\" — and with on=false for \"exit full screen\", \"צא ממסך מלא\". Answer in one short line; there is nothing to explain.",
+  input_schema: {
+    type: 'object',
+    properties: { on: { type:'boolean', description:'true to enter full screen, false to leave it. Defaults to true.' } },
+    required: []
+  }
+};
+
+async function callFullScreenTool(input){
+  const on = !(input && input.on === false);
+  const res = await setFullScreen(on);
+  if(res.ok) addMessage('system', '▸ ' + (on ? 'full screen' : 'back to the orb'));
+  return res.ok
+    ? Object.assign({}, res, { note: 'Say one short line. Do not describe the interface.' })
+    : res;
+}
+
+/* ------------------------------------------------------------------
+   The three, run without the model.
+
+   Returns true when it has fully handled the message, false when the
+   message should carry on to the model as usual.
+------------------------------------------------------------------ */
+async function runWorkflowCommand(flow, text){
+  const he = flowLang(text) === 'he';
+  const say = (line) => {
+    addMessage('assistant', line);
+    chatHistory.push({ role:'assistant', content: line });
+    persistCurrentSession();
+    if(IS_DESKTOP && typeof speak === 'function') speak(line);
+  };
+
+  if(flow === 'fullscreen' || flow === 'fullscreen_exit'){
+    const on = flow === 'fullscreen';
+    const res = await setFullScreen(on);
+    if(res.error){
+      say(he ? ('לא הצלחתי לעבור למסך מלא: ' + res.error)
+             : ('I could not switch to full screen: ' + res.error));
+      return true;
+    }
+    if(res.already){
+      say(on ? (he ? 'כבר במסך מלא.' : 'Already full screen.')
+             : (he ? 'כבר יצאתי.' : 'Already out of it.'));
+      return true;
+    }
+    say(on ? (he ? 'מסך מלא.' : 'Full screen.')
+           : (he ? 'חזרתי.' : 'Back.'));
+    return true;
+  }
+
+  if(flow === 'workspace'){
+    const res = await callWorkspaceTool({});
+    if(res && res.ok){
+      say(he ? 'סביבת העבודה מוכנה.' : 'Workspace ready.');
+      return true;
+    }
+    /* Something did not open. Name it. "Workspace ready" over a missing
+       window is the exact failure he asked never to be given. */
+    const missed = (res && res.failed) ? res.failed : [];
+    const first = missed.length ? missed[0] : null;
+    const why = first ? first.why : ((res && res.error) || 'unknown');
+    const which = missed.length ? missed.map(f => f.service).join(', ') : '';
+    say(he
+      ? ('לא הצלחתי לפתוח' + (which ? ' את ' + which : '') + ': ' + why)
+      : ('I could not open' + (which ? ' ' + which : ' the workspace') + ': ' + why));
+    return true;
+  }
+
+  if(flow === 'store_report'){
+    /* Normally this one goes to the model, which calls store_report and then
+       says what the numbers mean — the observations are the point, and they
+       need a model. Only when there is no model to reach does it run here, so
+       that the answer is a real report with an honest note rather than a
+       generic failure. */
+    const reachable = !!(backendUrl && backendCapabilities);
+    if(reachable) return false;
+    const res = await callStoreReportTool({});
+    if(res && res.error){
+      say(he ? 'לא הצלחתי למשוך את נתוני 24 השעות של החנות: ' + res.error
+             : 'I could not retrieve the store’s 24-hour analytics: ' + res.error);
+    } else {
+      say(he ? 'הנה הנתונים. אין לי כרגע חיבור למנוע כדי לנתח אותם.'
+             : 'Here are the figures. I have no engine connected to read them for you.');
+    }
+    return true;
+  }
+
+  return false;
+}
+
 const CLOSE_WINDOW_TOOL = {
   name: 'close_this_window',
   description: "Close the window the user is currently looking at — the foreground window on his desktop. Desktop only, Windows only. Use it when he says to close this window, close that, or shut this. It sends the same close request as clicking the X, so an application with unsaved work will still prompt him; it does not force-kill anything. You cannot choose WHICH window: it is always the one in front, and there is no way to name a target. If he asks to close something specific by name, say that you can only close whatever is in front and ask him to bring it forward first. It will refuse to close your own panel.",
@@ -10340,7 +11300,8 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
       ? [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL, MAKE_ZIP_TOOL, BUILD3D_TOOL]
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
     if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL,
-                                          TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL);
+                                          TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
+                                          WORKSPACE_TOOL, FULLSCREEN_TOOL);
   } else {
     /* The mode boundary is enforced HERE, by which tools exist, rather than by
        asking the model to hold back. A prompt instruction is something it can
@@ -10358,7 +11319,15 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
        errand, not heavy work. In the browser the capability does not exist at
        all, so offering it there would only invite a promise it cannot keep. */
     if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL,
-                                      TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL);
+                                      TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
+                                      WORKSPACE_TOOL, FULLSCREEN_TOOL);
+    /* The report needs a connected store, not a desktop — it reads the same
+       Shopify connection the website uses, so it is offered in both. Offered
+       only when a store really is configured: a tool that can only return
+       "no store connected" is an invitation to try and fail. */
+    if((backendCapabilities && Array.isArray(backendCapabilities.shopify) && backendCapabilities.shopify.length)){
+      everydayTools.push(STORE_REPORT_TOOL);
+    }
     const advancedTools = [BUILD3D_TOOL, MODEL3D_TOOL, PHOTO3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
     if(IS_DESKTOP) advancedTools.push(MODEL_WINDOW_TOOL);
     requestBody.tools = fullCapability()
@@ -10719,6 +11688,12 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callPhoto3dTool(tu.input);
           } else if(tu.name === 'show_model_in_window'){
             payload = await openModelWindow(null);
+          } else if(tu.name === 'open_workspace'){
+            payload = await callWorkspaceTool(tu.input);
+          } else if(tu.name === 'set_full_screen'){
+            payload = await callFullScreenTool(tu.input);
+          } else if(tu.name === 'store_report'){
+            payload = await callStoreReportTool(tu.input);
           } else if(tu.name === 'shopify_admin_query'){
             payload = await callShopifyTool(tu.input, logEntry);
           } else if(tu.name === 'remember'){
@@ -11922,6 +12897,41 @@ async function handleSend(){
     if(!already) startModeTransform(modeCmd);
     return;
   }
+
+  /* The three working-day commands, for the same three reasons mode
+     switching is handled here: they must work when every engine is down,
+     they must be instant, and they must not be interpreted. A round trip
+     before opening three windows reads as the command having failed, and
+     "\u05d1\u05d5\u05d0 \u05e0\u05ea\u05d7\u05d9\u05dc \u05dc\u05e2\u05d1\u05d5\u05d3" reaching the model is how it becomes a paragraph
+     about what could be opened instead of three open windows.
+
+     The store report is the exception and deliberately falls through: its
+     numbers are worthless without something to say about them, and that
+     needs the model. runWorkflowCommand returns false for it. */
+  if(!images.length){
+    const flow = detectWorkflowCommand(text);
+    if(flow){
+      chatHistory.push({ role:'user', content: text });
+      persistCurrentSession();
+      let handled = false;
+      try{ handled = await runWorkflowCommand(flow, text); }
+      catch(err){
+        addMessage('system', 'DEBUG (' + flow + '): ' + ((err && err.message) || err));
+        handled = true;
+      }
+      if(handled){
+        if(conversationMode && !isThinking && typeof startListening === 'function'){
+          setTimeout(startListening, 250);
+        }
+        return;
+      }
+      /* Falling through to the model, so the turn it just pushed must come
+         back off: handleSend pushes it again below and a doubled user turn
+         confuses every engine. */
+      chatHistory.pop();
+    }
+  }
+
   isThinking = true;
   lastThinkStart = Date.now();   // for the stall breaker in the watchdog
   updateStopBtnVisibility();
@@ -12383,9 +13393,38 @@ adjustLayout();
                           : stalled   ? 'microphone not open'
                                       : 'starting';
       }
+      /* The same fact, in the full-screen telemetry column. Read off the
+         label rather than recomputed, so the two can never disagree about
+         whether the microphone is open \u2014 which is the one thing on that
+         panel he would actually act on. */
+      const hudMic = document.getElementById('hudMic');
+      if(hudMic) hudMic.textContent = ((label && label.textContent) || '').toUpperCase() || '\u2014';
     }
   }
   setInterval(paintMic, 200);
+
+  /* The rest of the telemetry column. Four true things and no fifth: the
+     reference art carries a reading no laptop has a sensor for, so that
+     slot is not drawn at all. Anything unknown stays an em dash rather
+     than being filled with a plausible-looking number. */
+  function paintHud(){
+    if(!document.getElementById('hudFrame')) return;
+    const caps = (typeof backendCapabilities !== 'undefined') ? backendCapabilities : null;
+    const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v || '\u2014'; };
+    set('hudStatus', caps ? (caps.brain ? 'ONLINE' : 'NO ENGINE') : 'OFFLINE');
+    /* The model, not the whole label. A worker labels its chain
+       "claude-sonnet-4-6 via anthropic", and a blind cut at 24 characters
+       renders that as "CLAUDE-SONNET-4-6 VIA AN" — which reads as a broken
+       panel rather than as a long name. The vendor is dropped first, and
+       only what is left is trimmed, with an ellipsis so a trim is visible
+       as a trim. */
+    const engines = (caps && Array.isArray(caps.engines)) ? caps.engines : [];
+    const engine = engines.length ? String(engines[0]).split(/\s+via\s+/i)[0].trim().toUpperCase() : '';
+    set('hudEngine', engine ? (engine.length > 22 ? engine.slice(0, 21) + '\u2026' : engine) : '\u2014');
+    set('hudVersion', (caps && caps.version) ? String(caps.version) : '\u2014');
+  }
+  setInterval(paintHud, 2000);
+  paintHud();
 
   if(micDot){
     micDot.addEventListener('click', (e)=>{
@@ -12575,6 +13614,9 @@ adjustLayout();
   })();
 
   window.__orbExpand = setExpanded;
+  /* Read as well as written. Without this, "go full screen" said twice
+     leaves and re-enters instead of answering "already there". */
+  window.__orbExpanded = ()=> expanded;
   document.addEventListener('dblclick', ()=> setExpanded(!expanded));
 
   /* Escape now has two jobs, in the order you would expect: leave the

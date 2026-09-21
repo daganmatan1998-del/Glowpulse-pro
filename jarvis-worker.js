@@ -230,6 +230,13 @@ async function health(env) {
     },
     brain: chain.length > 0,
     engines: chain.map(e => e.label),
+    /* Whether anything in the chain can actually LOOK at a picture.
+       Reported here so the page can say so when the camera opens, rather
+       than letting him hold something up, wait, and be told afterwards
+       that it never arrived. The name of the first seeing engine comes
+       with it, because "which one" is the next question. */
+    vision: chain.some(e => e.vendor === 'anthropic' || engineSeesImages(e, env)),
+    vision_engine: (chain.find(e => e.vendor === 'anthropic' || engineSeesImages(e, env)) || {}).label || null,
     voice: !!(env.CARTESIA_API_KEY || env.AI),
     voice_via: env.CARTESIA_API_KEY ? 'cartesia' : (env.AI ? 'workers-ai' : false),
     model3d: !!env.MESHY_API_KEY,

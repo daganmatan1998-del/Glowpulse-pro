@@ -469,6 +469,59 @@
   html.tauri.orb-expanded #micDot{ left:clamp(28px, 4.2vw, 76px); bottom:clamp(28px, 3.4vh, 58px); }
   html.tauri.orb-expanded #micLabel{ left:calc(clamp(28px, 4.2vw, 76px) + 22px); bottom:clamp(23px, 2.9vh, 53px); }
 
+  /* ------------------------------------------------------------------
+     ROOM TO MOVE
+
+     The camera pane was never pinned to the hologram by a rule. It was
+     pinned by the WINDOW: the orb is 180px square, the pane is 200px
+     wide, and clampPane() clamps to innerWidth — so there was nowhere to
+     drag it to. Full screen is where the room is, so that is where both
+     of them come free. The pane drags as it always has; the hologram now
+     moves with it.
+  ------------------------------------------------------------------ */
+  html.tauri.orb-expanded #scene-canvas,
+  html.tauri.orb-expanded #orbHit{
+    transform:translate(var(--orb-dx, 0px), var(--orb-dy, 0px));
+  }
+  html.tauri.orb-expanded #orbHit{ cursor:grab; }
+  html.tauri.orb-expanded.orb-dragging #orbHit{ cursor:grabbing; }
+  html.tauri.orb-expanded.orb-dragging #scene-canvas{ transition:none; }
+
+  /* ------------------------------------------------------------------
+     "MAKE ME FULL SCREEN"
+
+     His camera fills the display; the hologram stays, smaller, over the
+     bottom-right of it, and still his to move. The frame stays too: this
+     is a state of the environment, not a different one.
+  ------------------------------------------------------------------ */
+  html.tauri.live-full #livePane{
+    position:fixed !important;
+    left:0 !important; top:0 !important; right:auto !important; bottom:auto !important;
+    width:100vw !important; height:100vh !important;
+    border:none !important; border-radius:0 !important; box-shadow:none !important;
+    z-index:20; cursor:default;
+  }
+  html.tauri.live-full #livePane video{
+    width:100%; height:100vh;
+    /* contain, not cover. Cropping his head off to fill the corners is
+       not what "show me full screen" means. */
+    object-fit:contain;
+    background:#01040a;
+  }
+  html.tauri.live-full #liveTag{ opacity:0.45; }
+  /* Above the picture, below the frame. */
+  html.tauri.live-full #scene-canvas{
+    z-index:30;
+    transform:translate(var(--orb-dx, 0px), var(--orb-dy, 0px)) scale(0.34);
+    transform-origin:85% 82%;
+  }
+  /* The hit area follows the hologram to where the scale puts it: scaling
+     about 85%/82% lands the centre near 73%/71%, and the orb is about 21%
+     of the window across once shrunk. */
+  html.tauri.live-full #orbHit{
+    left:62%; top:60%; width:22%; height:22%;
+  }
+
   /* Filled and pulsing only while capture is genuinely open. */
   html.tauri.mic-open #micDot{
     background:var(--cyan);
@@ -1793,6 +1846,7 @@ const I18N = {
     permissionHint: 'Grant once and the browser remembers it for this site, so he stops asking. On iPhone, add the page to your Home Screen first - Safari forgets permissions for ordinary tabs every session.',
     micDenied: 'Microphone permission was refused. Allow it from the padlock icon in the address bar, then try again.',
     sttFailed: 'Could not transcribe: {why}',
+    cameraBlind: 'The camera is on, but no engine connected to your worker can see pictures — the worker strips them out on the way, so what you hold up will not reach him. Fix it on Cloudflare: set ANTHROPIC_API_KEY, or point the chain at a model that can see (Gemini, GPT-4o, Grok, Llama 4), or add that model to VISION_ENGINES.',
     sttOldWorker: 'Your Cloudflare worker is the old one, which forces Whisper into one language and is why requests come back as "Thank you". Run: wrangler deploy',
     captureReset: 'The microphone had stopped responding. Reopened it.',
     doingItForReal: '▸ actually doing it…',
@@ -2013,6 +2067,7 @@ const I18N = {
     permissionHint: 'תאשר פעם אחת והדפדפן יזכור לאתר הזה, כך שהוא יפסיק לשאול. באייפון - תוסיף קודם את הדף למסך הבית, כי ספארי שוכח הרשאות של לשונית רגילה בכל פעם מחדש.',
     micDenied: 'ההרשאה למיקרופון נדחתה. תאשר דרך אייקון המנעול בשורת הכתובת ותנסה שוב.',
     sttFailed: 'לא הצלחתי לתמלל: {why}',
+    cameraBlind: 'המצלמה פתוחה, אבל אף מנוע שמחובר ל-worker שלך לא יכול לראות תמונות — ה-worker מסנן אותן בדרך, ומה שתרים לא יגיע אליו. לתקן ב-Cloudflare: להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה (Gemini, GPT-4o, Grok, Llama 4), או להוסיף אותו ל-VISION_ENGINES.',
     sttOldWorker: 'ה-worker ב-Cloudflare הוא הישן — הוא כופה על Whisper שפה אחת, וזו הסיבה שבקשות חוזרות כמו "Thank you". הרץ: wrangler deploy',
     captureReset: 'המיקרופון הפסיק להגיב. פתחתי אותו מחדש.',
     doingItForReal: '▸ מבצע בפועל…',
@@ -8652,7 +8707,30 @@ async function startLive(){
   livePane.classList.add('open');
   liveBtn.classList.add('active');
   addMessage('system', t('liveOn'));
+  warnIfNothingCanSee();
   eyeStart();
+}
+
+/* THE CAMERA IS ON, BUT NOBODY IS LOOKING.
+
+   Whether a picture reaches the model is a property of the ENGINE, and
+   the worker strips images out on the way to one that cannot see them.
+   That is correct behaviour — but he found out about it afterwards, by
+   holding something up, waiting, and being told the image never arrived.
+
+   The worker now reports this in /health, so it can be said at the moment
+   the camera opens, when it is still useful. Said once a session: it is a
+   configuration fact, not an event. */
+let warnedNothingSees = false;
+function warnIfNothingCanSee(){
+  if(warnedNothingSees) return;
+  /* Only when the worker has ANSWERED and said no. An older worker does
+     not carry the field at all, and silence there must not be read as a
+     refusal — saying "he cannot see" to someone whose engine can is worse
+     than saying nothing. */
+  if(!backendCapabilities || backendCapabilities.vision !== false) return;
+  warnedNothingSees = true;
+  addMessage('system', t('cameraBlind'));
 }
 
 function stopLive(quiet){
@@ -8662,6 +8740,9 @@ function stopLive(quiet){
   }
   liveFeed.srcObject = null;
   livePane.classList.remove('open');
+  /* A full-screen camera with no camera is a black rectangle over his
+     desktop that nothing obvious removes. */
+  document.documentElement.classList.remove('live-full');
   liveBtn.classList.remove('active');
   eyeStop();
   if(!quiet) addMessage('system', t('liveOff'));
@@ -9928,6 +10009,35 @@ const FLOW_ASKING = /^(what|why|how\s+do(es)?|can\s+you\s+explain|tell\s+me\s+ab
    count when almost nothing else was said, or every sentence mentioning a
    screen would go full screen. */
 const FLOW_RULES = [
+  /* These two come first on purpose. "make me full screen" is four words
+     and contains "full screen", so the bare rule further down would claim
+     it and put the HUD up instead of his camera. Strong patterns are all
+     tried before any bare one, and rules are tried in order, so being
+     first here is what settles it. */
+  { flow: 'live_full_exit', strong: [
+      /\b(exit|leave|stop|undo|close|end)\b[\s\S]{0,20}\b(me|my\s+(camera|face|video|feed))\b[\s\S]{0,14}\bfull[\s-]?screen\b/,
+      /\bmake\s+me\s+small(er)?\b/,
+      /\bshrink\s+(me|my\s+(camera|video))\b/,
+      /\b(my\s+(camera|video|face))\b[\s\S]{0,12}\b(back|smaller|small)\b/,
+      /\u05ea\u05e7\u05d8\u05d9\u05df \u05d0\u05d5\u05ea\u05d9/,
+      /\u05ea\u05e7\u05d8\u05d9\u05df[\s\S]{0,14}(\u05d4\u05de\u05e6\u05dc\u05de\u05d4|\u05d4\u05e6\u05d9\u05dc\u05d5\u05dd)/,
+      /(\u05e6\u05d0|\u05ea\u05e6\u05d0|\u05ea\u05e1\u05d2\u05d5\u05e8|\u05d1\u05d8\u05dc|\u05ea\u05d1\u05d8\u05dc)[\s\S]{0,18}(\u05d0\u05d5\u05ea\u05d9|\u05d4\u05de\u05e6\u05dc\u05de\u05d4 \u05e9\u05dc\u05d9)[\s\S]{0,14}\u05d4?\u05de\u05e1\u05da \u05d4?\u05de\u05dc\u05d0/,
+      /\u05d0\u05d5\u05ea\u05d9[\s\S]{0,12}\u05d7\u05d6\u05e8\u05d4 \u05dc\u05e7\u05d8\u05df/
+    ], bare: [] },
+
+  { flow: 'live_full', strong: [
+      /\bmake\s+(me|my\s+(camera|face|video|feed))\b[\s\S]{0,16}\bfull[\s-]?screen\b/,
+      /\b(show|put|blow\s+up|expand|maximi[sz]e)\s+(me|my\s+(camera|face|video|feed))\b[\s\S]{0,16}\bfull[\s-]?screen\b/,
+      /\bfull[\s-]?screen\s+(me|my\s+(camera|face|video|feed))\b/,
+      /\bmy\s+(camera|face|video|feed)\b[\s\S]{0,14}\bfull[\s-]?screen\b/,
+      /\b(camera|video)\s+full[\s-]?screen\b/,
+      /\b(put|show)\s+me\s+on\s+(the\s+)?(whole|full)\s+screen\b/,
+      /(\u05ea\u05e2\u05e9\u05d4|\u05e2\u05e9\u05d4|\u05ea\u05d4\u05e4\u05d5\u05da|\u05d4\u05e4\u05d5\u05da|\u05ea\u05d2\u05d3\u05d9\u05dc|\u05d4\u05d2\u05d3\u05dc|\u05ea\u05e8\u05d0\u05d4|\u05ea\u05e4\u05ea\u05d7|\u05e9\u05d9\u05dd)[\s\S]{0,18}(\u05d0\u05d5\u05ea\u05d9|\u05d4\u05de\u05e6\u05dc\u05de\u05d4 \u05e9\u05dc\u05d9|\u05d4\u05e6\u05d9\u05dc\u05d5\u05dd \u05e9\u05dc\u05d9|\u05d4\u05ea\u05de\u05d5\u05e0\u05d4 \u05e9\u05dc\u05d9)[\s\S]{0,18}\u05d4?\u05de\u05e1\u05da \u05d4?\u05de\u05dc\u05d0/,
+      /(\u05d0\u05d5\u05ea\u05d9|\u05d4\u05de\u05e6\u05dc\u05de\u05d4 \u05e9\u05dc\u05d9|\u05d4\u05e6\u05d9\u05dc\u05d5\u05dd \u05e9\u05dc\u05d9)[\s\S]{0,14}\u05d1?\u05de\u05e1\u05da \u05de\u05dc\u05d0/,
+      /\u05d4?\u05de\u05e1\u05da \u05d4?\u05de\u05dc\u05d0[\s\S]{0,14}(\u05d0\u05d5\u05ea\u05d9|\u05dc\u05de\u05e6\u05dc\u05de\u05d4 \u05e9\u05dc\u05d9|\u05dc\u05e6\u05d9\u05dc\u05d5\u05dd \u05e9\u05dc\u05d9)/,
+      /\u05ea\u05d2\u05d3\u05d9\u05dc \u05d0\u05d5\u05ea\u05d9/
+    ], bare: [] },
+
   { flow: 'fullscreen_exit', strong: [
       /\b(exit|leave|quit|close|out\s+of|get\s+out\s+of)\b[\s\S]{0,12}\bfull[\s-]?screen\b/,
       /\bfull[\s-]?screen\b[\s\S]{0,8}\b(off|down)\b/,
@@ -10561,8 +10671,37 @@ async function callStoreReportTool(input){
    state is defined in the stylesheet beside the rest of the orb.
 ------------------------------------------------------------------ */
 
+/* Whether there is a picture to make full screen in the first place. */
+function liveIsOpen(){
+  return !!(typeof livePane !== 'undefined' && livePane && livePane.classList.contains('open'));
+}
+
+/* "Jarvis, make me full screen" — his camera fills the display and the
+   hologram stays on top of it, smaller and out of his face.
+
+   It needs the window to be full screen to fill anything, so it takes it
+   there itself rather than asking him to say two commands. */
+async function setLiveFullScreen(on){
+  const root = document.documentElement;
+  if(!on){
+    root.classList.remove('live-full');
+    return { ok: true, live_full_screen: false };
+  }
+  if(!liveIsOpen()){
+    return { error: 'the camera is not on, so there is nothing to show full screen',
+             tell_the_user: 'Say that the camera is not open yet, and offer to open it. Do not say you made anything full screen.' };
+  }
+  const res = await setFullScreen(true);
+  if(res.error) return res;
+  root.classList.add('live-full');
+  return { ok: true, live_full_screen: true };
+}
+
 async function setFullScreen(on){
   const want = !!on;
+  /* Coming out of full screen takes the full-screen camera with it. The
+     state only exists inside it. */
+  if(!want) document.documentElement.classList.remove('live-full');
   if(IS_DESKTOP){
     if(typeof window.__orbExpand !== 'function'){
       return { error: 'the orb is not mounted yet' };
@@ -10606,6 +10745,25 @@ const FULLSCREEN_TOOL = {
   }
 };
 
+const LIVE_FULL_TOOL = {
+  name: 'set_my_camera_full_screen',
+  description: "Make HIS CAMERA fill the display — what you are seeing of him, blown up to the whole screen with the hologram left on top of it. Different from set_full_screen, which is your own interface: this one is about the picture of him. Use it for \"make me full screen\", \"put my camera full screen\", \"תעשה אותי מסך מלא\", \"תגדיל אותי\", and with on=false for \"make me small again\", \"תקטין אותי\".\n\nIt needs the camera to be ON. If it is not, this returns an error saying so — tell him that and offer to open it, rather than reporting that you made anything full screen. Answer in one short line.",
+  input_schema: {
+    type: 'object',
+    properties: { on: { type:'boolean', description:'true to fill the screen with his camera, false to put it back. Defaults to true.' } },
+    required: []
+  }
+};
+
+async function callLiveFullTool(input){
+  const on = !(input && input.on === false);
+  const res = await setLiveFullScreen(on);
+  if(res.ok) addMessage('system', '\u25B8 ' + (on ? 'camera full screen' : 'camera back'));
+  return res.ok
+    ? Object.assign({}, res, { note: 'Say one short line. You still cannot see whether the picture is any good — do not describe it.' })
+    : res;
+}
+
 async function callFullScreenTool(input){
   const on = !(input && input.on === false);
   const res = await setFullScreen(on);
@@ -10629,6 +10787,23 @@ async function runWorkflowCommand(flow, text){
     persistCurrentSession();
     if(IS_DESKTOP && typeof speak === 'function') speak(line);
   };
+
+  if(flow === 'live_full' || flow === 'live_full_exit'){
+    const on = flow === 'live_full';
+    const res = await setLiveFullScreen(on);
+    if(res.error){
+      /* The commonest case by far: he asked before opening the camera.
+         Say which thing is missing rather than "I could not". */
+      say(!liveIsOpen()
+        ? (he ? '\u05d4\u05de\u05e6\u05dc\u05de\u05d4 \u05dc\u05d0 \u05e4\u05ea\u05d5\u05d7\u05d4. \u05ea\u05d2\u05d9\u05d3 \u05dc\u05d9 \u05dc\u05e4\u05ea\u05d5\u05d7 \u05d0\u05d5\u05ea\u05d4 \u05d5\u05d0\u05e0\u05d9 \u05d0\u05e2\u05e9\u05d4 \u05d0\u05d5\u05ea\u05da \u05de\u05e1\u05da \u05de\u05dc\u05d0.'
+              : 'The camera is not on. Say the word and I will open it, then put you full screen.')
+        : (he ? '\u05dc\u05d0 \u05d4\u05e6\u05dc\u05d7\u05ea\u05d9: ' + res.error : 'I could not: ' + res.error));
+      return true;
+    }
+    say(on ? (he ? '\u05d0\u05ea\u05d4 \u05e2\u05dc \u05db\u05dc \u05d4\u05de\u05e1\u05da.' : 'You are on the whole screen.')
+           : (he ? '\u05d4\u05d7\u05d6\u05e8\u05ea\u05d9 \u05d0\u05d5\u05ea\u05da.' : 'Back to the corner.'));
+    return true;
+  }
 
   if(flow === 'fullscreen' || flow === 'fullscreen_exit'){
     const on = flow === 'fullscreen';
@@ -11322,7 +11497,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
     if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL,
                                           TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
-                                          WORKSPACE_TOOL, FULLSCREEN_TOOL);
+                                          WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL);
   } else {
     /* The mode boundary is enforced HERE, by which tools exist, rather than by
        asking the model to hold back. A prompt instruction is something it can
@@ -11341,7 +11516,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
        all, so offering it there would only invite a promise it cannot keep. */
     if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL,
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
-                                      WORKSPACE_TOOL, FULLSCREEN_TOOL);
+                                      WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL);
     /* The report needs a connected store, not a desktop — it reads the same
        Shopify connection the website uses, so it is offered in both. Offered
        only when a store really is configured: a tool that can only return
@@ -11711,6 +11886,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await openModelWindow(null);
           } else if(tu.name === 'open_workspace'){
             payload = await callWorkspaceTool(tu.input);
+          } else if(tu.name === 'set_my_camera_full_screen'){
+            payload = await callLiveFullTool(tu.input);
           } else if(tu.name === 'set_full_screen'){
             payload = await callFullScreenTool(tu.input);
           } else if(tu.name === 'store_report'){
@@ -13638,6 +13815,80 @@ adjustLayout();
   /* Read as well as written. Without this, "go full screen" said twice
      leaves and re-enters instead of answering "already there". */
   window.__orbExpanded = ()=> expanded;
+
+  /* ------------------------------------------------------------------
+     MOVING THE HOLOGRAM
+
+     In the small orb the window IS the hologram, so moving it means
+     moving the window — which has always worked. Expanded, the window is
+     the whole screen and the hologram sat immovably in the middle of it.
+     That was the half of "let me put things where I want" that was
+     missing, and it is also why the camera pane felt welded to him: the
+     pane was free all along, but in a 180px window there was nowhere to
+     drag it TO.
+
+     Drag, not click. The same element is the click-to-talk target, so
+     nothing counts as a drag until the pointer has actually travelled,
+     and the click that ends one is swallowed rather than heard as a
+     request to speak.
+  ------------------------------------------------------------------ */
+  const ORB_OFF_KEY = 'jarvis:orb_offset';
+  let orbOff = { x: 0, y: 0 };
+  function applyOrbOffset(){
+    root.style.setProperty('--orb-dx', orbOff.x + 'px');
+    root.style.setProperty('--orb-dy', orbOff.y + 'px');
+  }
+  try{
+    const saved = JSON.parse(localStorage.getItem(ORB_OFF_KEY) || 'null');
+    if(saved && typeof saved.x === 'number' && typeof saved.y === 'number') orbOff = saved;
+  }catch(err){ /* a placement is cosmetic; never let it break the orb */ }
+  applyOrbOffset();
+
+  (function makeOrbDraggable(){
+    const hit = document.getElementById('orbHit');
+    if(!hit) return;
+    let from = null, moved = false;
+
+    hit.addEventListener('pointerdown', (e)=>{
+      if(!expanded) return;                 // only where there is room to move
+      from = { x: e.clientX, y: e.clientY, ox: orbOff.x, oy: orbOff.y };
+      moved = false;
+      try{ hit.setPointerCapture(e.pointerId); }catch(err){}
+    });
+
+    hit.addEventListener('pointermove', (e)=>{
+      if(!from) return;
+      const dx = e.clientX - from.x, dy = e.clientY - from.y;
+      // Under five pixels this is a click with a shaky hand, not a drag.
+      if(!moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+      if(!moved){ moved = true; root.classList.add('orb-dragging'); }
+      /* Clamped well inside the window. Pushed off the edge he would have
+         nothing left to grab, and no way back except clearing storage. */
+      const limitX = window.innerWidth  * 0.42;
+      const limitY = window.innerHeight * 0.42;
+      orbOff = {
+        x: Math.max(-limitX, Math.min(limitX, from.ox + dx)),
+        y: Math.max(-limitY, Math.min(limitY, from.oy + dy))
+      };
+      applyOrbOffset();
+    });
+
+    const release = ()=>{
+      if(!from) return;
+      from = null;
+      if(moved){
+        root.classList.remove('orb-dragging');
+        try{ localStorage.setItem(ORB_OFF_KEY, JSON.stringify(orbOff)); }catch(err){}
+        /* The click that ends a drag must not also start a turn. */
+        window.addEventListener('click', (ev)=>{
+          ev.stopPropagation(); ev.preventDefault();
+        }, { capture:true, once:true });
+      }
+      moved = false;
+    };
+    hit.addEventListener('pointerup', release);
+    hit.addEventListener('pointercancel', release);
+  })();
   document.addEventListener('dblclick', ()=> setExpanded(!expanded));
 
   /* Escape now has two jobs, in the order you would expect: leave the

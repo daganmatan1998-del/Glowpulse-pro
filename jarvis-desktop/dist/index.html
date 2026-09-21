@@ -1847,6 +1847,7 @@ const I18N = {
     micDenied: 'Microphone permission was refused. Allow it from the padlock icon in the address bar, then try again.',
     sttFailed: 'Could not transcribe: {why}',
     seeing: 'Looking at: {what}',
+    saidNotDone: 'He described doing something and no tool ran, so it did not happen. The sentence was not spoken. Nothing was changed on your machine.',
     cameraDescribed: 'Note: no engine on your worker takes pictures directly, so anything you show him is described by a vision model first and he answers from the description. Fine detail — small print, exact shades — may not survive that. Set ANTHROPIC_API_KEY, or point the chain at a model that sees, for him to look at it himself.',
     cameraBlind: 'The camera is on, but no engine connected to your worker can see pictures — the worker strips them out on the way, so what you hold up will not reach him. Fix it on Cloudflare: set ANTHROPIC_API_KEY, or point the chain at a model that can see (Gemini, GPT-4o, Grok, Llama 4), or add that model to VISION_ENGINES.',
     sttOldWorker: 'Your Cloudflare worker is the old one, which forces Whisper into one language and is why requests come back as "Thank you". Run: wrangler deploy',
@@ -2070,6 +2071,7 @@ const I18N = {
     micDenied: 'ההרשאה למיקרופון נדחתה. תאשר דרך אייקון המנעול בשורת הכתובת ותנסה שוב.',
     sttFailed: 'לא הצלחתי לתמלל: {why}',
     seeing: 'מסתכל על: {what}',
+    saidNotDone: 'הוא תיאר פעולה ושום כלי לא רץ, אז זה לא קרה. המשפט לא הושמע. שום דבר לא השתנה במחשב שלך.',
     cameraDescribed: 'שים לב: אף מנוע ב-worker שלך לא מקבל תמונות ישירות, אז כל מה שתראה לו עובר קודם תיאור על ידי מודל ראייה, והוא עונה מהתיאור. פרטים עדינים — אותיות קטנות, גוונים מדויקים — עלולים לא לשרוד. להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה, כדי שיסתכל בעצמו.',
     cameraBlind: 'המצלמה פתוחה, אבל אף מנוע שמחובר ל-worker שלך לא יכול לראות תמונות — ה-worker מסנן אותן בדרך, ומה שתרים לא יגיע אליו. לתקן ב-Cloudflare: להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה (Gemini, GPT-4o, Grok, Llama 4), או להוסיף אותו ל-VISION_ENGINES.',
     sttOldWorker: 'ה-worker ב-Cloudflare הוא הישן — הוא כופה על Whisper שפה אחת, וזו הסיבה שבקשות חוזרות כמו "Thank you". הרץ: wrangler deploy',
@@ -10267,6 +10269,34 @@ const FLOW_RULES = [
       /זמן לעבודה/
     ], bare: [ /\bwork\s?space\b/, /סביבת ה?עבודה/ ] },
 
+  /* OPENING THE CAMERA DOES NOT GO THROUGH A MODEL ANY MORE.
+
+     "\u05d2'\u05e8\u05d5\u05d5\u05d9\u05e1 \u05e4\u05ea\u05d7 \u05de\u05e6\u05dc\u05de\u05d4" is the command he gives most, and it was
+     reaching a model and depending on that model choosing to call
+     open_camera. When it did not, the answer was "camera opened" and the
+     camera was shut. No amount of prompt wording makes that reliable,
+     because it is the wrong place to fix it: this is a switch, and a
+     switch should be thrown by the thing that heard the word.
+
+     It is now matched here and executed directly. There is no sentence
+     that can be said instead of it. */
+  { flow: 'camera_off', strong: [
+      /\b(close|shut|turn\s+off|switch\s+off|stop|kill|disable)\b[\s\S]{0,12}\b(the\s+|my\s+)?(camera|cam|webcam|video)\b/,
+      /\b(camera|cam|webcam)\s+off\s*$/,
+      /\bstop\s+(looking|watching|filming)\b/,
+      /(\u05e1\u05d2\u05d5\u05e8|\u05ea\u05e1\u05d2\u05d5\u05e8|\u05ea\u05db\u05d1\u05d4|\u05db\u05d1\u05d4|\u05ea\u05e2\u05e6\u05d5\u05e8|\u05ea\u05e4\u05e1\u05d9\u05e7)[\s\S]{0,12}\u05d4?\u05de\u05e6\u05dc\u05de\u05d4/,
+      /\u05d4?\u05de\u05e6\u05dc\u05de\u05d4[\s\S]{0,10}(\u05db\u05d1\u05d5\u05d9\u05d4|\u05e1\u05d2\u05d5\u05e8\u05d4)/
+    ], bare: [] },
+
+  { flow: 'camera_on', strong: [
+      /\b(open|start|turn\s+on|switch\s+on|activate|enable|show|fire\s+up)\b[\s\S]{0,12}\b(the\s+|my\s+)?(camera|cam|webcam)\b/,
+      /\b(camera|cam|webcam)\s+on\s*$/,
+      /\blet\s+me\s+show\s+you\b/,
+      /(\u05ea\u05e4\u05ea\u05d7|\u05e4\u05ea\u05d7|\u05ea\u05e4\u05e2\u05d9\u05dc|\u05d4\u05e4\u05e2\u05dc|\u05ea\u05d3\u05dc\u05d9\u05e7|\u05d3\u05dc\u05d9\u05e7|\u05ea\u05e4\u05e2\u05dc)[\s\S]{0,12}\u05d4?\u05de\u05e6\u05dc\u05de\u05d4/,
+      /\u05d4?\u05de\u05e6\u05dc\u05de\u05d4[\s\S]{0,10}(\u05d3\u05dc\u05d5\u05e7\u05d4|\u05e4\u05ea\u05d5\u05d7\u05d4)/,
+      /\u05d0\u05e0\u05d9 \u05e8\u05d5\u05e6\u05d4 \u05dc\u05d4\u05e8\u05d0\u05d5\u05ea \u05dc\u05da/
+    ], bare: [ /^\u05de\u05e6\u05dc\u05de\u05d4$/, /^camera$/ ] },
+
   { flow: 'store_report', strong: [
       /\bhow('?s|\s+is|\s+are)\b[\s\S]{0,18}\b(store|shop|we|things|sales|business)\b[\s\S]{0,14}\bdoing\b/,
       /\bhow('?s|\s+is)\b[\s\S]{0,14}\b(the|my)\s+(store|shop)\b/,
@@ -11058,6 +11088,21 @@ async function runWorkflowCommand(flow, text){
     persistCurrentSession();
     if(IS_DESKTOP && typeof speak === 'function') speak(line);
   };
+
+  if(flow === 'camera_on' || flow === 'camera_off'){
+    const on = flow === 'camera_on';
+    /* The switch is thrown here, by the code that heard the word. Whatever
+       comes out of the speaker afterwards is a description of something
+       that has already happened. */
+    const res = await callCameraTool(on ? {} : { close: true });
+    if(res && res.error){
+      say(he ? '\u05dc\u05d0 \u05d4\u05e6\u05dc\u05d7\u05ea\u05d9: ' + res.error : 'I could not: ' + res.error);
+      return true;
+    }
+    say(on ? (he ? '\u05d4\u05de\u05e6\u05dc\u05de\u05d4 \u05e4\u05ea\u05d5\u05d7\u05d4.' : 'Camera is open.')
+           : (he ? '\u05e1\u05d2\u05e8\u05ea\u05d9 \u05d0\u05d5\u05ea\u05d4.' : 'Camera closed.'));
+    return true;
+  }
 
   if(flow === 'live_full' || flow === 'live_full_exit'){
     const on = flow === 'live_full';
@@ -12077,6 +12122,32 @@ const ACTION_CLAIM_DONE = /^\s*(?:ok(?:ay)?[,.]?\s+)?(?:opened|closed|launched|s
    are passive forms he reaches for constantly and none of them were. */
 const ACTION_CLAIM_DONE_HE = /^\s*(?:\u05d0\u05d5\u05e7\u05d9[,.]?\s+)?(?:\u05e0\u05e4\u05ea\u05d7|\u05e0\u05e1\u05d2\u05e8|\u05e0\u05e9\u05de\u05e8|\u05e0\u05d5\u05e1\u05e3|\u05e0\u05e9\u05dc\u05d7|\u05e0\u05d5\u05e6\u05e8|\u05d1\u05d5\u05e6\u05e2|\u05e1\u05d2\u05d5\u05e8|\u05e4\u05ea\u05d5\u05d7|\u05de\u05d5\u05db\u05df|\u05d4\u05d5\u05e8\u05d3|\u05d4\u05d5\u05ea\u05e7\u05df)(?![\u0590-\u05FF])(?:[^.!?\n]{0,28})?[.!\u2026]?\s*$/;
 
+/* DID ANYTHING ACTUALLY RUN THIS TURN?
+
+   The single fact the voice gate below is built on. Set the moment a tool
+   is dispatched — including one that goes on to fail, because a failed
+   tool is still an attempt at the world, and the model is handed the
+   failure and can describe it honestly. What this is guarding against is
+   words with no attempt behind them at all. */
+let turnToolRan = false;
+
+/* A bare "here you go" is how an ANSWER is handed over as often as an
+   action, and the voice gate must not silence him mid-conversation for
+   saying it. So the gate reads claims slightly more strictly than the
+   nudge does: there, a false positive costs one wasted round and nothing
+   else; here it would cost him a sentence he was owed.
+
+   Only the bare form is exempt. "Here you go — I opened it" still counts,
+   because the rest of it is a claim. */
+const CLAIM_COURTESY = /^\s*(?:here you go|here it is|הנה לך)[.!…]?\s*$/i;
+
+function claimsItDidSomething(text){
+  const t = String(text || '').trim();
+  if(!t) return false;
+  if(CLAIM_COURTESY.test(t)) return false;
+  return claimsAnAction(t);
+}
+
 function claimsAnAction(text){
   const t = String(text || '');
   return ACTION_CLAIM_EN.test(t) || ACTION_CLAIM_HE.test(t) ||
@@ -12110,6 +12181,7 @@ function trimStaleFrames(messages){
    there is rejected — and is stripped again in trimStaleFrames. */
 async function askJarvis(userText, images, onText, tag){
   userInterrupted = false;
+  turnToolRan = false;
   /* Set for the whole turn, so every tool the loop runs is attributed to
      whoever started it rather than all of them reading "chat". */
   toolOrigin = (tag && tag.origin) || 'chat';
@@ -12190,6 +12262,9 @@ async function askJarvis(userText, images, onText, tag){
           /* Opened here, before the dispatch below, so that a tool which
              throws or never returns still leaves a record of having been
              asked for. */
+          /* Something is about to really happen. From here on, a sentence
+             claiming it is a description rather than a substitute. */
+          turnToolRan = true;
           const logEntry = logActionStart(tu.name, tu.input, toolOrigin);
           let payload;
           /* Belt and braces. The advanced tools are not offered in Normal Mode,
@@ -12327,7 +12402,11 @@ async function askJarvis(userText, images, onText, tag){
                          { role:'user', content: nudge }];
       data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
       const fixed = textOf(data);
-      if(fixed) collected = collected ? collected + '\n' + fixed : fixed;
+      /* REPLACES the claim rather than being appended under it. Appending
+         left the false sentence in the transcript and in the history the
+         model reads next turn — so its own untrue line came back to it as
+         something it had apparently established. */
+      if(fixed) collected = fixed;
     }
     clearToolStatus();
     if(data.stop_reason === 'tool_use'){
@@ -13546,6 +13625,36 @@ async function handleSend(){
   let shown = '';
   let speechBuffer = '';
   const speechFilter = makeSpeechFilter();
+
+  /* THE CLAIM IS NOT SPOKEN BEFORE THE ACTION HAPPENS.
+
+     This is the structural half of "he says he did it and does nothing",
+     and no amount of better detection could have fixed it. The reply is
+     STREAMED: each finished sentence goes into the speech queue the moment
+     it arrives. The check that catches an unbacked claim runs at the end
+     of the turn. So he heard "Opened YouTube", and only afterwards did the
+     correction arrive — as a second thing he also heard. The detector was
+     working. It was simply speaking after the fact.
+
+     Now a sentence that claims something was done is HELD rather than
+     spoken, for as long as nothing has actually run. The moment a tool
+     dispatches, everything held is released in order and the turn sounds
+     normal. If the turn ends having run nothing at all, the held sentences
+     are never spoken and he is told the truth instead.
+
+     Held, not deleted: the screen still shows the whole reply. It is the
+     speaker that stops making promises. */
+  let heldClaims = [];
+  const sayOrHold = (sentence)=>{
+    if(!sentence) return;
+    if(!turnToolRan && claimsItDidSomething(sentence)){ heldClaims.push(sentence); return; }
+    if(heldClaims.length && turnToolRan){
+      for(const held of heldClaims) enqueueSpeech(held);
+      heldClaims = [];
+    }
+    enqueueSpeech(sentence);
+  };
+
   const onText = (chunk)=>{
     if(!chunk) return;
     if(pending.isConnected) pending.remove();
@@ -13559,7 +13668,7 @@ async function handleSend(){
     while(true){
       const taken = takeSentence(speechBuffer, false);
       if(!taken) break;
-      enqueueSpeech(taken[0]);
+      sayOrHold(taken[0]);
       speechBuffer = taken[1];
     }
   };
@@ -13586,9 +13695,25 @@ async function handleSend(){
     chatLog.scrollTop = chatLog.scrollHeight;
     const tail = (speechBuffer + speechFilter.flush()).trim();
     speechBuffer = '';
-    if(tail) enqueueSpeech(tail);
+    if(tail) sayOrHold(tail);
   } else {
     addMessage('assistant', spokenText || reply);
+  }
+
+  /* The turn is over. Anything still held was a promise nothing backed up. */
+  if(heldClaims.length){
+    if(turnToolRan){
+      for(const held of heldClaims) enqueueSpeech(held);
+    } else {
+      /* He asked for something, was told it was done, and it was not. Say
+         that, out loud, instead of the sentence that was not true — and
+         put it on screen too, so it is not a thing he has to have heard. */
+      addMessage('system', t('saidNotDone'));
+      enqueueSpeech(currentLang === 'he'
+        ? 'לא ביצעתי את זה בפועל. תגיד שוב ואנסה עכשיו.'
+        : 'I did not actually do that. Say it again and I will.');
+    }
+    heldClaims = [];
   }
 
   // Open the first one; the rest just leave chips. Stacking a full-screen

@@ -1846,6 +1846,7 @@ const I18N = {
     permissionHint: 'Grant once and the browser remembers it for this site, so he stops asking. On iPhone, add the page to your Home Screen first - Safari forgets permissions for ordinary tabs every session.',
     micDenied: 'Microphone permission was refused. Allow it from the padlock icon in the address bar, then try again.',
     sttFailed: 'Could not transcribe: {why}',
+    seeing: 'Looking at: {what}',
     cameraBlind: 'The camera is on, but no engine connected to your worker can see pictures — the worker strips them out on the way, so what you hold up will not reach him. Fix it on Cloudflare: set ANTHROPIC_API_KEY, or point the chain at a model that can see (Gemini, GPT-4o, Grok, Llama 4), or add that model to VISION_ENGINES.',
     sttOldWorker: 'Your Cloudflare worker is the old one, which forces Whisper into one language and is why requests come back as "Thank you". Run: wrangler deploy',
     captureReset: 'The microphone had stopped responding. Reopened it.',
@@ -2067,6 +2068,7 @@ const I18N = {
     permissionHint: 'תאשר פעם אחת והדפדפן יזכור לאתר הזה, כך שהוא יפסיק לשאול. באייפון - תוסיף קודם את הדף למסך הבית, כי ספארי שוכח הרשאות של לשונית רגילה בכל פעם מחדש.',
     micDenied: 'ההרשאה למיקרופון נדחתה. תאשר דרך אייקון המנעול בשורת הכתובת ותנסה שוב.',
     sttFailed: 'לא הצלחתי לתמלל: {why}',
+    seeing: 'מסתכל על: {what}',
     cameraBlind: 'המצלמה פתוחה, אבל אף מנוע שמחובר ל-worker שלך לא יכול לראות תמונות — ה-worker מסנן אותן בדרך, ומה שתרים לא יגיע אליו. לתקן ב-Cloudflare: להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה (Gemini, GPT-4o, Grok, Llama 4), או להוסיף אותו ל-VISION_ENGINES.',
     sttOldWorker: 'ה-worker ב-Cloudflare הוא הישן — הוא כופה על Whisper שפה אחת, וזו הסיבה שבקשות חוזרות כמו "Thank you". הרץ: wrangler deploy',
     captureReset: 'המיקרופון הפסיק להגיב. פתחתי אותו מחדש.',
@@ -8748,6 +8750,85 @@ function stopLive(quiet){
   if(!quiet) addMessage('system', t('liveOff'));
 }
 
+/* ==================================================================
+   WHAT HE SHOWED HIM
+
+   Until now every message sent while the camera was open carried a
+   frame. Two things were wrong with that. It cost roughly 590 tokens a
+   turn for a picture nobody had asked about — and worse, a message with
+   an image attached is read THROUGH that image, so "open youtube" said
+   over an open camera became a question about whatever was on the desk.
+
+   So the camera no longer rides along. It is looked at when he asks it
+   to be looked at, once, and what was in the frame is remembered as a
+   short line of text — sixty tokens instead of six hundred — for the
+   minute and a half afterwards, which is the window he asked for.
+
+   If the remembered line is not enough to answer precisely, the model
+   asks for the picture back itself through look_again. It does not ask
+   him to hold it up again.
+   ================================================================== */
+
+/* A minute and a half, his figure. Long enough to show something and then
+   say what to do with it; short enough that "make it blue" an hour later
+   is not silently about a bottle he has put away. */
+const SEEN_TTL_MS = 90 * 1000;
+
+/* { at, subject, detail, frame:{media_type,data}, thumb } */
+let lastSeen = null;
+/* This turn is a look, so its answer is what gets remembered. */
+let lookPending = false;
+
+function seenIsFresh(){
+  return !!(lastSeen && (Date.now() - lastSeen.at) < SEEN_TTL_MS);
+}
+
+/* What he is looking at, put on screen beside the actual frame.
+
+   This is the whole answer to "I do not know if he sees well": the
+   picture that was sent and the one thing he locked onto, side by side,
+   every single time. If he fastened onto the mug instead of the bottle it
+   is obvious at a glance, before it costs a wrong answer. */
+function showWhatHeSaw(subject, thumb){
+  const line = t('seeing').replace('{what}', subject || '—');
+  addMessage('system', line, thumb ? [{ kind:'image', dataUrl: thumb }] : null);
+}
+
+function rememberWhatHeSaw(subject, detail, frame, thumb){
+  lastSeen = {
+    at: Date.now(),
+    subject: String(subject || '').trim().slice(0, 120),
+    detail: String(detail || '').trim().slice(0, 400),
+    frame: frame ? { media_type: frame.media_type, data: frame.data } : null,
+    thumb: thumb || null
+  };
+  showWhatHeSaw(lastSeen.subject, lastSeen.thumb);
+}
+
+/* The line that goes to the model instead of the picture. */
+function seenNote(){
+  if(!seenIsFresh()) return '';
+  const ago = Math.round((Date.now() - lastSeen.at) / 1000);
+  return '\n\nWHAT HE SHOWED YOU: ' + ago + ' seconds ago he held something up to the camera and ' +
+         'you looked at it. It was: ' + lastSeen.subject +
+         (lastSeen.detail ? ' — ' + lastSeen.detail : '') +
+         '. When he says "it", "this", "that one" or names nothing at all, he means THAT, and you ' +
+         'may act on it without asking him to show it again. You are working from your own notes, ' +
+         'not from the picture: if answering him properly needs the actual pixels — a colour, a ' +
+         'label, small print, an exact shape — call look_again and read it, rather than guessing ' +
+         'or asking him to hold it up a second time.';
+}
+
+/* Said only on the turn he asks to be looked at. */
+const LOOK_INSTRUCTION =
+  '\n\nHE IS SHOWING YOU SOMETHING RIGHT NOW. The frame attached to this message is his camera, ' +
+  'this second.\n\nFIRST, call note_what_you_see once, naming the SINGLE main thing in the frame in ' +
+  'a few words. Not the room, not the background, not everything you can make out — the one thing ' +
+  'he is holding up or pointing at. That name is shown to him beside the picture so he can see at ' +
+  'once whether you fastened onto the right object, and it is what you will be working from for the ' +
+  'next minute and a half.\n\nTHEN answer him in one or two short sentences. He can see the thing ' +
+  'himself, so do not inventory it — tell him what matters about it, or answer whatever he asked.';
+
 /* The frame as it looks right now. Kept small on purpose: this rides along
    with every message while live is on, and a full-resolution still each
    time would eat the request budget for no extra understanding. */
@@ -8816,7 +8897,13 @@ const EYE_DARK         = 0.0012;   // variance below which the lens is covered o
    an actual object in it fails to clear. */
 const EYE_SKIP         = '\u00b7'; // his way of saying "nothing worth mentioning"
 
-let eyeOn        = true;           // the user's switch, remembered
+/* OFF by default now, and the reason is his: an eye he cannot check is an
+   eye he cannot trust. "If I do not see what he sees, I do not know whether
+   he sees well." Unprompted remarks are also the opposite of what the
+   camera is now for — looking when asked, and only then. The switch and
+   the tool both still turn it back on, and a saved preference still wins
+   over this, so nobody who chose it loses it. */
+let eyeOn        = false;          // the user's switch, remembered
 let eyeTimer     = null;
 let eyePrev      = null;           // previous thumbnail, for motion
 let eyeSeen      = [];             // scenes already accounted for, for novelty
@@ -10009,6 +10096,27 @@ const FLOW_ASKING = /^(what|why|how\s+do(es)?|can\s+you\s+explain|tell\s+me\s+ab
    count when almost nothing else was said, or every sentence mentioning a
    screen would go full screen. */
 const FLOW_RULES = [
+  /* "What is this?" is a question AND an instruction — he is holding
+     something up while he says it. So this rule is marked as not subject
+     to the asking guard below, which exists to stop "what is the
+     workspace" from opening the workspace. Nothing else is exempt. */
+  { flow: 'look_now', ignoresAsking: true, strong: [
+      /\blook\s+(at\s+)?(this|that|here|it)\b/,
+      /\blook\s+at\s+what\s+i(?:'?m|\s+am)\s+(holding|showing)/,
+      /\bwhat\s+am\s+i\s+(holding|showing)\b/,
+      /\b(take|have)\s+a\s+look\b/,
+      /\b(can|do)\s+you\s+see\s+(this|that|it)\b/,
+      /\bwhat('?s|\s+is)\s+(this|that)\s*$/,
+      /\bcheck\s+this\s+out\b/,
+      /\bsee\s+this\b/,
+      /^(\u05ea\u05e8\u05d0\u05d4|\u05ea\u05e1\u05ea\u05db\u05dc|\u05ea\u05d1\u05d9\u05d8)\s*$/,
+      /(\u05ea\u05e8\u05d0\u05d4|\u05ea\u05e1\u05ea\u05db\u05dc|\u05ea\u05d1\u05d9\u05d8|\u05ea\u05d1\u05d3\u05d5\u05e7)[\s\S]{0,12}(\u05de\u05d4 \u05d0\u05e0\u05d9 \u05de\u05d7\u05d6\u05d9\u05e7|\u05de\u05d4 \u05d0\u05e0\u05d9 \u05de\u05e8\u05d0\u05d4|\u05e2\u05dc \u05d6\u05d4|\u05d0\u05ea \u05d6\u05d4|\u05db\u05d0\u05df|\u05e4\u05d4|\u05e8\u05d2\u05e2)/,
+      /\u05de\u05d4 \u05d0\u05e0\u05d9 \u05de\u05d7\u05d6\u05d9\u05e7/,
+      /\u05d0\u05ea\u05d4 \u05e8\u05d5\u05d0\u05d4 (\u05d0\u05ea )?(\u05d6\u05d4|\u05d4?\u05d3\u05d1\u05e8 \u05d4\u05d6\u05d4)/,
+      /^\u05de\u05d4 \u05d6\u05d4\s*$/,
+      /^\u05de\u05d4 \u05d6\u05d4 \u05d4?\u05d3\u05d1\u05e8/
+    ], bare: [] },
+
   /* These two come first on purpose. "make me full screen" is four words
      and contains "full screen", so the bare rule further down would claim
      it and put the HUD up instead of his camera. Strong patterns are all
@@ -10105,20 +10213,42 @@ function detectWorkflowCommand(text){
 
   /* "ג'רוויס, מסך מלא" opens by addressing him. The name is not part of
      the command, and leaving it in makes every pattern need a prefix. */
+  /* TWO strippings, because one of them eats a verb.
+
+     WAKE_FILLER is the courtesy people put around a NAME — "hey", "listen",
+     "look", "אתה". Removing it is right for every command whose words sit
+     after the address. It is wrong for the one command whose first word IS
+     the instruction: "look at this" becomes "at this", and "אתה רואה את
+     זה" becomes "רואה את זה". So the rules that carry their own verb are
+     also offered the sentence with only his name taken off. */
+  let named = words.slice();
+  while(named.length > 1 && wordIsName(named[0])) named = named.slice(1);
+  const restNamed = named.join(' ');
+
   while(words.length > 1 && (wordIsName(words[0]) || WAKE_FILLER.indexOf(words[0]) >= 0)){
     words = words.slice(1);
   }
   const rest = words.join(' ');
   if(!rest) return null;
 
-  if(FLOW_LATER.test(rest) || FLOW_NOT.test(rest) || FLOW_ASKING.test(rest)) return null;
+  if(FLOW_LATER.test(rest) || FLOW_NOT.test(rest)) return null;
 
+  /* The asking guard silences a sentence that is ABOUT a feature rather
+     than a request for it. One command's natural form is a question —
+     "what is this?", said while holding something up — so rules that say
+     so are not subject to it. Everything else still is. */
+  const asking = FLOW_ASKING.test(rest);
   for(const rule of FLOW_RULES){
-    for(const re of rule.strong){ if(re.test(rest)) return rule.flow; }
+    if(asking && !rule.ignoresAsking) continue;
+    for(const re of rule.strong){
+      if(re.test(rest)) return rule.flow;
+      if(rule.ignoresAsking && re.test(restNamed)) return rule.flow;
+    }
   }
   /* The bare forms, and only when that really is all he said. */
   if(words.length <= 4){
     for(const rule of FLOW_RULES){
+      if(asking && !rule.ignoresAsking) continue;
       for(const re of rule.bare){ if(re.test(rest)) return rule.flow; }
     }
   }
@@ -10891,6 +11021,58 @@ async function runWorkflowCommand(flow, text){
   return false;
 }
 
+/* The frame of the turn he asked to be looked at, held so the tool below
+   can file it away with the name the model gives it. */
+let lookFrame = null;
+
+const NOTE_SEEN_TOOL = {
+  name: 'note_what_you_see',
+  description: "Write down the SINGLE main thing in the camera frame he has just shown you. Call it once, immediately, before you answer him.\n\nThe subject is the one object he is holding up or pointing at — not the room, not the desk, not a list of everything visible. Three to six words: \"a dark glass serum bottle\", \"a soldering iron, tip burnt\", \"a printed invoice\".\n\nWhat you write is shown to him beside the picture, so he can see at once whether you fastened onto the right thing. It is also what you will be working from when he says \"it\" over the next minute and a half, so name the thing he cares about rather than the largest object in view.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      subject: { type:'string', description:'The one main thing, in three to six words.' },
+      detail:  { type:'string', description:'Optional: one short clause of detail worth keeping — a colour, a state, a reading. Not a description of the whole scene.' }
+    },
+    required: ['subject']
+  }
+};
+
+let noteSeenCalled = false;
+
+function callNoteSeenTool(input){
+  const subject = String((input && input.subject) || '').trim();
+  if(!subject) return { error: 'no subject given' };
+  noteSeenCalled = true;
+  rememberWhatHeSaw(subject, input && input.detail, lookFrame, lookFrame && lookFrame.dataUrl);
+  return { ok: true, remembered: subject,
+           note: 'Filed, and shown to him beside the picture. Now answer him in a sentence or two. ' +
+                 'Do not repeat the description back — he is looking at the thing.' };
+}
+
+const LOOK_AGAIN_TOOL = {
+  name: 'look_again',
+  description: "Get back the picture he showed you, to read it properly.\n\nYou are normally working from your own short note about it. Call this the moment that note is not enough to answer precisely — an exact colour, a label, small print, a shape you would otherwise be guessing at. It costs one picture and it is always better than guessing, and far better than asking him to hold the thing up again.\n\nIt returns the same frame he showed you, not a new one: if he has moved on to something else, ask him to show you that instead.",
+  input_schema: { type: 'object', properties: {}, required: [] }
+};
+
+function callLookAgainTool(){
+  if(!lastSeen || !lastSeen.frame){
+    return { error: 'he has not shown you anything yet',
+             tell_the_user: 'Ask him to hold it up and say "look at this".' };
+  }
+  if(!seenIsFresh()){
+    const ago = Math.round((Date.now() - lastSeen.at) / 1000);
+    return { error: 'that was ' + ago + ' seconds ago and is no longer held',
+             tell_the_user: 'Say that it has been a while and ask him to show you again.' };
+  }
+  return {
+    image: { media_type: lastSeen.frame.media_type, data: lastSeen.frame.data,
+             note: 'This is the picture he showed you. Read what you need from it and answer.' },
+    subject: lastSeen.subject
+  };
+}
+
 const CLOSE_WINDOW_TOOL = {
   name: 'close_this_window',
   description: "Close the window the user is currently looking at — the foreground window on his desktop. Desktop only, Windows only. Use it when he says to close this window, close that, or shut this. It sends the same close request as clicking the X, so an application with unsaved work will still prompt him; it does not force-kill anything. You cannot choose WHICH window: it is always the one in front, and there is no way to name a target. If he asks to close something specific by name, say that you can only close whatever is in front and ask him to bring it forward first. It will refuse to close your own panel.",
@@ -11493,6 +11675,13 @@ async function readMessageStream(response, onText){
   return { content: blocks.filter(Boolean), stop_reason: stopReason, usage: usage };
 }
 
+/* Either he is being looked at this turn, or he is being remembered from
+   the last one. Never both: a look replaces the note it is about to write. */
+function cameraSystemExtras(){
+  if(lookPending) return LOOK_INSTRUCTION;
+  return seenNote();
+}
+
 async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget){
   if(backendProbe){ try{ await backendProbe; }catch(err){} }
   const controller = new AbortController();
@@ -11508,7 +11697,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
   const requestBody = {
     model:'claude-sonnet-4-6',
     max_tokens: tokenBudget,
-    system: getSystemPrompt(usingOwnBackend),
+    system: String(getSystemPrompt(usingOwnBackend)) + cameraSystemExtras(),
     messages: messages
   };
   if(wantStream) requestBody.stream = true;
@@ -11525,7 +11714,8 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
     if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL,
                                           TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
-                                          WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL);
+                                          WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
+                                          NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL);
   } else {
     /* The mode boundary is enforced HERE, by which tools exist, rather than by
        asking the model to hold back. A prompt instruction is something it can
@@ -11544,7 +11734,8 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
        all, so offering it there would only invite a promise it cannot keep. */
     if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL,
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
-                                      WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL);
+                                      WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
+                                      NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL);
     /* The report needs a connected store, not a desktop — it reads the same
        Shopify connection the website uses, so it is offered in both. Offered
        only when a store really is configured: a tool that can only return
@@ -11914,6 +12105,10 @@ async function askJarvis(userText, images, onText, tag){
             payload = await openModelWindow(null);
           } else if(tu.name === 'open_workspace'){
             payload = await callWorkspaceTool(tu.input);
+          } else if(tu.name === 'note_what_you_see'){
+            payload = callNoteSeenTool(tu.input);
+          } else if(tu.name === 'look_again'){
+            payload = callLookAgainTool();
           } else if(tu.name === 'set_my_camera_full_screen'){
             payload = await callLiveFullTool(tu.input);
           } else if(tu.name === 'set_full_screen'){
@@ -11983,7 +12178,11 @@ async function askJarvis(userText, images, onText, tag){
                 { type:'image', source:{ type:'base64',
                   media_type: payload.image.media_type || 'image/png',
                   data: payload.image.data } },
-                { type:'text', text:'This is his screen right now. Read what is relevant and answer.' }
+                /* The caption belongs to whoever produced the image. It said
+                   "this is his screen" for every image result, which is a lie
+                   about a camera frame and exactly the kind of lie that makes
+                   an answer confidently wrong. */
+                { type:'text', text: payload.image.note || 'This is his screen right now. Read what is relevant and answer.' }
               ]
             });
           } else {
@@ -12044,6 +12243,20 @@ async function askJarvis(userText, images, onText, tag){
        which engine was answering, not whether anything came back at all. Every
        diagnosis then started from zero. Print the evidence instead. */
     let reply = collected.trim();
+    if(lookPending){
+      lookPending = false;
+      /* He asked to be looked at and the note never got written — the
+         model answered straight out. Rather than lose what it saw, the
+         opening clause of its own answer becomes the subject, so the card
+         still appears and "it" still means something afterwards. Marked
+         as a fallback in nothing but the wording: he sees exactly what was
+         recorded either way. */
+      if(!noteSeenCalled){
+        const first = reply.split(/(?<=[.!?\u05be])\s|\n/)[0] || reply;
+        rememberWhatHeSaw(first.slice(0, 90), '', lookFrame, lookFrame && lookFrame.dataUrl);
+      }
+      lookFrame = null;
+    }
     if(!reply){
       addMessage('system', describeBreak(data, budget));
       reply = currentLang === 'he'
@@ -12059,6 +12272,11 @@ async function askJarvis(userText, images, onText, tag){
     return reply;
   }catch(err){
     clearToolStatus();
+    /* Whatever happened, this turn is no longer a look. Left set, the next
+       thing he said would be answered with the looking instruction and no
+       picture attached to look at. */
+    lookPending = false;
+    lookFrame = null;
     if(err.name === 'AbortError' || userInterrupted){
       /* THE TURN WAS CUT OFF, AND THE HISTORY HAS TO SAY SO.
 
@@ -13102,13 +13320,26 @@ function makeTypewriter(el, onTick){
 async function handleSend(){
   const text = chatInput.value.trim();
   const images = pendingImages.slice();
-  /* While live view is on, whatever the camera is pointed at right now goes
-     with the message — that is the whole point of it. Only when nothing was
-     attached by hand, so an explicit photo is never quietly displaced by the
-     live frame. */
-  if(liveActive() && !images.length){
+  /* THE CAMERA NO LONGER RIDES ALONG WITH EVERY MESSAGE.
+
+     It used to: while live view was on, every single thing he said carried
+     a frame. That cost about 590 tokens a turn for a picture nobody had
+     asked about, and it did something worse than cost — a message with an
+     image attached is read THROUGH that image, so "open youtube" said over
+     an open camera became a question about whatever was on his desk.
+
+     Now the frame goes only when he asks to be looked at, and what was in
+     it is remembered as a line of text for the minute and a half
+     afterwards. An attached photo is untouched by any of this: choosing a
+     file is already asking. */
+  if(!images.length && text && liveActive() && detectWorkflowCommand(text) === 'look_now'){
     const frame = grabLiveFrame();
-    if(frame) images.push(frame);
+    if(frame){
+      images.push(frame);
+      lookFrame = frame;
+      lookPending = true;
+      noteSeenCalled = false;
+    }
   }
   if((!text && !images.length) || isThinking) return;
   eyeAbandon();   // his turn outranks an unprompted remark, always

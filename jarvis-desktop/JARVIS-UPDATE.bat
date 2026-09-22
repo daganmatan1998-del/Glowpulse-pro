@@ -169,8 +169,18 @@ if not exist "%PROJECT%\node_modules" (
   if errorlevel 1 (
     popd
     echo  [X] STOP - npm install failed.
-    echo      Node.js and Rust both have to be installed first:
-    echo      https://nodejs.org   and   https://rustup.rs
+    echo.
+    echo      On a machine that has never built JARVIS, three things
+    echo      are needed and this script cannot install any of them:
+    echo.
+    echo        1. Node.js            https://nodejs.org
+    echo        2. Rust               https://rustup.rs
+    echo        3. The MSVC build tools, which rustup offers to install
+    echo           for you the first time you run it. Say yes. Without
+    echo           them Rust installs fine and then cannot link anything,
+    echo           which is a confusing way to fail.
+    echo.
+    echo      Install those, then run this again.
     goto :fail
   )
   popd
@@ -192,6 +202,10 @@ if not "%BUILDRC%"=="0" (
   echo.
   echo      Scroll up and copy the last 20 lines to Claude.
   echo      Look for a red line starting with  error
+  echo.
+  echo      On a machine building this for the first time, the usual
+  echo      cause is the MSVC build tools missing - re-run rustup and
+  echo      accept the Visual Studio component it offers.
   goto :fail
 )
 

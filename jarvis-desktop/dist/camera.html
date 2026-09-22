@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JARVIS — camera</title>
+<!--
+  THE CAMERA, IN A WINDOW OF ITS OWN.
+
+  It used to be a panel inside the orb, and the orb is a 180px square
+  window — so the panel was 200px wide inside a 180px window and there was
+  nowhere on earth to drag it to. No amount of CSS fixes a box that is
+  bigger than the box holding it.
+
+  So it is a real window now: dragged by its title bar, resized by its
+  edges, put anywhere on the screen, and left there.
+
+  The stream lives HERE rather than in the orb, because two webviews
+  cannot share a MediaStream. The orb needs pictures, not the stream, so
+  this pushes it a frame a couple of times a second and the orb keeps the
+  most recent one. That only became cheap once the camera stopped riding
+  along with every message — before that it would have been a frame per
+  sentence for no reason.
+-->
+<style>
+  :root{ --cyan:#00e5ff; --ink:#03080f; }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; height:100%; background:var(--ink); overflow:hidden;
+    font-family:'Courier New', Consolas, monospace; color:#bfe9f7;
+    user-select:none; -webkit-user-select:none;
+  }
+  #wrap{ position:fixed; inset:0; display:flex; flex-direction:column; }
+  #feed{
+    flex:1 1 auto; width:100%; min-height:0;
+    object-fit:cover; background:#000; display:block;
+  }
+  #feed.mirrored{ transform:scaleX(-1); }
+  #bar{
+    flex:0 0 auto; display:flex; align-items:center; gap:10px;
+    padding:6px 10px; background:rgba(4,12,20,0.94);
+    border-top:1px solid rgba(0,229,255,0.28);
+    font-size:10px; letter-spacing:1.6px; text-transform:uppercase;
+  }
+  #dot{
+    width:7px; height:7px; border-radius:50%; background:#ff4d4d;
+    box-shadow:0 0 8px rgba(255,77,77,0.9); flex:0 0 auto;
+  }
+  #dot.live{ background:#38e08a; box-shadow:0 0 8px rgba(56,224,138,0.9); }
+  #state{ flex:1 1 auto; color:rgba(160,205,225,0.9); white-space:nowrap;
+          overflow:hidden; text-overflow:ellipsis; }
+  button{
+    font:inherit; font-size:10px; letter-spacing:1.6px; text-transform:uppercase;
+    color:#bfe9f7; background:transparent; cursor:pointer;
+    border:1px solid rgba(0,229,255,0.4); border-radius:3px; padding:3px 9px;
+  }
+  button:hover{ border-color:var(--cyan); color:#fff; }
+  #err{
+    position:absolute; inset:0; display:none; place-content:center;
+    padding:22px; text-align:center; font-size:12px; line-height:1.7;
+    letter-spacing:0.6px; text-transform:none; background:var(--ink);
+  }
+  #err.show{ display:grid; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <video id="feed" autoplay playsinline muted></video>
+  <div id="bar">
+    <span id="dot"></span>
+    <span id="state">starting…</span>
+    <button id="mirror" title="Flip the picture left to right">flip</button>
+  </div>
+</div>
+<div id="err"></div>
+
+<script>
+(function(){
+  "use strict";
+  var T      = window.__TAURI__ || {};
+  var ev     = T.event || {};
+  var feed   = document.getElementById('feed');
+  var dot    = document.getElementById('dot');
+  var state  = document.getElementById('state');
+  var errBox = document.getElementById('err');
+  var stream = null, timer = null, mirrored = true;
+
+  /* How often a frame is handed to the orb. Fast enough that "look at
+     this" never shows something stale, slow enough to be free. */
+  var PUSH_MS = 600;
+  var MAX_W   = 768;
+
+  function say(text, live){
+    state.textContent = text;
+    dot.classList.toggle('live', !!live);
+  }
+  function emit(name, payload){
+    try{ if(ev.emit) ev.emit(name, payload); }catch(e){}
+  }
+  function fail(message, detail){
+    if(timer){ clearInterval(timer); timer = null; }
+    errBox.textContent = message;
+    errBox.classList.add('show');
+    say('not available', false);
+    emit('jarvis://camera-error', String(detail || message));
+  }
+
+  /* Remember where he put it. The window is created by Rust at a default
+     spot; if he has moved or resized it before, it goes back there. */
+  var POS_KEY = 'jarvis:camwin';
+  function rememberPlace(){
+    try{
+      var w = T.window && T.window.getCurrentWindow && T.window.getCurrentWindow();
+      if(!w) return;
+      Promise.all([w.outerPosition(), w.outerSize()]).then(function(r){
+        localStorage.setItem(POS_KEY, JSON.stringify({
+          x:r[0].x, y:r[0].y, w:r[1].width, h:r[1].height
+        }));
+      }).catch(function(){});
+    }catch(e){}
+  }
+  function restorePlace(){
+    try{
+      var saved = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
+      if(!saved || typeof saved.x !== 'number') return;
+      var W = T.window;
+      if(!W || !W.getCurrentWindow) return;
+      var w = W.getCurrentWindow();
+      w.setPosition(new W.PhysicalPosition(saved.x, saved.y)).catch(function(){});
+      if(saved.w > 120 && saved.h > 100){
+        w.setSize(new W.PhysicalSize(saved.w, saved.h)).catch(function(){});
+      }
+    }catch(e){}
+  }
+
+  function pushFrame(){
+    if(!stream || !feed.videoWidth) return;
+    try{
+      var scale = Math.min(1, MAX_W / feed.videoWidth);
+      var c = document.createElement('canvas');
+      c.width  = Math.round(feed.videoWidth  * scale);
+      c.height = Math.round(feed.videoHeight * scale);
+      var ctx = c.getContext('2d');
+      /* Mirrored on screen is what he expects of himself; mirrored in the
+         frame that gets analysed is not, because text comes out backwards.
+         The picture that leaves here is always the true way round. */
+      ctx.drawImage(feed, 0, 0, c.width, c.height);
+      emit('jarvis://frame', c.toDataURL('image/jpeg', 0.75));
+    }catch(e){ /* one dropped frame is not worth reporting */ }
+  }
+
+  function start(){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      return fail('This window cannot reach a camera.', 'no getUserMedia');
+    }
+    say('asking for the camera…', false);
+    navigator.mediaDevices.getUserMedia({
+      video: { width:{ ideal:1280 }, height:{ ideal:720 }, facingMode:'user' },
+      audio: false
+    }).then(function(s){
+      stream = s;
+      feed.srcObject = s;
+      feed.classList.toggle('mirrored', mirrored);
+      return feed.play().catch(function(){});
+    }).then(function(){
+      var track = stream.getVideoTracks()[0];
+      var st = (track && track.getSettings) ? track.getSettings() : {};
+      say((st.width || '?') + '×' + (st.height || '?') + ' — live', true);
+      emit('jarvis://camera-open', true);
+      if(timer) clearInterval(timer);
+      timer = setInterval(pushFrame, PUSH_MS);
+      pushFrame();
+    }).catch(function(e){
+      var name = (e && e.name) || '';
+      if(name === 'NotAllowedError' || name === 'SecurityError'){
+        fail('Windows is blocking the camera for desktop apps.\n\n' +
+             'Settings → Privacy & security → Camera → turn on ' +
+             '"Let desktop apps access your camera", then open this again.', name);
+      } else if(name === 'NotReadableError' || name === 'TrackStartError'){
+        fail('Another application is using the camera.\n\n' +
+             'Close Zoom, Teams, Chrome or whatever has it, then open this again.', name);
+      } else if(name === 'NotFoundError'){
+        fail('No camera found on this machine.', name);
+      } else {
+        fail('The camera would not start.\n\n' + ((e && e.message) || name || 'unknown'), name);
+      }
+    });
+  }
+
+  document.getElementById('mirror').addEventListener('click', function(){
+    mirrored = !mirrored;
+    feed.classList.toggle('mirrored', mirrored);
+  });
+
+  /* The orb asks for one out of turn, when it wants to look right now
+     rather than at whatever the last push happened to catch. */
+  if(ev.listen) ev.listen('jarvis://grab-frame', function(){ pushFrame(); });
+
+  /* "Jarvis, make me full screen" — which, now that the camera is a real
+     window, means this window filling the display at its own frame rate
+     rather than the orb blowing up a still. */
+  if(ev.listen) ev.listen('jarvis://camera-fullscreen', function(e){
+    try{
+      var W = T.window;
+      if(!W || !W.getCurrentWindow) return;
+      W.getCurrentWindow().setFullscreen(e && e.payload === true).catch(function(){});
+    }catch(err){}
+  });
+
+  window.addEventListener('beforeunload', function(){
+    rememberPlace();
+    emit('jarvis://camera-closed', true);
+    if(stream) stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
+  });
+  /* Moves and resizes are frequent; the last one before it closes is the
+     one that matters, and beforeunload covers that. This keeps the saved
+     spot fresh in between without writing on every pixel of a drag. */
+  setInterval(rememberPlace, 4000);
+
+  restorePlace();
+  start();
+})();
+</script>
+</body>
+</html>

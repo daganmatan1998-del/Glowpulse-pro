@@ -1,0 +1,32 @@
+[package]
+name = "jarvis"
+version = "1.0.0"
+description = "JARVIS desktop panel"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-global-shortcut = "2"
+
+# Only the two Win32 pieces needed to close the foreground window. The full
+# windows crate is enormous; windows-sys with these features is small and
+# compiles quickly, which matters when a release build already takes hours.
+# Screen capture. xcap handles the platform differences; image is pinned to
+# PNG only, since pulling in every codec would add minutes to a build that is
+# already long.
+xcap = "0.0.14"
+image = { version = "0.25", default-features = false, features = ["png"] }
+base64 = "0.22"
+dirs-next = "2"   # to find the user's Pictures folder
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

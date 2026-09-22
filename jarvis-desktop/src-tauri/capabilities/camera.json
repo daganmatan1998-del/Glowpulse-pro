@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "camera",
+  "description": "The camera window, and nothing else. It needs to read and set its own position and size, because it remembers where he put it, and it needs events to hand frames to the orb. No opener, no shell, no filesystem: it films and it reports, and that is the whole of it.",
+  "windows": ["camera"],
+  "permissions": [
+    "core:default",
+    "core:event:allow-emit",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:window:allow-close",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen"
+  ]
+}

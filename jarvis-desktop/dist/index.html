@@ -8621,7 +8621,60 @@ const liveBtn  = document.getElementById('liveBtn');
 let liveStream = null;
 let liveFacing = 'environment';
 
-function liveActive(){ return !!liveStream; }
+/* ==================================================================
+   THE CAMERA IN ITS OWN WINDOW
+
+   On the desktop the camera is no longer a panel inside the orb. It
+   could never be moved there: the orb is a 180px square window and the
+   panel is 200px wide, so it was bigger than the thing holding it and
+   clampPane had nowhere to put it. A real window is dragged by its
+   title bar and resized by its edges, which is what he asked for three
+   times.
+
+   The stream lives in THAT window, because two webviews cannot share a
+   MediaStream. It hands this one a frame every 600ms and the freshest
+   is kept here, so liveActive() and grabLiveFrame() below answer exactly
+   as they always did and none of their four callers know the difference.
+
+   On the website, and on any build whose Rust half predates this, the
+   old in-page panel is still used. Nothing was removed.
+   ================================================================== */
+let liveWinOpen  = false;   // the separate window is up
+let liveWinFrame = null;    // the most recent frame it sent
+
+function cameraWindowUsable(){
+  return !!(IS_DESKTOP && window.__TAURI__ && window.__TAURI__.core &&
+            window.__TAURI__.core.invoke);
+}
+
+async function startLiveWindow(){
+  const invoke = window.__TAURI__.core.invoke;
+  try{
+    await invoke('open_camera_window');
+  }catch(err){
+    /* An older build has no such command. Fall back to the panel rather
+       than leaving him with no camera at all. */
+    console.info('JARVIS: no camera window in this build -', (err && err.message) || err);
+    return false;
+  }
+  liveWinOpen = true;
+  liveWinFrame = null;
+  noteCameraGranted();
+  liveBtn.classList.add('active');
+  addMessage('system', t('liveOn'));
+  warnIfNothingCanSee();
+  return true;
+}
+
+async function stopLiveWindow(){
+  liveWinOpen = false;
+  liveWinFrame = null;
+  if(!cameraWindowUsable()) return;
+  try{ await window.__TAURI__.core.invoke('close_camera_window'); }catch(err){}
+}
+
+/* Whatever it is being filmed with, it is on. */
+function liveActive(){ return !!liveStream || liveWinOpen; }
 
 /* GRANTING THE CAMERA ONCE, PERMANENTLY.
 
@@ -8671,6 +8724,8 @@ async function makeRoomForThePrompt(){
 }
 
 async function startLive(){
+  /* The window first, the panel only if this build cannot make one. */
+  if(cameraWindowUsable() && await startLiveWindow()) return;
   if(!cameraSupported()){
     addMessage('system', t('liveNoCamera'));
     return;
@@ -8750,6 +8805,14 @@ function warnIfNothingCanSee(){
 }
 
 function stopLive(quiet){
+  if(liveWinOpen){
+    stopLiveWindow();
+    liveBtn.classList.remove('active');
+    document.documentElement.classList.remove('live-full');
+    eyeStop();
+    if(!quiet) addMessage('system', t('liveOff'));
+    return;
+  }
   if(liveStream){
     liveStream.getTracks().forEach(tr => { try{ tr.stop(); }catch(e){} });
     liveStream = null;
@@ -8847,6 +8910,10 @@ const LOOK_INSTRUCTION =
    with every message while live is on, and a full-resolution still each
    time would eat the request budget for no extra understanding. */
 function grabLiveFrame(){
+  /* Filmed by the other window: the freshest thing it sent, at most
+     600ms old. Nothing here has to change for that — the shape returned
+     is the same shape it has always been. */
+  if(liveWinOpen) return liveWinFrame;
   if(!liveStream || !liveFeed.videoWidth) return null;
   const maxW = 768;
   const scale = Math.min(1, maxW / liveFeed.videoWidth);
@@ -10684,7 +10751,14 @@ function summariseOrders(nodes){
   const byProduct = new Map();
   const seenCustomers = new Set();
 
-  for(const node of nodes){
+  /* GUARDED, because this reads a server's answer rather than our own
+     data. Shopify returns an edge with a null node whenever a field on it
+     is outside the token's scope, and one of those used to take the whole
+     report down with "cannot read properties of null" — no card, no
+     numbers, no explanation. A missing order is one order missing; a
+     thrown exception is the entire answer missing. */
+  for(const node of (Array.isArray(nodes) ? nodes : [])){
+    if(!node || typeof node !== 'object') continue;
     /* A test order is not a sale. Counting them inflates a quiet day into a
        good one, which is the single most misleading thing this could do. */
     if(node.test) continue;
@@ -10948,9 +11022,14 @@ async function callStoreReportTool(input){
    state is defined in the stylesheet beside the rest of the orb.
 ------------------------------------------------------------------ */
 
-/* Whether there is a picture to make full screen in the first place. */
+/* Whether there is a picture to make full screen in the first place.
+
+   Asks liveActive(), not the panel. With the camera in a window of its
+   own the panel is never opened at all, so reading the panel meant "make
+   me full screen" refused while the camera was plainly running. */
 function liveIsOpen(){
-  return !!(typeof livePane !== 'undefined' && livePane && livePane.classList.contains('open'));
+  return typeof liveActive === 'function' ? liveActive()
+       : !!(typeof livePane !== 'undefined' && livePane && livePane.classList.contains('open'));
 }
 
 /* "Jarvis, make me full screen" — his camera fills the display and the
@@ -10962,11 +11041,27 @@ async function setLiveFullScreen(on){
   const root = document.documentElement;
   if(!on){
     root.classList.remove('live-full');
+    if(liveWinOpen){
+      try{ await window.__TAURI__.event.emit('jarvis://camera-fullscreen', false); }catch(err){}
+    }
     return { ok: true, live_full_screen: false };
   }
   if(!liveIsOpen()){
     return { error: 'the camera is not on, so there is nothing to show full screen',
              tell_the_user: 'Say that the camera is not open yet, and offer to open it. Do not say you made anything full screen.' };
+  }
+  /* When the camera has a window of its own, filling the screen means
+     filling it with THAT window — the picture at its real frame rate,
+     not the two-a-second stills the orb is handed. Blowing up a still
+     and calling it full screen would be a worse picture than the one he
+     already had. */
+  if(liveWinOpen){
+    try{
+      await window.__TAURI__.event.emit('jarvis://camera-fullscreen', true);
+      return { ok: true, live_full_screen: true, via: 'camera window' };
+    }catch(err){
+      return { error: 'could not reach the camera window: ' + ((err && err.message) || err) };
+    }
   }
   const res = await setFullScreen(true);
   if(res.error) return res;
@@ -11549,9 +11644,12 @@ async function callCameraTool(input){
     }
   }
   try{
-    /* Expanded first: the pane is 200px wide and the small orb is 180px, so
-       it would be wider than the window holding it. */
-    if(window.__orbExpand) await window.__orbExpand(true);
+    /* The orb used to be thrown into full screen first, because the panel
+       is 200px wide and the orb window is 180px — it would not have fitted
+       otherwise. With the camera in a window of its own there is nothing
+       to make room for, and expanding the orb to open a camera is a thing
+       nobody asked for. Only the old panel path still needs it. */
+    if(!cameraWindowUsable() && window.__orbExpand) await window.__orbExpand(true);
     if(!liveActive()) await startLive();
     if(!liveActive()) return { error: 'the camera would not start' };
 
@@ -14327,6 +14425,41 @@ adjustLayout();
      arrives whether or not the window is focused, visible, or being talked
      over — which is the entire reason it exists in Rust rather than as a
      key listener in the page. */
+  /* THE CAMERA WINDOW TALKING BACK.
+
+     A frame roughly twice a second, and a word whenever it opens, closes
+     or cannot start. The closing one matters most: he shuts it with the
+     X, and without being told, the orb goes on believing it can see and
+     goes on offering to look at something nobody is filming. */
+  (function wireCameraWindow(){
+    const ev = window.__TAURI__ && window.__TAURI__.event;
+    if(!ev || !ev.listen) return;
+
+    ev.listen('jarvis://frame', (e)=>{
+      const dataUrl = e && e.payload;
+      if(typeof dataUrl !== 'string' || dataUrl.indexOf('data:image') !== 0) return;
+      liveWinFrame = { kind:'image', media_type:'image/jpeg',
+                       data: dataUrl.split(',')[1], dataUrl: dataUrl, live:true };
+      liveWinOpen = true;
+    });
+
+    const wentAway = (why)=>{
+      if(!liveWinOpen && !why) return;
+      liveWinOpen = false;
+      liveWinFrame = null;
+      try{ liveBtn.classList.remove('active'); }catch(err){}
+      try{ root.classList.remove('live-full'); }catch(err){}
+      try{ eyeStop(); }catch(err){}
+      try{ addMessage('system', why || t('liveOff')); }catch(err){}
+    };
+
+    ev.listen('jarvis://camera-open',   ()=>{ liveWinOpen = true; });
+    ev.listen('jarvis://camera-closed', ()=>{ wentAway(null); });
+    ev.listen('jarvis://camera-error',  (e)=>{
+      wentAway('DEBUG (camera): ' + String((e && e.payload) || 'unknown'));
+    });
+  })();
+
   (function wireHush(){
     const ev = window.__TAURI__ && window.__TAURI__.event;
     if(!ev || !ev.listen) return;

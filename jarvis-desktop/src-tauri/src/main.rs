@@ -613,6 +613,71 @@ fn close_workspace(app: tauri::AppHandle) -> Vec<String> {
     closed
 }
 
+/* ------------------------------------------------------------------
+   THE CAMERA, AS A WINDOW OF ITS OWN
+
+   It was a panel inside the orb, and the orb is a 180px square window
+   while the panel is 200px wide. It was literally larger than the window
+   containing it, and clampPane clamps to innerWidth, so there was
+   nowhere to drag it to. That is not a styling problem and no amount of
+   CSS was ever going to fix it.
+
+   So it is a real window: dragged by its title bar, resized by its
+   edges, put anywhere on the screen and left there. It owns the camera
+   stream itself, because two webviews cannot share one, and hands the
+   orb a frame a couple of times a second.
+------------------------------------------------------------------ */
+#[tauri::command]
+async fn open_camera_window(app: tauri::AppHandle) -> Result<String, String> {
+    if let Some(existing) = app.get_webview_window("camera") {
+        let _ = existing.unminimize();
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        return Ok("reused".into());
+    }
+
+    let win = WebviewWindowBuilder::new(&app, "camera", WebviewUrl::App("camera.html".into()))
+        .title("JARVIS \u{2014} camera")
+        .inner_size(360.0, 300.0)
+        .min_inner_size(200.0, 170.0)
+        .resizable(true)
+        .decorations(true)
+        /* Above the work, because a camera you have to go and find is a
+           camera you stop using. He can drop it behind things himself. */
+        .always_on_top(true)
+        .skip_taskbar(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    /* Bottom right of the usable desktop, out of the way of everything.
+       The page moves it again if he has placed it before; this is only
+       where it goes the very first time. */
+    if let Ok(area) = work_area(app.clone()) {
+        if area.len() >= 4 {
+            if let Ok(size) = win.outer_size() {
+                let margin = 24;
+                let x = area[0] + area[2] - size.width as i32 - margin;
+                let y = area[1] + area[3] - size.height as i32 - margin;
+                let _ = win.set_position(tauri::PhysicalPosition { x, y });
+            }
+        }
+    }
+    Ok("opened".into())
+}
+
+#[tauri::command]
+fn close_camera_window(app: tauri::AppHandle) -> bool {
+    match app.get_webview_window("camera") {
+        Some(win) => win.close().is_ok(),
+        None => false,
+    }
+}
+
+#[tauri::command]
+fn camera_window_open(app: tauri::AppHandle) -> bool {
+    app.get_webview_window("camera").is_some()
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -625,7 +690,10 @@ fn main() {
             work_area,
             open_service_window,
             workspace_open,
-            close_workspace
+            close_workspace,
+            open_camera_window,
+            close_camera_window,
+            camera_window_open
         ])
         .setup(|app| {
             let window = app
@@ -722,6 +790,17 @@ fn main() {
                model window is a viewer with nothing in it worth keeping, so
                its X must actually close it or it would pile up hidden windows
                nobody can reach. */
+            /* Closing the camera window is not the same as it vanishing:
+               the orb holds "the camera is on" and would go on believing
+               it, and go on offering to look at something nobody is
+               filming. Told directly, before the early return below. */
+            if window.label() == "camera" {
+                if let tauri::WindowEvent::Destroyed = event {
+                    if let Some(main) = window.app_handle().get_webview_window("main") {
+                        let _ = main.emit("jarvis://camera-closed", true);
+                    }
+                }
+            }
             if window.label() != "main" {
                 return;
             }

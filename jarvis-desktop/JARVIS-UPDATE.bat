@@ -15,8 +15,11 @@ REM   The only three lines you may ever need to touch:
 REM ============================================================
 
 set "PROJECT=%USERPROFILE%\jarvis"
-set "ZIP=%USERPROFILE%\Downloads\jarvis-desktop.zip"
 set "STAGE=%USERPROFILE%\jarvis-update-tmp"
+set "ZIP=%STAGE%\latest.zip"
+set "UNPACK=%STAGE%\unpacked"
+set "FALLBACK=%USERPROFILE%\Downloads\jarvis-desktop.zip"
+set "SOURCE=https://github.com/daganmatan1998-del/Glowpulse-pro/archive/refs/heads/claude/file-download-0u216w.zip"
 
 REM ------------------------------------------------------------
 echo.
@@ -25,19 +28,36 @@ echo    JARVIS UPDATE
 echo  ============================================
 echo.
 echo   project : %PROJECT%
-echo   zip     : %ZIP%
+echo   source  : github
 echo.
 
-REM --- 1. the zip has to be there -----------------------------
+REM --- 1. fetch the latest version ------------------------------
+REM     Downloaded here rather than by hand. Nothing to click, and
+REM     no way to update from a zip that has been sitting in the
+REM     Downloads folder for a fortnight.
+if exist "%STAGE%" rmdir /S /Q "%STAGE%"
+mkdir "%STAGE%"
+echo  [1/8] downloading the latest version...
+curl -sSL --fail -o "%ZIP%" "%SOURCE%"
+if errorlevel 1 (
+  echo        github did not answer - trying PowerShell...
+  powershell -NoProfile -Command "try{ Invoke-WebRequest -Uri '%SOURCE%' -OutFile '%ZIP%' -UseBasicParsing } catch { exit 1 }"
+)
+REM  curl can leave a short or empty file behind when it gives up, and
+REM  "the file exists" would then be true of something unusable.
+if exist "%ZIP%" for %%Z in ("%ZIP%") do if %%~zZ LSS 100000 del /Q "%ZIP%"
 if not exist "%ZIP%" (
-  echo  [X] STOP - no zip found.
-  echo.
-  echo      Expected it here:
-  echo      %ZIP%
-  echo.
-  echo      Download jarvis-desktop.zip into your Downloads
-  echo      folder and run this again. Do not unpack it yourself.
-  goto :fail
+  REM  No internet, or the address moved. A zip sent by hand still works.
+  if exist "%FALLBACK%" (
+    echo        could not download - using the zip in your Downloads instead.
+    copy /Y "%FALLBACK%" "%ZIP%" >nul
+  ) else (
+    echo  [X] STOP - could not download, and no zip in Downloads either.
+    echo.
+    echo      Check the internet connection and run this again.
+    echo      Or download jarvis-desktop.zip into Downloads by hand.
+    goto :fail
+  )
 )
 
 REM --- 2. first run, or an update? ----------------------------
@@ -69,33 +89,41 @@ if exist "%PROJECT%\src-tauri\target" (
 echo.
 
 REM --- 4. close it, or the exe cannot be replaced --------------
-echo  [1/7] closing JARVIS...
+echo  [2/8] closing JARVIS...
 taskkill /IM jarvis.exe /F  >nul 2>&1
 taskkill /IM JARVIS.exe /F  >nul 2>&1
 
-REM --- 5. unpack into a staging folder, never over the project -
-echo  [2/7] unpacking the zip...
-if exist "%STAGE%" rmdir /S /Q "%STAGE%"
-powershell -NoProfile -Command "Expand-Archive -LiteralPath '%ZIP%' -DestinationPath '%STAGE%' -Force" 
+REM --- 5. unpack beside the zip, never over the project --------
+REM     Into a subfolder, NOT over %STAGE% itself: the zip we just
+REM     downloaded is sitting in there, and wiping the folder first
+REM     would delete the thing about to be unpacked.
+echo  [3/8] unpacking...
+if exist "%UNPACK%" rmdir /S /Q "%UNPACK%"
+powershell -NoProfile -Command "Expand-Archive -LiteralPath '%ZIP%' -DestinationPath '%UNPACK%' -Force"
 if errorlevel 1 (
   echo  [X] STOP - the zip could not be unpacked.
   goto :fail
 )
 
-set "SRC=%STAGE%\jarvis-desktop"
-if not exist "%SRC%\dist\index.html" (
-  REM some unpackers add an extra level - look one deeper
-  if exist "%STAGE%\jarvis-desktop\jarvis-desktop\dist\index.html" (
-    set "SRC=%STAGE%\jarvis-desktop\jarvis-desktop"
+REM  Find dist\index.html wherever it landed. A zip from github
+REM  unpacks into a folder named after the branch; one sent by hand
+REM  unpacks into jarvis-desktop. Rather than know which, look.
+set "SRC="
+for /f "delims=" %%D in ('dir /S /B "%UNPACK%\index.html" 2^>nul') do (
+  if not defined SRC (
+    set "FOUND=%%~dpD"
+    if /I "!FOUND:~-5!"=="dist\" (
+      for %%P in ("!FOUND!..") do set "SRC=%%~fP"
+    )
   )
 )
 if not exist "!SRC!\dist\index.html" (
   echo  [X] STOP - the zip does not have the layout expected.
   echo.
   echo      Looked for dist\index.html under:
-  echo      %STAGE%
+  echo      %UNPACK%
   echo.
-  echo      Send Claude the output of:  dir /S /B "%STAGE%\*.html"
+  echo      Send Claude the output of:  dir /S /B "%UNPACK%\*.html"
   goto :fail
 )
 
@@ -103,7 +131,7 @@ REM --- 6. copy EVERYTHING except the things that must survive --
 REM     target/ is the build cache - deleting it turns a
 REM     3 minute build into a 30 minute one.
 REM     node_modules/ is installed, not shipped.
-echo  [3/7] copying the new files...
+echo  [4/8] copying the new files...
 echo.
 robocopy "!SRC!" "%PROJECT%" /E /NFL /NDL /NJH /NJS /NP ^
   /XD "node_modules" "target" "gen" ".git" >nul
@@ -113,7 +141,7 @@ if errorlevel 8 (
 )
 
 REM --- 7. prove the copy actually landed -----------------------
-echo  [4/7] checking the files arrived...
+echo  [5/8] checking the files arrived...
 fc /B "!SRC!\dist\index.html" "%PROJECT%\dist\index.html" >nul 2>&1
 if errorlevel 1 (
   echo  [X] STOP - dist\index.html did not copy.
@@ -132,7 +160,7 @@ if exist "!SRC!\src-tauri\src\main.rs" (
 REM --- 8. dependencies, on a first run or after a wipe -----------
 if not exist "%PROJECT%\node_modules" (
   echo.
-  echo  [5/7] installing dependencies. First run only, a few minutes.
+  echo  [6/8] installing dependencies. First run only, a few minutes.
   pushd "%PROJECT%"
   call npm install
   REM  checked with IF ERRORLEVEL, not by capturing %%ERRORLEVEL%% into a
@@ -150,7 +178,7 @@ if not exist "%PROJECT%\node_modules" (
 
 REM --- 9. build --------------------------------------------------
 echo.
-echo  [6/7] building. Do not close this window.
+echo  [7/8] building. Do not close this window.
 echo        "Compiling ..." lines are what should be happening.
 echo.
 pushd "%PROJECT%"
@@ -169,7 +197,7 @@ if not "%BUILDRC%"=="0" (
 
 REM --- 10. the exe must be NEW, or you are about to run the old one
 echo.
-echo  [7/7] checking the build produced a new JARVIS...
+echo  [8/8] checking the build produced a new JARVIS...
 if not exist "%EXE%" (
   echo  [X] STOP - the build finished but there is no jarvis.exe.
   goto :fail
@@ -185,7 +213,19 @@ if "!AFTER!"=="!BEFORE!" (
   goto :fail
 )
 
-REM --- 11. clean up and go -------------------------------------
+REM --- 11. put the worker where he can reach it ----------------
+REM     It cannot be installed from here - it lives on Cloudflare -
+REM     but leaving it inside a temp folder about to be deleted is
+REM     how it gets forgotten.
+set "WORKER="
+for /f "delims=" %%W in ('dir /S /B "%UNPACK%\jarvis-worker.js" 2^>nul') do (
+  if not defined WORKER (
+    copy /Y "%%W" "%USERPROFILE%\Desktop\jarvis-worker.js" >nul 2>&1
+    if not errorlevel 1 set "WORKER=1"
+  )
+)
+
+REM --- 12. clean up and go -------------------------------------
 if exist "%STAGE%" rmdir /S /Q "%STAGE%"
 
 echo.
@@ -193,10 +233,13 @@ echo  ============================================
 echo    DONE. Starting JARVIS.
 echo  ============================================
 echo.
-echo   If a jarvis-worker.js was sent too, it is NOT
-echo   installed by this script. Paste it into the
-echo   Cloudflare dashboard: Workers ^& Pages - your
-echo   worker - Edit code - paste - Deploy.
+if defined WORKER (
+  echo   jarvis-worker.js has been put on your Desktop.
+  echo   It is NOT installed by this script. To install it:
+  echo   Cloudflare dashboard - Workers ^& Pages - your worker
+  echo   - Edit code - select all - paste - Deploy.
+  echo.
+)
 echo.
 echo   Press Ctrl+Shift+Space if the orb does not appear:
 echo   it starts hidden on purpose.

@@ -4128,6 +4128,25 @@ function getSystemPrompt(calendarAvailable){
               (cron ? '' : ' Note: the worker\'s Cron Trigger has not run yet, so a message for later will be saved but will not go out until it is set up — tell him so.')
             : ' Sending at a later time is not set up on the worker yet (no D1 database bound as JARVIS_DB) — if he asks for one, say so rather than promise it.') +
           ' If a result comes back with a warning, pass it on instead of confirming.';
+    } else if(backendCapabilities){
+      /* The tool is withheld when it cannot work, and a model with no tool
+         concludes the capability does not exist — "I can't send text
+         messages to your phone". It can, it is just not switched on, and
+         which of two things is missing is exactly what he needs to hear. */
+      const older = !('whatsapp' in backendCapabilities);
+      const missing = Array.isArray(backendCapabilities.whatsapp_missing)
+        ? backendCapabilities.whatsapp_missing.join(', ') : '';
+      prompt += currentLang === 'he'
+        ? ' שליחת הודעות וואטסאפ לטלפון שלו כבר בנויה, אבל כרגע היא לא פעילה: ' +
+          (older
+            ? 'הוורקר ב-Cloudflare הוא גרסה ישנה שעוד אין בה את זה — צריך להדביק את jarvis-worker.js החדש ולעשות Deploy.'
+            : 'חסרים בוורקר ב-Cloudflare הסודות ' + (missing || 'WHATSAPP_PHONE / CALLMEBOT_APIKEY') + ' (Settings → Variables and Secrets).') +
+          ' כשהוא מבקש הודעה, תגיד לו בדיוק את זה, במשפט אחד — לא "אני לא יכול לשלוח הודעות", ולא תציע יומן במקום.'
+        : ' Sending WhatsApp messages to his phone is built but not switched on right now: ' +
+          (older
+            ? 'the Cloudflare worker is an older version without it — the new jarvis-worker.js needs pasting in and deploying.'
+            : 'the Cloudflare worker is missing the secret(s) ' + (missing || 'WHATSAPP_PHONE / CALLMEBOT_APIKEY') + ' (Settings → Variables and Secrets).') +
+          ' When he asks for a message, tell him exactly that in one sentence — not "I can\'t send messages", and do not offer the calendar instead.';
     }
   }
   /* The single biggest lever on answer quality: tell him he is allowed to

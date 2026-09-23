@@ -297,6 +297,13 @@ async function health(env) {
     })),
     calendar: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN),
     whatsapp: whatsAppConfigured(env),
+    /* Names only, never values, so "I can't send messages" can become "the
+       worker is missing CALLMEBOT_APIKEY" — the difference between a dead
+       end and a thirty-second fix. */
+    whatsapp_missing: [
+      whatsAppPhone(env) ? null : (env.WHATSAPP_PHONE ? 'WHATSAPP_PHONE (not a valid phone number)' : 'WHATSAPP_PHONE'),
+      env.CALLMEBOT_APIKEY ? null : 'CALLMEBOT_APIKEY'
+    ].filter(Boolean),
     /* Masked: /health answers anyone, and his number is his. The last four
        digits are enough for JARVIS to say which phone it is going to. */
     whatsapp_to: whatsAppConfigured(env) ? maskPhone(whatsAppPhone(env)) : null,

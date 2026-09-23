@@ -1984,6 +1984,7 @@ const I18N = {
     searchingWeb: '\u25B8 searching the web\u2026', readingPage: '\u25B8 reading the page\u2026', buildingPage: '\u25B8 building the page\u2026',
     saving: '\u25B8 saving to memory\u2026', readingCalendar: '\u25B8 checking the calendar\u2026',
     bookingEvent: '\u25B8 booking it\u2026', queryingStore: '\u25B8 querying the store\u2026',
+    sendingWhatsApp: '\u25B8 sending the WhatsApp\u2026',
     openingSite: '\u25B8 opening it\u2026',
     toolRoundsExhausted: 'He used all {n} working steps and is still going. Ask him to carry on, or narrow it down.',
     voiceTestRunning: 'Testing\u2026',
@@ -2209,6 +2210,7 @@ const I18N = {
     searchingWeb: '\u25B8 מחפש באינטרנט\u2026', readingPage: '\u25B8 קורא את הדף\u2026', buildingPage: '\u25B8 בונה את הדף\u2026',
     saving: '\u25B8 שומר בזיכרון\u2026', readingCalendar: '\u25B8 בודק ביומן\u2026',
     bookingEvent: '\u25B8 קובע\u2026', queryingStore: '\u25B8 שולף מהחנות\u2026',
+    sendingWhatsApp: '\u25B8 שולח וואטסאפ\u2026',
     openingSite: '\u25B8 פותח\u2026',
     toolRoundsExhausted: 'הוא ניצל את כל {n} שלבי העבודה ועדיין באמצע. תבקש ממנו להמשיך, או תצמצם את המשימה.',
     voiceTestRunning: 'בודק\u2026',
@@ -4107,6 +4109,26 @@ function getSystemPrompt(calendarAvailable){
           : ` You also have access to a tool (shopify_admin_query) that runs real, read-only GraphQL queries against his Shopify store named "${shopNames[0]}" — use it whenever he asks about products, inventory, orders, customers, or other real store data, instead of guessing or speaking hypothetically.`)
       : '';
     prompt += shopifyNote;
+    if(backendCapabilities && backendCapabilities.whatsapp){
+      const tail = String(backendCapabilities.whatsapp_to || '').replace(/\D/g, '').slice(-4);
+      const later = !!backendCapabilities.whatsapp_later;
+      const cron = !!backendCapabilities.whatsapp_cron;
+      prompt += currentLang === 'he'
+        ? ' יש לך send_whatsapp: הודעת וואטסאפ לטלפון שלו' + (tail ? ' (המספר שמור, מסתיים ב-' + tail + ')' : '') +
+          ' — לעולם אל תשאל אותו מה המספר. "שלח לי הודעה" בלי תוכן — תשאל "מה לכתוב?" ותשלח רק אחרי שענה.' +
+          (later
+            ? ' לשעה מסוימת ("בארבע", "בעוד שעתיים", "מחר בבוקר") תעביר send_at, והיא נשלחת מהשרת גם כשהמחשב כבוי. manage_whatsapp_reminders מציג ומבטל הודעות מתוזמנות.' +
+              (cron ? '' : ' שים לב: הטיימר בוורקר (Cron Trigger) עוד לא רץ, אז הודעה לשעה מאוחרת יותר תישמר אבל לא תצא עד שיוגדר — תגיד לו את זה.')
+            : ' שליחה לשעה מאוחרת יותר עוד לא מוגדרת בוורקר (חסר מסד D1 בשם JARVIS_DB) — אם הוא מבקש, תגיד לו את זה במקום להבטיח.') +
+          ' אם תוצאה חוזרת עם warning — תמסור לו אותה במקום לאשר.'
+        : ' You have send_whatsapp: a WhatsApp message to his own phone' + (tail ? ' (the number is on file, ending ' + tail + ')' : '') +
+          ' — never ask him for the number. "Send me a message" with no content means ask "What should it say?" and send only after he answers.' +
+          (later
+            ? ' For a set time ("at 4pm", "in two hours", "tomorrow morning") pass send_at; the server sends it then, even with his computer off. manage_whatsapp_reminders lists and cancels scheduled ones.' +
+              (cron ? '' : ' Note: the worker\'s Cron Trigger has not run yet, so a message for later will be saved but will not go out until it is set up — tell him so.')
+            : ' Sending at a later time is not set up on the worker yet (no D1 database bound as JARVIS_DB) — if he asks for one, say so rather than promise it.') +
+          ' If a result comes back with a warning, pass it on instead of confirming.';
+    }
   }
   /* The single biggest lever on answer quality: tell him he is allowed to
      work rather than obliged to answer immediately. */
@@ -7742,6 +7764,7 @@ function toolStatusLabel(tu, round){
     generate_image: 'makingImage', make_zip: 'packaging',
     remember: 'saving', get_calendar_events: 'readingCalendar',
     create_calendar_event: 'bookingEvent', shopify_admin_query: 'queryingStore',
+    send_whatsapp: 'sendingWhatsApp',
     open_url: 'openingSite'
   };
   const label = t(names[tu.name] || 'workingLabel');
@@ -8159,6 +8182,36 @@ const CALENDAR_CREATE_TOOL = {
       location: { type:'string', description:'Optional location.' }
     },
     required: ['title', 'start']
+  }
+};
+
+/* WhatsApp to his own phone, through the worker. There is deliberately no
+   recipient field: the worker holds his number and CallMeBot will only
+   deliver to the phone that registered the key, so nothing said to JARVIS
+   can turn this into messaging someone else. */
+const WHATSAPP_TOOL = {
+  name: 'send_whatsapp',
+  description: "Send a WhatsApp message to the user's own phone. His number is already on file in the worker — never ask him for it — and this can only ever reach him. Use this, not create_calendar_event, whenever he says 'send me a message', 'WhatsApp me', 'text me', '\u05e9\u05dc\u05d7 \u05dc\u05d9 \u05d4\u05d5\u05d3\u05e2\u05d4', or asks to be reminded BY MESSAGE. If he has not said what it should say, ask him what to write and send only after he answers — never invent the content. For a time ('at 4pm', 'in two hours', 'tomorrow morning') pass send_at: the worker sends it at that moment from the server, even with his computer switched off. Write the text the way he wants to read it on his phone: short, in the language he spoke, the reminder itself ('Workout at 16:00 \u2014 go.') rather than 'this is a reminder that'. Afterwards confirm in one sentence what goes out and when; if the result carries a warning, tell him the warning instead of confirming.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      text: { type:'string', description:'The message exactly as it should appear on his phone.' },
+      send_at: { type:'string', description:'Optional. When to send it, ISO 8601 with his UTC offset, e.g. 2026-09-23T16:00:00+03:00. Leave out to send right now.' }
+    },
+    required: ['text']
+  }
+};
+
+const WHATSAPP_MANAGE_TOOL = {
+  name: 'manage_whatsapp_reminders',
+  description: "See or cancel WhatsApp messages scheduled for later. action 'list' returns what is still waiting and what recently went out, failed or was cancelled — use it for 'what reminders do I have' and 'did my message go out'. action 'cancel' with an id from list stops one; when he names it by content or time rather than id, list first and match.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      action: { type:'string', enum:['list', 'cancel'] },
+      id: { type:'string', description:'For cancel: the id returned by list.' }
+    },
+    required: ['action']
   }
 };
 
@@ -11893,6 +11946,49 @@ async function callCalendarCreateTool(input){
   }
 }
 
+async function callWhatsAppTool(input){
+  try{
+    const res = await fetch(backendUrl + '/whatsapp/send', {
+      method:'POST',
+      headers: jarvisHeaders(),
+      body: JSON.stringify({
+        text: (input && input.text) || '',
+        send_at: (input && input.send_at) || '',
+        timeZone: localTimeZone()
+      })
+    });
+    if(res.status === 401){ await forceReauth(); return { error:'session expired' }; }
+    const data = await res.json().catch(()=> ({}));
+    if(!res.ok) return { error: data.error || ('WhatsApp failed (HTTP ' + res.status + ')'), tell_the_user: data.tell_the_user };
+    return data;
+  }catch(err){
+    return { error: 'Could not reach the worker to send the WhatsApp: ' + err.message };
+  }
+}
+
+async function callWhatsAppManageTool(input){
+  const action = input && input.action;
+  try{
+    let res;
+    if(action === 'list'){
+      res = await fetch(backendUrl + '/whatsapp/scheduled', { headers: jarvisHeaders() });
+    } else if(action === 'cancel'){
+      res = await fetch(backendUrl + '/whatsapp/cancel', {
+        method:'POST', headers: jarvisHeaders(),
+        body: JSON.stringify({ id: (input && input.id) || '' })
+      });
+    } else {
+      return { error: "action must be 'list' or 'cancel'" };
+    }
+    if(res.status === 401){ await forceReauth(); return { error:'session expired' }; }
+    const data = await res.json().catch(()=> ({}));
+    if(!res.ok) return { error: data.error || ('HTTP ' + res.status) };
+    return data;
+  }catch(err){
+    return { error: 'Could not reach the worker: ' + err.message };
+  }
+}
+
 // Requests to our own worker must carry the session token; direct
 // in-chat Anthropic calls must not (it would just be an unknown header).
 /* Just the host, for messages. A full URL in an error line wraps badly on a
@@ -12056,6 +12152,12 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
        "no store connected" is an invitation to try and fail. */
     if((backendCapabilities && Array.isArray(backendCapabilities.shopify) && backendCapabilities.shopify.length)){
       everydayTools.push(STORE_REPORT_TOOL);
+    }
+    /* Same rule: offered only when the worker says it is configured, so he
+       is never handed a tool whose only answer is "not set up". */
+    if(backendCapabilities && backendCapabilities.whatsapp){
+      everydayTools.push(WHATSAPP_TOOL);
+      if(backendCapabilities.whatsapp_later) everydayTools.push(WHATSAPP_MANAGE_TOOL);
     }
     const advancedTools = [BUILD3D_TOOL, MODEL3D_TOOL, PHOTO3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
     if(IS_DESKTOP) advancedTools.push(MODEL_WINDOW_TOOL);
@@ -12439,6 +12541,10 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCalendarTool(tu.input);
           } else if(tu.name === 'create_calendar_event'){
             payload = await callCalendarCreateTool(tu.input);
+          } else if(tu.name === 'send_whatsapp'){
+            payload = await callWhatsAppTool(tu.input);
+          } else if(tu.name === 'manage_whatsapp_reminders'){
+            payload = await callWhatsAppManageTool(tu.input);
           } else if(tu.name === 'build_3d_model'){
             payload = await callBuild3dTool(tu.input);
           } else if(tu.name === 'generate_3d_model'){

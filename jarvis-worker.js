@@ -21,6 +21,12 @@
      GOOGLE_CLIENT_SECRET                    → calendar
      GOOGLE_REFRESH_TOKEN                    → calendar
      ALLOWED_ORIGIN        https://your.site → CORS lock (defaults to *)
+     WHATSAPP_PHONE        his own number, e.g. 0552813729 or +972552813729
+     CALLMEBOT_APIKEY      the key CallMeBot sends back on WhatsApp
+                           → both together: send_whatsapp, to him and only him
+     JARVIS_DB             a D1 database BINDING (not a secret) → messages for
+                           later. With a Cron Trigger of "* * * * *" on this
+                           worker they go out on time with the computer off.
      PRIMARY_API_KEY       AIza/gsk_/sk-or-... → try THIS before Anthropic. Put a
                            free-tier key here and Anthropic becomes the safety
                            net instead of the meter.
@@ -54,6 +60,9 @@
      GET  /calendar/upcoming?days=7                     → { events: [...] }
      POST /calendar/create     { title, start, end, ... } → { ok, event }
      POST /shopify/query       { query, variables }     → GraphQL result
+     POST /whatsapp/send       { text, send_at? }       → sends now, or queues it
+     GET  /whatsapp/scheduled                           → { pending, recent }
+     POST /whatsapp/cancel     { id }                   → { ok }
      GET  /health                                       → capability report
      GET  /session                                      → { ok:true } if the token
                                is good. Costs nothing and calls nobody, so the
@@ -62,7 +71,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.3.0';
+const WORKER_VERSION = '2.4.0';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -102,6 +111,9 @@ export default {
       if (path === '/calendar/upcoming')           return await handleCalendarUpcoming(request, env, url);
       if (path === '/calendar/create')             return await handleCalendarCreate(request, env);
       if (path === '/shopify/query')               return await handleShopify(request, env);
+      if (path === '/whatsapp/send')               return await handleWhatsAppSend(request, env);
+      if (path === '/whatsapp/scheduled')          return await handleWhatsAppList(request, env);
+      if (path === '/whatsapp/cancel')             return await handleWhatsAppCancel(request, env);
       if (path === '/fallback/test')               return await handleFallbackTest(env, request);
       if (path === '/session')                     return json({ ok: true }, 200, env, request);
 
@@ -109,6 +121,13 @@ export default {
     } catch (err) {
       return json({ error: String((err && err.message) || err) }, 500, env, request);
     }
+  },
+
+  /* The Cron Trigger. This is what makes "at 4pm" happen with the computer
+     off: nothing on his side is involved, Cloudflare wakes the worker every
+     minute and it sends whatever has come due. */
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runWhatsAppQueue(env).catch(err => console.error('whatsapp queue', err)));
   }
 };
 
@@ -277,6 +296,15 @@ async function health(env) {
       handle: String(s.store || '').trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0].replace(/\.myshopify\.com$/, '')
     })),
     calendar: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN),
+    whatsapp: whatsAppConfigured(env),
+    /* Masked: /health answers anyone, and his number is his. The last four
+       digits are enough for JARVIS to say which phone it is going to. */
+    whatsapp_to: whatsAppConfigured(env) ? maskPhone(whatsAppPhone(env)) : null,
+    whatsapp_later: !!env.JARVIS_DB,
+    /* Whether the Cron Trigger is really firing, read from the last time it
+       did rather than assumed. A queue with no cron behind it is a promise
+       that silently never arrives, which is worse than an error. */
+    whatsapp_cron: env.JARVIS_DB ? await cronAlive(env) : false,
     missing: missing
   };
 }
@@ -965,7 +993,11 @@ export const __test = {
     if (label) return Date.now() < (cooldowns.get(label) || 0);
     return cooldowns.size > 0;
   },
-  chain(env) { return engineChain(env).map(e => e.label); }
+  chain(env) { return engineChain(env).map(e => e.label); },
+  normalizePhone(p) { return normalizePhone(p); },
+  parseSendAt(v, tz) { return parseSendAt(v, tz); },
+  runWhatsAppQueue(env) { return runWhatsAppQueue(env); },
+  resetSchema() { schemaReady = null; }
 };
 
 function shouldFailover(status, bodyText) {
@@ -2264,4 +2296,326 @@ async function handleCalendarCreate(request, env) {
       link: data.htmlLink
     }
   }, 200, env, request);
+}
+
+/* =====================================================================
+   WHATSAPP — to him, and only him
+
+   Sent through CallMeBot, which delivers to the one number that registered
+   the key. That is a limit and also the safety: there is no recipient
+   argument anywhere, so nothing JARVIS is told can turn this into a way of
+   messaging somebody else.
+
+   "Now" goes straight out. "At 4pm" is written to D1 and sent by the Cron
+   Trigger below, which Cloudflare runs whether his computer is on, off or
+   in a drawer. D1 rather than KV: KV is eventually consistent, and a queue
+   read in one place and rewritten in another loses the message that
+   arrived in between. Here every row is its own record and a send is
+   claimed with a conditional UPDATE, so two overlapping runs cannot both
+   send it.
+   ===================================================================== */
+
+const WA_MAX_TEXT      = 1000;
+const WA_MAX_AHEAD_MS  = 366 * 86400000;
+const WA_NOW_WINDOW_MS = 60 * 1000;          // this close to now just means now
+const WA_PAST_GRACE_MS = 10 * 60 * 1000;     // a little in the past: send; more: a wrong date
+const WA_LATE_MS       = 15 * 60 * 1000;     // later than this, the message says it is late
+const WA_MAX_TRIES     = 3;
+const WA_STUCK_MS      = 10 * 60 * 1000;     // a claim this old died mid-send
+const WA_CRON_FRESH_MS = 5 * 60 * 1000;
+const WA_KEEP_MS       = 30 * 86400000;      // finished rows kept this long
+
+function whatsAppPhone(env) { return normalizePhone(env.WHATSAPP_PHONE || ''); }
+function whatsAppConfigured(env) { return !!(env.CALLMEBOT_APIKEY && whatsAppPhone(env)); }
+
+/* 0552813729, 055-281-3729, 972552813729, +972 55 281 3729 and
+   00972552813729 are all the same phone. A leading single 0 is an Israeli
+   local number. */
+function normalizePhone(raw) {
+  let d = String(raw || '').replace(/[^\d+]/g, '');
+  if (!d) return '';
+  if (d.startsWith('+')) d = d.slice(1);
+  else if (d.startsWith('00')) d = d.slice(2);
+  else if (d.startsWith('0')) d = '972' + d.slice(1);
+  if (!/^\d{8,15}$/.test(d)) return '';
+  return '+' + d;
+}
+
+function maskPhone(p) {
+  if (!p) return null;
+  return p.slice(0, 6) + '*'.repeat(Math.max(0, p.length - 10)) + p.slice(-4);
+}
+
+function validTimeZone(tz) {
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return tz; }
+  catch (e) { return 'Asia/Jerusalem'; }
+}
+
+function tzOffsetMs(utcMs, tz) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }).formatToParts(new Date(utcMs));
+  const g = type => +parts.find(p => p.type === type).value;
+  const asUtc = Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second'));
+  return asUtc - Math.floor(utcMs / 1000) * 1000;
+}
+
+/* A time with no zone on it is HIS wall-clock time, not the worker's. The
+   worker runs in UTC, so reading "16:00" the default way would deliver the
+   workout reminder at seven in the evening in summer. Done twice so a date
+   on the far side of a clock change lands on the right hour. */
+function wallTimeToUtc(y, mo, d, h, mi, se, tz) {
+  const zone = validTimeZone(tz || 'Asia/Jerusalem');
+  const guess = Date.UTC(y, mo - 1, d, h, mi, se);
+  let at = guess - tzOffsetMs(guess, zone);
+  at = guess - tzOffsetMs(at, zone);
+  return at;
+}
+
+function parseSendAt(value, tz) {
+  const s = String(value || '').trim();
+  if (!s) return { at: null };
+  if (/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(s)) {
+    const at = Date.parse(s);
+    return Number.isFinite(at) ? { at } : { error: 'could not read send_at: ' + s };
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(s);
+  if (!m) return { error: 'send_at must be ISO 8601, e.g. 2026-09-23T16:00:00+03:00 — got: ' + s };
+  const at = wallTimeToUtc(+m[1], +m[2], +m[3], +m[4], +m[5], +(m[6] || 0), tz);
+  return Number.isFinite(at) ? { at } : { error: 'could not read send_at: ' + s };
+}
+
+function wallClock(ms, tz) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: validTimeZone(tz || 'Asia/Jerusalem'),
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms));
+  } catch (e) { return new Date(ms).toISOString().slice(11, 16); }
+}
+
+/* CallMeBot answers 200 with a sentence either way, so the sentence is
+   read. Only a network failure, a 429 or a 5xx is worth trying again: a
+   bad key will be exactly as bad in a minute, and retrying something that
+   may in fact have gone out is how he gets the same reminder three times. */
+async function callMeBot(env, text) {
+  const url = 'https://api.callmebot.com/whatsapp.php' +
+    '?phone=' + encodeURIComponent(whatsAppPhone(env)) +
+    '&text=' + encodeURIComponent(text) +
+    '&apikey=' + encodeURIComponent(String(env.CALLMEBOT_APIKEY).trim());
+  let res, body = '';
+  try {
+    res = await fetch(url, { method: 'GET' });
+    body = await res.text().catch(() => '');
+  } catch (err) {
+    return { ok: false, retry: true, detail: 'could not reach CallMeBot: ' + ((err && err.message) || err) };
+  }
+  const plain = String(body).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+  if (res.status === 429 || res.status >= 500) {
+    return { ok: false, retry: true, status: res.status, detail: plain || ('HTTP ' + res.status) };
+  }
+  const refused = !res.ok ||
+    (/invalid|error|not allowed|blocked|paused|wrong|denied|not registered/i.test(plain) &&
+     !/message (?:queued|sent)/i.test(plain));
+  if (refused) return { ok: false, retry: false, status: res.status, detail: plain || ('HTTP ' + res.status) };
+  return { ok: true, status: res.status, detail: plain };
+}
+
+let schemaReady = null;
+function ensureSchema(env) {
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      await env.JARVIS_DB.prepare(
+        'CREATE TABLE IF NOT EXISTS whatsapp_queue (' +
+        ' id TEXT PRIMARY KEY, text TEXT NOT NULL, send_at INTEGER NOT NULL,' +
+        ' tz TEXT, created INTEGER NOT NULL,' +
+        " status TEXT NOT NULL DEFAULT 'pending', tries INTEGER NOT NULL DEFAULT 0," +
+        ' claimed_at INTEGER, sent_at INTEGER, last_error TEXT)'
+      ).run();
+      await env.JARVIS_DB.prepare(
+        'CREATE TABLE IF NOT EXISTS jarvis_meta (key TEXT PRIMARY KEY, value TEXT)'
+      ).run();
+    })().catch(err => { schemaReady = null; throw err; });
+  }
+  return schemaReady;
+}
+
+async function cronAlive(env) {
+  try {
+    await ensureSchema(env);
+    const row = await env.JARVIS_DB.prepare("SELECT value FROM jarvis_meta WHERE key = 'cron_tick'").first();
+    const tick = row ? parseInt(row.value, 10) : 0;
+    return Date.now() - tick < WA_CRON_FRESH_MS;
+  } catch (e) { return false; }
+}
+
+function waRow(r) {
+  return {
+    id: r.id,
+    text: r.text,
+    send_at: new Date(r.send_at).toISOString(),
+    status: r.status,
+    tries: r.tries || 0,
+    sent_at: r.sent_at ? new Date(r.sent_at).toISOString() : null,
+    last_error: r.last_error || null
+  };
+}
+
+async function handleWhatsAppSend(request, env) {
+  if (!whatsAppConfigured(env)) {
+    return json({
+      error: 'whatsapp not configured',
+      tell_the_user: 'WhatsApp is not set up on the worker yet — it needs the WHATSAPP_PHONE and CALLMEBOT_APIKEY secrets.'
+    }, 503, env, request);
+  }
+  const body = await request.json().catch(() => ({}));
+  const text = String((body && body.text) || '').trim();
+  if (!text) return json({ error: 'text is required — ask him what the message should say' }, 400, env, request);
+  if (text.length > WA_MAX_TEXT) {
+    return json({ error: 'message too long: ' + text.length + ' characters, the limit is ' + WA_MAX_TEXT }, 400, env, request);
+  }
+  const tz = validTimeZone(String((body && body.timeZone) || 'Asia/Jerusalem'));
+  const parsed = parseSendAt(body && body.send_at, tz);
+  if (parsed.error) return json({ error: parsed.error }, 400, env, request);
+
+  const now = Date.now();
+  const at = parsed.at;
+  if (at !== null && at < now - WA_PAST_GRACE_MS) {
+    return json({
+      error: 'that time has already passed (' + new Date(at).toISOString() + ') — check the date',
+      now: new Date(now).toISOString()
+    }, 400, env, request);
+  }
+  if (at !== null && at > now + WA_MAX_AHEAD_MS) {
+    return json({ error: 'that is more than a year ahead' }, 400, env, request);
+  }
+
+  if (at === null || at <= now + WA_NOW_WINDOW_MS) {
+    const r = await callMeBot(env, text);
+    if (!r.ok) {
+      return json({ error: 'WhatsApp send failed: ' + r.detail, status: r.status || null }, 502, env, request);
+    }
+    return json({ ok: true, sent: true, to: maskPhone(whatsAppPhone(env)), provider_said: r.detail }, 200, env, request);
+  }
+
+  if (!env.JARVIS_DB) {
+    return json({
+      error: 'sending later needs the JARVIS_DB binding (a D1 database) on the worker',
+      tell_the_user: 'I can send you a WhatsApp right now, but not at a set time yet — the worker still needs its D1 database bound as JARVIS_DB, plus a Cron Trigger.'
+    }, 503, env, request);
+  }
+  await ensureSchema(env);
+  const id = 'wa' + now.toString(36) + Math.random().toString(36).slice(2, 6);
+  await env.JARVIS_DB.prepare(
+    'INSERT INTO whatsapp_queue (id, text, send_at, tz, created) VALUES (?, ?, ?, ?, ?)'
+  ).bind(id, text, at, tz, now).run();
+
+  const cron = await cronAlive(env);
+  const out = {
+    ok: true, scheduled: true, id,
+    send_at: new Date(at).toISOString(),
+    local_time: wallClock(at, tz),
+    to: maskPhone(whatsAppPhone(env)),
+    cron_running: cron
+  };
+  if (!cron) {
+    out.warning = 'Saved, but the worker\'s Cron Trigger has not run in the last few minutes, so this will NOT ' +
+                  'go out until one is added (worker → Settings → Triggers → Cron Triggers → "* * * * *"). ' +
+                  'Tell him that plainly instead of confirming the reminder.';
+  }
+  return json(out, 200, env, request);
+}
+
+async function handleWhatsAppList(request, env) {
+  if (!env.JARVIS_DB) return json({ pending: [], recent: [], later_available: false }, 200, env, request);
+  await ensureSchema(env);
+  const db = env.JARVIS_DB;
+  const pending = await db.prepare(
+    "SELECT * FROM whatsapp_queue WHERE status IN ('pending', 'sending') ORDER BY send_at LIMIT 50"
+  ).all();
+  const recent = await db.prepare(
+    "SELECT * FROM whatsapp_queue WHERE status IN ('sent', 'failed', 'cancelled') " +
+    'ORDER BY COALESCE(sent_at, send_at) DESC LIMIT 10'
+  ).all();
+  return json({
+    pending: ((pending && pending.results) || []).map(waRow),
+    recent: ((recent && recent.results) || []).map(waRow),
+    later_available: true,
+    cron_running: await cronAlive(env)
+  }, 200, env, request);
+}
+
+async function handleWhatsAppCancel(request, env) {
+  if (!env.JARVIS_DB) return json({ error: 'nothing is scheduled: the worker has no JARVIS_DB' }, 503, env, request);
+  await ensureSchema(env);
+  const body = await request.json().catch(() => ({}));
+  const id = String((body && body.id) || '').trim();
+  if (!id) return json({ error: 'id is required — list the scheduled messages first' }, 400, env, request);
+  const db = env.JARVIS_DB;
+  const r = await db.prepare(
+    "UPDATE whatsapp_queue SET status = 'cancelled' WHERE id = ? AND status = 'pending'"
+  ).bind(id).run();
+  if (r && r.meta && r.meta.changes === 1) return json({ ok: true, cancelled: id }, 200, env, request);
+  const row = await db.prepare('SELECT status FROM whatsapp_queue WHERE id = ?').bind(id).first();
+  return json({
+    error: row ? 'cannot cancel: that message is already ' + row.status : 'no scheduled message with id ' + id
+  }, row ? 409 : 404, env, request);
+}
+
+async function runWhatsAppQueue(env) {
+  if (!env.JARVIS_DB) return { skipped: 'no JARVIS_DB' };
+  await ensureSchema(env);
+  const db = env.JARVIS_DB;
+  const now = Date.now();
+
+  /* Written every run, so /health can tell a cron that is firing from one
+     that was never added. */
+  await db.prepare(
+    "INSERT INTO jarvis_meta (key, value) VALUES ('cron_tick', ?) " +
+    'ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+  ).bind(String(now)).run();
+  await db.prepare(
+    "DELETE FROM whatsapp_queue WHERE status IN ('sent', 'failed', 'cancelled') AND created < ?"
+  ).bind(now - WA_KEEP_MS).run();
+
+  if (!whatsAppConfigured(env)) return { skipped: 'whatsapp not configured' };
+
+  await db.prepare(
+    "UPDATE whatsapp_queue SET status = 'pending' WHERE status = 'sending' AND claimed_at < ?"
+  ).bind(now - WA_STUCK_MS).run();
+
+  const due = await db.prepare(
+    "SELECT * FROM whatsapp_queue WHERE status = 'pending' AND send_at <= ? ORDER BY send_at LIMIT 20"
+  ).bind(now).all();
+  const report = { sent: 0, failed: 0, retrying: 0 };
+  for (const row of ((due && due.results) || [])) {
+    const claim = await db.prepare(
+      "UPDATE whatsapp_queue SET status = 'sending', claimed_at = ? WHERE id = ? AND status = 'pending'"
+    ).bind(now, row.id).run();
+    if (!claim || !claim.meta || claim.meta.changes !== 1) continue;   // another run took it
+
+    /* A reminder that arrives hours late with no word about it reads as
+       nonsense — "go to your workout" at nine at night. Say when it was for. */
+    const late = now - row.send_at > WA_LATE_MS;
+    const text = late ? '⏰ ' + wallClock(row.send_at, row.tz) + ' · ' + row.text : row.text;
+
+    const r = await callMeBot(env, text);
+    const tries = (row.tries || 0) + 1;
+    if (r.ok) {
+      await db.prepare(
+        "UPDATE whatsapp_queue SET status = 'sent', sent_at = ?, tries = ?, last_error = NULL WHERE id = ?"
+      ).bind(Date.now(), tries, row.id).run();
+      report.sent++;
+    } else if (r.retry && tries < WA_MAX_TRIES) {
+      await db.prepare(
+        "UPDATE whatsapp_queue SET status = 'pending', tries = ?, last_error = ? WHERE id = ?"
+      ).bind(tries, r.detail, row.id).run();
+      report.retrying++;
+    } else {
+      await db.prepare(
+        "UPDATE whatsapp_queue SET status = 'failed', tries = ?, last_error = ? WHERE id = ?"
+      ).bind(tries, r.detail, row.id).run();
+      report.failed++;
+    }
+  }
+  return report;
 }

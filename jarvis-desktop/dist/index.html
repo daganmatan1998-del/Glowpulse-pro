@@ -344,6 +344,8 @@
      to trust that he is not listening. */
   html.tauri.orb-muted  #scene-canvas{ opacity:0.26; filter:saturate(0.25); }
   html.tauri.orb-asleep #scene-canvas{ opacity:0.14; filter:saturate(0.12); }
+  /* Dozing: still there, still listening for his name, visibly resting. */
+  html.tauri.orb-dozing #scene-canvas{ opacity:0.55; filter:saturate(0.55); }
   html.tauri #scene-canvas{ transition:opacity .4s ease, filter .4s ease; }
 
   /* The dot lives in the expanded view only: at 180px it is visual noise on
@@ -548,6 +550,11 @@
     animation:none;
   }
   html.tauri.mic-busy #micLabel{ color:#ffb020; }
+  /* Open, but only for his name: hollow and still, not pulsing. */
+  html.tauri.orb-dozing #micDot{
+    background:transparent; border-color:var(--cyan); box-shadow:none; animation:none;
+  }
+  html.tauri.orb-dozing #micLabel{ color:rgba(0,229,255,0.55); }
   /* Hollow red: standby, or a capture that said it was starting and never did. */
   html.tauri.mic-stalled #micDot,
   html.tauri.orb-muted   #micDot{
@@ -1873,7 +1880,7 @@ const I18N = {
     noLangHint: 'Note: your worker does not accept a language hint yet, so this only changes the name and colour. Deploy the updated jarvis-worker.js for it to actually help transcription.',
     sttGaveUp: 'Repeated failures — still listening, but slowing down. Fix the cause shown above.',
     noVoiceDesktop: 'Cannot listen: {why}. The desktop window has no built-in speech recognition, so transcription must come from your worker.',
-    notAddressed: 'heard "{heard}" — say his name to talk to him',
+    dozing: 'dozing \u2014 say \u201chey Jarvis\u201d to wake him',
     goAhead: 'listening\u2026',
     heardNothing: 'nothing came through the microphone',
     micTooQuiet: 'the microphone picked up nothing above background noise — check it is not muted and is the right input device',
@@ -2100,7 +2107,7 @@ const I18N = {
     noLangHint: 'שים לב: ה-worker שלך עדיין לא מקבל רמז שפה, אז זה משנה רק את השם והצבע. תעלה את jarvis-worker.js המעודכן כדי שזה באמת ישפר את התמלול.',
     sttGaveUp: 'כשלים חוזרים — עדיין מקשיב אבל מאט. תתקן את הסיבה שמופיעה למעלה.',
     noVoiceDesktop: 'לא יכול להקשיב: {why}. לחלון הדסקטופ אין זיהוי דיבור מובנה, אז התמלול חייב להגיע מה-worker שלך.',
-    notAddressed: 'שמעתי \"{heard}\" — תגיד את שמו כדי לדבר איתו',
+    dozing: 'במצב שינה \u2014 תגיד \u201cהיי ג\'רוויס\u201d כדי להעיר אותו',
     goAhead: 'מקשיב\u2026',
     heardNothing: 'שום דבר לא נקלט מהמיקרופון',
     micTooQuiet: 'המיקרופון לא קלט שום דבר מעל רעש הרקע — תבדוק שהוא לא מושתק ושזה מכשיר הקלט הנכון',
@@ -4075,6 +4082,11 @@ function getSystemPrompt(calendarAvailable){
   let prompt = ultron
     ? (currentLang === 'he' ? ULTRON_PROMPT_HE : ULTRON_PROMPT_EN)
     : (currentLang === 'he' ? SYSTEM_PROMPT_HE : SYSTEM_PROMPT_EN);
+  /* The commands the app recognises are split and run before anything
+     reaches here; this covers every request that is not on that list. */
+  prompt += currentLang === 'he'
+    ? ' כשבקשה אחת כוללת כמה דברים, תעשה את כולם: תקרא לכל כלי שצריך — כמה באותו תור זה בסדר — לפני שאתה עונה, ואז תאשר את כולם יחד במשפט קצר אחד. לעולם אל תעשה רק את הראשון ותשמיט את השאר. אם ההודעה מתחילה ב-[Already done by the app], הדברים שם כבר בוצעו — אל תבצע אותם שוב.'
+    : ' When one request asks for several things, do every one of them: call each tool it needs — several in one turn is fine — before you answer, then confirm them together in one short sentence. Never do the first and drop the rest. If a message starts with [Already done by the app], those parts are done — do not do them again.';
   /* Declared here, not inside the calendarAvailable branch below, because the
      store-check briefing near the end of this function needs it regardless
      of whether a backend is connected. It was briefly scoped inside that
@@ -4801,28 +4813,36 @@ function echoWords(text){
     .filter(Boolean);
 }
 
+/* Most of a longer transcript has to be his for it to be his. A command of
+   yours that happens to repeat four of his words — "open the camera window"
+   right after "I'll open the camera window" — is mostly yours, and was being
+   thrown away whole. An echo is his sentence coming back, so nearly all of
+   it matches; 0.6 leaves room for Whisper mishearing a word of it. */
+const ECHO_COVER = 0.6;
+
 function looksLikeEcho(heard){
   const said = echoWords(spokenRecently);
   if(!said.length) return false;              // he has said nothing; nothing to echo
   const words = echoWords(heard);
   if(!words.length) return false;             // nothing to judge, so do not discard it
 
-  /* Short enough to be a whole phrase of his: an echo only if the entire
-     thing appears in his words, in order and unbroken. "כן" on its own is a
-     reply to a question, not his voice — unless he literally just said "כן"
-     and nothing has happened since. */
+  /* Whole words, padded with spaces. A plain substring search — which this
+     was, whatever the comment above says — found "open" inside "opened",
+     "yes" inside "yesterday" and "stop" inside "stopped", so the shortest
+     answers he could give were the likeliest to be deleted. */
   const need = Math.min(words.length, ECHO_RUN);
-  const target = said.join(' ');
+  const target = ' ' + said.join(' ') + ' ';
+  const covered = new Array(words.length).fill(false);
   for(let i = 0; i + need <= words.length; i++){
-    const run = words.slice(i, i + need).join(' ');
-    if(target.indexOf(run) >= 0){
-      /* A run of four of his words in his order is his voice. For a shorter
-         utterance the whole of it has to match, which is a far higher bar
-         than four words out of a long sentence. */
-      if(need >= ECHO_RUN || words.length === need) return true;
+    if(target.indexOf(' ' + words.slice(i, i + need).join(' ') + ' ') >= 0){
+      for(let k = i; k < i + need; k++) covered[k] = true;
     }
   }
-  return false;
+  const n = covered.filter(Boolean).length;
+  /* Short enough to be a whole phrase of his: an echo only if all of it
+     appears in his words, in order and unbroken. */
+  if(words.length <= ECHO_RUN) return n === words.length;
+  return n / words.length >= ECHO_COVER;
 }
 
 /* The one job: if these words address him and he is mid-sentence, stop.
@@ -4836,7 +4856,7 @@ function hushIfNamed(heard){
   if(!norm) return false;
   if(!norm.split(' ').some(wordIsName)) return false;
   interruptSpeech();
-  lastWakeAt = Date.now();      // he addressed you; the turn is open
+  noteActivity();               // he addressed you; he is awake
   return true;
 }
 
@@ -5173,7 +5193,7 @@ async function startWhisperCapture(){
       return;
     }
     if(quiet) console.info('JARVIS: level meter heard nothing; transcribing anyway');
-    await transcribeAndSend(blob, sawSpeech);
+    await transcribeAndSend(blob, sawSpeech, speechBeganAt);
   };
   /* Chunked, so the audio recorded so far can be read without stopping the
      recorder. That is what makes the speculative pass below possible. */
@@ -5189,7 +5209,7 @@ async function startWhisperCapture(){
   src.connect(an);
   const buf = new Uint8Array(an.fftSize);
   const started = Date.now();
-  let lastLoud = 0, everSpoke = false, loudSince = 0, bargeSince = 0;
+  let lastLoud = 0, everSpoke = false, loudSince = 0, bargeSince = 0, speechBeganAt = 0;
   let speculated = false, speculativeAt = 0;
   let hushProbeAt = 0, hushProbes = 0, hushProbeBusy = false;
 
@@ -5273,6 +5293,7 @@ async function startWhisperCapture(){
          what is left really is you. */
 
       if(now - loudSince > 120){
+        if(!everSpoke) speechBeganAt = loudSince;
         everSpoke = true;
       }
     } else {
@@ -5352,8 +5373,9 @@ function stopWhisperCapture(){
    because the cost of missing a real summons is far higher than the cost of
    occasionally waking on something similar.
 
-   And once he has answered, follow-up questions do not need the name again.
-   Having to say it before every sentence would make conversation impossible.
+   But the name is only needed to WAKE him. Once awake, everything said is
+   for him, however long, until a full minute goes by with nobody talking —
+   then he dozes, and only his name brings him back.
 --------------------------------------------------------------------- */
 
 const WAKE_NAMES = [
@@ -5366,11 +5388,35 @@ const WAKE_NAMES = [
   'ג\'רוויס','גרוויס','ג\'ארוויס','גארוויס','ג\'רויס','אולטרון','אלטרון'
 ];
 const WAKE_LEADS = ['hey','hi','hello','ok','okay','yo','היי','הי','שלום','אוקיי'];
-/* How long a conversation stays open after he has answered. Long enough that
-   a follow-up feels natural, short enough that a passing remark later does
-   not get picked up as a command. */
-const WAKE_WINDOW_MS = 30000;
-let lastWakeAt = 0;
+/* AWAKE AND DOZING.
+
+   The old rule was a 30-second window counted from the last time his name
+   was heard — and nothing else ever refreshed it. So half a minute into a
+   perfectly good conversation, every sentence longer than six words without
+   his name was thrown away as "not for him", correctly transcribed and
+   never answered. That is most of "he doesn't hear me", and all of "I have
+   to say hey Jarvis before every sentence".
+
+   Now: awake, everything is for him. Every exchange — him talking, you
+   talking, a tool running — keeps him awake. A full AWAKE_IDLE_MS of nobody
+   saying anything and he dozes; dozing, he hears only his name, and
+   whatever follows it in the same breath is the request. */
+const AWAKE_IDLE_MS = 60000;
+let lastActivityAt = 0;    // the last time anything was said to him or by him
+let dozeForcedAt = 0;      // "stop", mute, sleep: from here the name is needed again
+
+function noteActivity(){ lastActivityAt = Date.now(); }
+function isAwake(at){
+  if(typeof isSpeaking !== 'undefined' && isSpeaking) return true;
+  if(typeof isThinking !== 'undefined' && isThinking) return true;
+  const spoke = typeof lastSpokeEndedAt !== 'undefined' ? lastSpokeEndedAt : 0;
+  const last = Math.max(lastActivityAt, spoke);
+  if(!last || last <= dozeForcedAt) return false;
+  /* Judged at the moment he STARTED talking, not when the transcript came
+     back: a sentence begun at second 59 is still part of the conversation
+     when Whisper returns it at second 62. */
+  return (at || Date.now()) - last < AWAKE_IDLE_MS;
+}
 
 function normaliseHeard(t){
   return String(t || '')
@@ -5427,65 +5473,50 @@ const WAKE_FILLER = [
   'היי','הי','שלום','אוקיי','נו','תשמע','שמע','שומע','אתה','שם','ער','תקשיב','הלו'
 ];
 
-/* Returns what he actually asked for with the name and any address words
-   removed, or null if he was not addressing Jarvis at all.
+/* His name, and what was said with it: the request with the name and the
+   address words around it taken out ('' when he said only the name), or
+   null when he was not addressing Jarvis.
 
-   Deliberately generous about HOW he addresses him. "Hey Jarvis", "Jarvis",
-   "שומע ג'רוויס", "Jarvis?", "open youtube jarvis" all mean the same thing,
-   and requiring one exact opener would make it feel like a command line
-   rather than talking to someone. The protection against waking on ordinary
-   conversation is length, not phrasing: a sentence long enough to be a real
-   remark to somebody else is not treated as an address unless the name comes
-   right at the front. */
-function extractAfterWake(text){
+   Generous about HOW he is addressed — "Hey Jarvis", "Jarvis", "שומע
+   ג'רוויס", "Jarvis?", "open youtube jarvis" all count — because this is now
+   the one thing that wakes him, and Whisper spells the name a dozen ways. A
+   long sentence only counts with the name at the front, so a remark to
+   someone else that happens to mention him does not wake him. */
+function addressedByName(text){
   const norm = normaliseHeard(text);
   if(!norm) return null;
-
-  // Already mid-conversation: the name is not needed again.
-  if(Date.now() - lastWakeAt < WAKE_WINDOW_MS) return text.trim();
-
   const words = norm.split(' ');
   const nameAt = words.findIndex(wordIsName);
+  if(nameAt < 0) return null;
 
-  /* No recognisable name. Rather than discard the sentence outright, allow a
-     short one through — because the failure mode of the strict rule was
-     brutal and invisible: Whisper spells his name a dozen ways, especially
-     inside Hebrew speech, and every miss threw away a perfectly good
-     instruction with no sign that anything had happened. From the outside
-     that looked exactly like "he does not understand Hebrew".
-
-     A short utterance while the orb is open and pointed at you is almost
-     always meant for it; a long one is a conversation with somebody else.
-     Getting this wrong now costs an unwanted answer, which you can see and
-     ignore, instead of silence you cannot diagnose. */
-  if(nameAt < 0){
-    if(words.length <= 6){
-      lastWakeAt = Date.now();
-      return text.trim();
-    }
-    return null;
-  }
-
-  /* Three ways this counts as him being addressed. */
   const leadWords = words.slice(0, nameAt);
   const leadIsFiller = leadWords.every(w => WAKE_FILLER.indexOf(w) >= 0);
-
   const atFront   = nameAt <= 2 && leadIsFiller;        // "hey jarvis ..."
   const shortLine = words.length <= 4;                  // "שומע ג'רוויס", "jarvis?"
   const atEnd     = nameAt === words.length - 1 && words.length <= 6; // "open youtube jarvis"
-
   if(!atFront && !shortLine && !atEnd) return null;
 
-  lastWakeAt = Date.now();
-
-  /* Take out the name and the address words around it, and hand back the
-     instruction. Only filler is removed — every other word is his. */
-  const rest = words
+  return words
     .filter((w, k) => k !== nameAt)
     .filter((w, k, arr) => !(WAKE_FILLER.indexOf(w) >= 0 && arr.slice(0, k).every(x => WAKE_FILLER.indexOf(x) >= 0)))
     .join(' ')
     .trim();
-  return rest;   // may be empty: he said only the name, and is about to speak
+}
+
+/* What he asked for, or null if it was not for Jarvis. Awake: all of it.
+   Dozing: only what came with his name. */
+function extractAfterWake(text, at){
+  if(!normaliseHeard(text)) return null;
+  if(isAwake(at)){
+    noteActivity();
+    /* Just his name, awake: he is already listening. Handled here, not sent
+       to the model to be answered with "Yes?". */
+    return addressedByName(text) === '' ? '' : text.trim();
+  }
+  const rest = addressedByName(text);
+  if(rest === null) return null;
+  noteActivity();
+  return rest;
 }
 
 /* Phrasings that mean "shut down and stop listening". Matched loosely for
@@ -5688,8 +5719,9 @@ async function restoreLangMode(){
   }catch(err){ /* the default stands */ }
 }
 
-function conversationIsOpen(){ return Date.now() - lastWakeAt < WAKE_WINDOW_MS; }
-function closeConversation(){ lastWakeAt = 0; }
+/* Straight to dozing: the next thing said needs his name. What "stop",
+   mute and sleep mean. */
+function closeConversation(){ lastActivityAt = 0; dozeForcedAt = Date.now(); }
 
 /* WHAT WHISPER SAYS WHEN IT HAS NOTHING TO SAY.
 
@@ -5786,7 +5818,7 @@ async function transcribeOnly(blob){
   return heard;
 }
 
-async function transcribeAndSend(blob, sawSpeech){
+async function transcribeAndSend(blob, sawSpeech, spokeAt){
   /* If the speculative pass already came back, the whole round trip happened
      during the silence wait and there is nothing left to wait for. */
   /* If a speculative request is already in flight, WAIT for it. Starting a
@@ -5809,7 +5841,7 @@ async function transcribeAndSend(blob, sawSpeech){
       ]);
       speculativePromise = null;
       pendingSpeculative = null;
-      if(text) { console.info('JARVIS: used the in-flight transcription'); return handleTranscript(text, sawSpeech); }
+      if(text) { console.info('JARVIS: used the in-flight transcription'); return handleTranscript(text, sawSpeech, spokeAt); }
     }catch(err){
       speculativePromise = null;   // it failed; fall through and try once
     }
@@ -5817,7 +5849,7 @@ async function transcribeAndSend(blob, sawSpeech){
   if(pendingSpeculative){
     const text = pendingSpeculative;
     pendingSpeculative = null;
-    return handleTranscript(text, sawSpeech);
+    return handleTranscript(text, sawSpeech, spokeAt);
   }
   try{
     const langQuery = sttLangQuery();
@@ -5871,7 +5903,7 @@ async function transcribeAndSend(blob, sawSpeech){
       if(conversationMode && !isThinking) setTimeout(startListening, 250);
       return;
     }
-    return handleTranscript(heard, sawSpeech);
+    return handleTranscript(heard, sawSpeech, spokeAt);
   }catch(err){
     addMessage('system', t('sttFailed').replace('{why}', (err && err.message) || String(err)));
     if(conversationMode && !isThinking) setTimeout(startListening, 600);
@@ -5883,7 +5915,7 @@ async function transcribeAndSend(blob, sawSpeech){
    echo guard and the language commands are applied identically either way —
    which matters, because a shortcut that skips half the checks is how the
    fast path quietly becomes the buggy path. */
-async function handleTranscript(rawText, sawSpeech){
+async function handleTranscript(rawText, sawSpeech, spokeAt){
   try{
     let text = (rawText || '').trim();
 
@@ -5926,7 +5958,7 @@ async function handleTranscript(rawText, sawSpeech){
       const norm = normaliseHeard(text);
       if(norm.split(' ').some(wordIsName)){
         interruptSpeech();
-        lastWakeAt = Date.now();   // he addressed you; the turn is open
+        noteActivity();            // he addressed you; he is awake
       }
     }
 
@@ -5944,63 +5976,56 @@ async function handleTranscript(rawText, sawSpeech){
       return;
     }
 
-    /* The wake word belongs to the orb ONLY, and this was wrong before: the
-       gate ran on every transcription, including the website's, where you
-       press MIC deliberately. Pressing a button IS the address — demanding
-       his name on top of it meant a perfectly clear sentence was discarded
-       without a word, which is exactly what "he doesn't respond at all"
-       looks like from the outside.
+    /* Asleep ("go down"). His name, or a wake phrase, brings him back — and
+       whatever he asked for in the same breath is then done, so "hey Jarvis,
+       open the camera" does not have to be said twice. Anything else is
+       discarded and nothing reaches the model. */
+    if(IS_DESKTOP && window.__orbAsleep && window.__orbAsleep()){
+      const named = addressedByName(text);
+      const wakePhrase = typeof isWakeUpCommand === 'function' && isWakeUpCommand(text);
+      if(named === null && !wakePhrase) return;
+      const request = (named && !(typeof isWakeUpCommand === 'function' && isWakeUpCommand(named))) ? named : '';
+      noteActivity();
+      if(window.__orbWake) await window.__orbWake(!!request);
+      if(!request) return;
+      text = request;
+    } else if(IS_DESKTOP){
+      /* The wake word belongs to the orb only: on the website you pressed MIC,
+         which is the address. In the orb the microphone is open with nobody
+         touching anything — awake, all of it is for him; dozing, only what
+         comes with his name. Nothing is announced when a dozing orb ignores
+         the room: the orb itself shows that he is dozing. */
+      const wasDozing = !isAwake(spokeAt);
+      const addressed = extractAfterWake(text, spokeAt);
+      if(addressed === null){
+        console.info('JARVIS: dozing, not addressed —', text.slice(0, 60));
+        if(conversationMode && !isThinking) setTimeout(startListening, 150);
+        return;
+      }
+      if(!addressed.trim()){
+        /* Only his name. Woken, he answers so you know he heard; already
+           awake, a quiet "listening" is enough. */
+        if(wasDozing) speak(langMode === 'en' ? 'Yes, sir?' : 'כן?');
+        else addMessage('system', t('goAhead'));
+        if(conversationMode && !isThinking) setTimeout(startListening, 150);
+        return;
+      }
+      text = addressed;
+    }
 
-       In the orb the microphone is open with nobody touching anything, so
-       there the name is what separates a request from the room. */
-    /* Language switch, before anything else is done with the transcript. */
+    /* Language switch — after the gate, so a dozing orb does not change
+       language on something said to somebody else. */
     if(IS_DESKTOP && typeof detectLangCommand === 'function'){
       const want = detectLangCommand(text);
       if(want && want !== langMode){ await setLangMode(want); return; }
       if(want) return;   // already in that mode: acknowledge nothing, do nothing
     }
 
-    /* Asleep. The only thing that matters is whether he is being woken; the
-       transcript is discarded either way and nothing reaches the model. */
-    if(IS_DESKTOP && window.__orbAsleep && window.__orbAsleep()){
-      if(typeof isWakeUpCommand === 'function' && isWakeUpCommand(text)){
-        if(window.__orbWake) window.__orbWake();
-      }
-      return;
-    }
-
-    /* "Jarvis, go down" — deeper than standby. Checked before the wake word,
-       because it has to work whether or not his name was recognised, and
-       before the text reaches the model, because nothing should be sent. */
+    /* "Jarvis, go down" — deeper than dozing: the orb hides. */
     if(IS_DESKTOP && typeof isSleepCommand === 'function' && isSleepCommand(text)){
       speak('Going down.');
       setTimeout(()=>{ if(window.__orbSleep) window.__orbSleep(); }, 900);
       return;
-    }
-
-    if(IS_DESKTOP){
-      /* Whisper writes his name however it hears it, and in Hebrew speech it
-         often comes back transliterated into Latin letters mid-sentence, or
-         spelled a way the list does not carry. When the name is not matched
-         the whole utterance is discarded as "not for him" — so a Hebrew
-         sentence looked like he did not understand Hebrew at all, when in
-         fact it never reached him. Checking both scripts fixes that. */
-      const addressed = extractAfterWake(text);
-      if(addressed === null){
-        /* Heard, understood, not for him. Said out loud rather than dropped:
-           silence here is indistinguishable from a broken microphone, and
-           that ambiguity cost real debugging time. */
-        if(text) addMessage('system', t('notAddressed').replace('{heard}', text.slice(0, 60)));
-        if(conversationMode && !isThinking) setTimeout(startListening, 150);
-        return;
-      }
-      if(!addressed.trim()){
-        // Only his name so far. He is listening for the rest.
-        addMessage('system', t('goAhead'));
-        if(conversationMode && !isThinking) setTimeout(startListening, 150);
-        return;
-      }
-      text = addressed;
     }
 
     if(!text){
@@ -10425,6 +10450,69 @@ function detectWorkflowCommand(text, state){
   return null;
 }
 
+/* SEVERAL THINGS IN ONE BREATH.
+
+   "Go full screen and open my camera" matched the full-screen rule, ran it,
+   and returned — the camera half was never seen by anything. The fast path
+   answers one command per sentence by construction, so a sentence carrying
+   two is split first and each part read on its own.
+
+   Split at the joins people actually use: and / then / also / commas, and in
+   Hebrew ואז, וגם, אחר כך — plus the ו that Hebrew glues onto the next verb
+   ("ותפתח"). That last one also splits words that merely start with ו, which
+   is safe only because a part counts for nothing unless it is itself a
+   command; a wrong cut produces two non-commands and the sentence goes to
+   the model whole, exactly as before. */
+const REQ_JOIN = /\s*(?:[,;]|\band\s+then\b|\band\s+also\b|\band\b|\bthen\b|\balso\b|\bplus\b|(?:^|\s)(?:\u05d5\u05d0\u05d6|\u05d5\u05d2\u05dd|\u05d5\u05d0\u05d7\u05e8\s+\u05db\u05da|\u05d0\u05d7\u05e8\s+\u05db\u05da)(?=\s|$))\s*/i;
+
+function splitRequests(text){
+  const out = [];
+  for(const piece of String(text || '').split(REQ_JOIN)){
+    const words = piece.trim().split(/\s+/).filter(Boolean);
+    let cur = [];
+    for(const w of words){
+      if(cur.length && /^\u05d5[\u05d0-\u05ea]{2,}/.test(w) && !/^\u05d5\u05d5/.test(w)){
+        out.push(cur.join(' '));
+        cur = [w.slice(1)];
+      } else {
+        cur.push(w);
+      }
+    }
+    if(cur.length) out.push(cur.join(' '));
+  }
+  return out;
+}
+
+/* The commands that finish on their own. Looking and the store report need
+   the model, so in a compound sentence they go to it with the rest. */
+const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', 'fullscreen_exit',
+                                      'live_full', 'live_full_exit', 'workspace']);
+
+/* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
+   sentence is one request (or none) and the ordinary path should have it. */
+function planRequests(text, state){
+  const norm = normaliseHeard(text);
+  /* "Remind me tomorrow to go full screen and open the camera" is one plan,
+     not two things to do now; "go full screen and don't open the camera" is
+     one instruction with a condition. Neither is split. */
+  if(!norm || FLOW_LATER.test(norm) || FLOW_NOT.test(norm)) return null;
+  const parts = splitRequests(text);
+  if(parts.length < 2) return null;
+  const steps = [], rest = [];
+  for(const part of parts){
+    const flow = detectWorkflowCommand(part, state);
+    if(flow && SELF_CONTAINED_FLOWS.has(flow)) steps.push({ flow, part });
+    else if(normaliseHeard(part).split(' ').some(w => w && !wordIsName(w) &&
+            WAKE_FILLER.indexOf(w) < 0 && !LANG_COURTESY.has(w))) rest.push(part);
+  }
+  if(!steps.length) return null;
+  /* One command with a word or two hanging off it — "open shopify and
+     instagram" — is still one command. */
+  const restWords = rest.join(' ').split(/\s+/).filter(Boolean).length;
+  if(steps.length < 2 && restWords < 3) return null;
+  return { steps, rest };
+}
+
 /* ------------------------------------------------------------------
    THE WORKSPACE: Shopify, Instagram and TikTok, arranged
 
@@ -13731,7 +13819,32 @@ async function handleSend(){
      The store report is the exception and deliberately falls through: its
      numbers are worthless without something to say about them, and that
      needs the model. runWorkflowCommand returns false for it. */
-  if(!images.length){
+  let modelText = text;
+  const plan = images.length ? null : planRequests(text);
+  if(plan){
+    const done = [];
+    for(const step of plan.steps){
+      let handled = false;
+      try{ handled = await runWorkflowCommand(step.flow, step.part); }
+      catch(err){
+        addMessage('system', 'DEBUG (' + step.flow + '): ' + ((err && err.message) || err));
+        handled = true;
+      }
+      if(handled) done.push(step.part); else plan.rest.push(step.part);
+    }
+    if(!plan.rest.length){
+      chatHistory.push({ role:'user', content: text });
+      persistCurrentSession();
+      if(conversationMode && !isThinking && typeof startListening === 'function'){
+        setTimeout(startListening, 250);
+      }
+      return;
+    }
+    /* The model hears what is left, told what has already been done so it
+       neither repeats it nor claims it cannot. */
+    modelText = (done.length ? '[Already done by the app, do not do again: ' + done.join('; ') + '.] ' : '') +
+                plan.rest.join(', ');
+  } else if(!images.length){
     const flow = detectWorkflowCommand(text);
     if(flow){
       chatHistory.push({ role:'user', content: text });
@@ -13815,7 +13928,7 @@ async function handleSend(){
     }
   };
 
-  const reply = await askJarvis(text, images, onText);
+  const reply = await askJarvis(modelText, images, onText);
   await persistCurrentSession(); // ensure the user's message is saved even if askJarvis failed
   if(pending.isConnected) pending.remove();
   isThinking = false;
@@ -14125,6 +14238,8 @@ adjustLayout();
   });
   window.addEventListener('focus', ()=>{
     if(window.__orbAsleep && window.__orbAsleep()){ window.__orbWake(); return; }
+    /* Summoned or clicked into: that is being spoken to. */
+    if(!(window.__orbMuted && window.__orbMuted())) noteActivity();
     if(!(window.__orbMuted && window.__orbMuted())) setTimeout(beginListening, 250);
   });
 
@@ -14142,7 +14257,7 @@ adjustLayout();
     if(typeof isSpeaking !== 'undefined' && isSpeaking){
       try{ interruptSpeech(); }catch(err){}
     }
-    try{ if(typeof lastWakeAt !== 'undefined') lastWakeAt = Date.now(); }catch(err){}
+    noteActivity();
     beginListening();
   });
 
@@ -14162,10 +14277,9 @@ adjustLayout();
     if(orbMuted){
       endListening();
       /* Completely inert, not merely quiet. The microphone track is stopped
-         so the OS indicator goes out and nothing is captured at all; the
-         wake window is closed so a leftover 30-second grace period cannot
-         let the next sound through; and anything queued to be said is
-         dropped. Half-measures here are worse than none — the whole point
+         so the OS indicator goes out and nothing is captured at all; he is
+         put straight to dozing so that unmuting needs his name before the
+         next sound counts; and anything queued to be said is dropped. Half-measures here are worse than none — the whole point
          is being able to trust that it is off. */
       try{ if(typeof stopWhisperStream === 'function') stopWhisperStream(); }catch(err){}
       try{ if(typeof closeConversation === 'function') closeConversation(); }catch(err){}
@@ -14262,12 +14376,21 @@ adjustLayout();
      remove. */
   const micDot = document.getElementById('micDot');
   let lastCaptureAt = Date.now();
+  let dozeNoted = false;
   function paintMic(){
     const capturing = (typeof whisperActive !== 'undefined' && whisperActive) ||
                       (micBtn && micBtn.classList.contains('listening'));
     const busy = (typeof isThinking !== 'undefined' && isThinking) ||
                  (typeof isSpeaking !== 'undefined' && isSpeaking);
     if(capturing || busy) lastCaptureAt = Date.now();
+    /* Dozing is shown, not announced every time: the orb dims a little and
+       the label says so, and the first time it happens the log says how to
+       wake him. Without that, a dozing orb ignoring the room would look
+       exactly like the deafness this replaced. */
+    const dozing = !orbMuted && !busy && !(window.__orbAsleep && window.__orbAsleep()) && !isAwake();
+    root.classList.toggle('orb-dozing', dozing);
+    if(dozing && !dozeNoted){ dozeNoted = true; addMessage('system', t('dozing')); }
+    if(!dozing) dozeNoted = false;
     root.classList.toggle('mic-open', !!capturing && !busy && !orbMuted);
     root.classList.toggle('mic-busy', !!busy && !orbMuted);
     if(micDot){
@@ -14278,6 +14401,7 @@ adjustLayout();
                       (Date.now() - lastCaptureAt > 5000);
       micDot.title = orbMuted ? 'Standby — click to switch the microphone on'
                    : busy      ? 'Working…'
+                   : dozing && capturing ? 'Dozing — say "hey Jarvis", or click, to wake him'
                    : capturing ? 'Listening — click to switch off'
                    : stalled   ? 'Microphone is NOT open — click to retry'
                                : 'Microphone starting…';
@@ -14286,6 +14410,7 @@ adjustLayout();
       if(label){
         label.textContent = orbMuted ? 'standby'
                           : busy      ? 'working'
+                          : dozing && capturing ? 'dozing'
                           : capturing ? 'listening'
                           : stalled   ? 'microphone not open'
                                       : 'starting';
@@ -14478,10 +14603,12 @@ adjustLayout();
      and never defined, so every one of those guards was permanently
      false. The visibility paths survived it because beginListening()
      re-checks orbMuted itself, but click-to-talk did not: clicking a
-     muted orb still stamped lastWakeAt, re-opening the 30-second
-     follow-up window that setOrbMuted had just deliberately closed. */
+     muted orb still marked him as spoken to, waking him out of the
+     doze that setOrbMuted had just deliberately forced. */
   window.__orbMuted = () => orbMuted;
-  window.__orbWake = async function(){
+  /* quiet: woken by a request ("hey Jarvis, open the camera"), which
+     answers for itself — "Online." on top of it is noise. */
+  window.__orbWake = async function(quiet){
     if(!asleep) return;
     asleep = false;
     root.classList.remove('orb-asleep');
@@ -14490,7 +14617,7 @@ adjustLayout();
     const w = tauriWindow();
     if(w){ try{ await w.show(); await w.setFocus(); }catch(err){} }
     if(!orbMuted) beginListening();
-    speak('Online.');
+    if(!quiet) speak('Online.');
   };
 
   /* The native stop. Ctrl+Shift+X and the tray item both emit this, and it

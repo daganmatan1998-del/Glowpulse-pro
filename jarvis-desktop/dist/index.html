@@ -4959,87 +4959,29 @@ micBtn.addEventListener('click', ()=>{
    from words.
 --------------------------------------------------------------------- */
 
-/* Trimmed from 1100ms. Every millisecond here is dead air the user sits
-   through before anything begins, and it is added to Whisper's own latency
-   rather than overlapping it. 650ms is still comfortably longer than the
-   pause inside a sentence. */
-/* 1.5 seconds. Long enough to think mid-sentence without being cut off,
-   which matters more than shaving latency: being interrupted means saying
-   the whole thing again, while waiting an extra second costs a second. */
-const VAD_SILENCE_MS   = 1500;
-/* When to start transcribing SPECULATIVELY — long before we are sure you have
-   finished. The 1500ms wait above exists to avoid cutting you off mid-thought,
-   but it was being spent doing nothing while the audio sat there. Firing a
-   transcription at 500ms and keeping the recorder running means the upload and
-   the model run DURING the wait instead of after it. If you carry on talking,
-   the speculative result is thrown away and it cost nothing but one request;
-   if you were finished, the answer is usually already back the moment the
-   1500ms elapses. */
+/* THE TURN ENDS ON ONE RULE: a full second below the minimum.
+
+   Everything that tried to tell his voice apart from the room added a way to
+   fail — a threshold learned from the first 350ms the microphone heard, a
+   lower bar to stay open, a window that stretched with the sentence, a
+   transcript allowed to end the turn early. The one that bit: in his room
+   (noise 0.0056, voice 0.0745, measured with mic-test.html) the stay-open
+   bar came out at 0.007, a quarter above the room, so the room itself kept
+   him listening and every turn ran to its 15-second ceiling. From the
+   outside that is "he can't hear me".
+
+   So nothing is classified any more. Any sound above VAD_LEVEL — his voice,
+   a keyboard, anything — means keep listening; VAD_END_SILENCE_MS below it
+   means he has finished, and the turn goes. */
+const VAD_END_SILENCE_MS = 1000;
+/* Transcription starts halfway into that second rather than after it, with
+   the recorder still running. If he carries on, the guess is thrown away and
+   cost one request; if he has finished, the transcript is usually back by the
+   time the second is up. */
 const VAD_SPECULATE_MS = 500;
 /* Shorter, and only while he is being spoken over: the transcript is wanted
    for one reason — to see whether his name is in it. */
 const VAD_BARGE_SPECULATE_MS = 260;
-/* 1500ms is the ceiling now, not the rule. Two things decide how much of it
-   is actually spent, and both of them only ever SHORTEN the wait — the
-   asymmetry above still holds, so neither is allowed to make a cut-off more
-   likely than it was.
-
-   First, how long you spoke. Nobody trails off in the middle of "תפתח
-   יוטיוב"; pauses for thought happen inside long sentences, not one-second
-   commands. So a short utterance gets a short window and a long one keeps the
-   full 1500ms, scaled between the two rather than switched.
-
-   Second, what you said. The speculative transcript above usually lands
-   around 900ms — well inside the window — and until now it sat there unread
-   while the clock ran down. If it reads as a finished thought, there is
-   nothing left to wait for. If it ends on a word nobody stops on ("אבל",
-   "כי", "and", "because") the wait stands, because that is precisely the
-   mid-thought pause the window exists to protect. */
-const VAD_SILENCE_MIN_MS = 700;    // a one-breath command
-const VAD_SHORT_SPEECH_MS = 1200;  // at or under this, the window is at its floor
-const VAD_LONG_SPEECH_MS  = 3500;  // at or over this, the full 1500ms
-/* Never end sooner than this after the last sound, whatever the transcript
-   says. Speech has gaps between words that are shorter than people think. */
-const VAD_EARLY_MIN_MS = 600;
-
-function silenceWindowFor(spokenMs){
-  if(!spokenMs || spokenMs <= VAD_SHORT_SPEECH_MS) return VAD_SILENCE_MIN_MS;
-  if(spokenMs >= VAD_LONG_SPEECH_MS) return VAD_SILENCE_MS;
-  const k = (spokenMs - VAD_SHORT_SPEECH_MS) / (VAD_LONG_SPEECH_MS - VAD_SHORT_SPEECH_MS);
-  return Math.round(VAD_SILENCE_MIN_MS + k * (VAD_SILENCE_MS - VAD_SILENCE_MIN_MS));
-}
-
-/* Words you do not stop on. A sentence ending here is a sentence still being
-   built, whatever the silence meter thinks. Listed rather than inferred
-   because the list is short, both languages need it, and a wrong guess here
-   costs a cut-off — so only words that are unambiguously mid-clause. */
-const TRAILING_CONNECTIVE = new Set([
-  'and','but','so','or','to','the','a','an','of','with','that','because','if',
-  'when','while','for','is','are','was','my','your','his','her','its','their','than','like',
-  'של','את','עם','כי','אבל','אז','גם','או','אם','כדי','בגלל','לפני','אחרי',
-  'בשביל','כשה','שה','על','אל','מה','איזה','כמה','יותר','פחות','כמו',
-  /* Hebrew prefixes are written joined, but Whisper regularly splits one off
-     as its own word — "אני רוצה ש" is a sentence cut in half, not a sentence. */
-  'ש','ל','ב','ה','ו','מ','כ',
-  /* Copulas and pronouns, which in Hebrew sit mid-clause far more often than
-     they end one. Listing a word here only ever buys more patience, never a
-     cut-off, so the doubtful cases belong on this side. */
-  'הוא','היא','הם','הן','אני','אתה','אנחנו','זה','זאת','אלה','יהיה','היה'
-]);
-
-/* Confident that the sentence is over. Deliberately conservative: anything it
-   is unsure about falls through to the full window, because being early is
-   the expensive mistake and being late is the cheap one. */
-function looksFinished(text){
-  const t = normaliseHeard(text);
-  if(!t) return false;
-  const words = t.split(' ').filter(Boolean);
-  /* One word is usually half of something. It also does not need this path:
-     a one-word utterance is short, so the length rule has already given it
-     the shortest window there is. */
-  if(words.length < 2) return false;
-  return !TRAILING_CONNECTIVE.has(words[words.length - 1]);
-}
 /* A deliberate press of MIC on the website is a short, complete sentence, and
    waiting the full ceiling before sending it reads as the app having frozen.
    The orb gets the longer window because there nothing was pressed and the
@@ -5064,51 +5006,14 @@ const BARGE_SUSTAIN_MS = 220;    // and this long to count as someone talking ov
 const HUSH_PROBE_MS  = 850;   // how often to look while he is being talked over
 const HUSH_PROBE_MAX = 8;     // and the most looks any one reply may cost
 let bargeActive = false;         // someone is talking over him; hurry the transcript
-/* Calibrated against the room rather than fixed. A built-in laptop microphone
-   puts normal speech somewhere around 0.01-0.03 RMS, so the old fixed 0.055
-   was simply never crossed on quieter hardware: speech was never detected, the
-   turn never ended, and the recording ran to its 15-second ceiling before
-   anything was sent. From the outside that is "he barely hears me".
-   The first moments of each recording measure the noise floor, and the
-   threshold is set above it — which also adapts to a noisy room. */
-const VAD_CALIBRATE_MS = 350;    // listen to the room before judging it
-/* Raised from 0.008. That was low enough to catch a whisper and also low
-   enough that a fan, a keyboard or a room's hum never fell below it, so the
-   end of a turn was never detected. Paired with the hysteresis above, this
-   still hears a quiet voice while letting silence read as silence. */
-/* Lowered from 0.014. In a genuinely silent room the floor itself is around
-   0.002, and a 0.014 minimum meant the threshold sat seven times above the
-   noise — so you had to speak up in the quietest conditions, which is
-   exactly backwards. The floor exists only so a near-zero reading cannot
-   make everything look like speech; 0.006 is enough for that. */
-/* Raised from 0.006, which sat BELOW his measured room noise of 0.0068. A
-   minimum threshold beneath the room itself is not a safety net, it is a
-   guarantee that silence reads as speech — the turn then never ends and
-   nothing is ever sent. Any floor value must stay above a realistic quiet
-   room, and 0.009 does. */
-const VAD_MIN_LEVEL    = 0.009;
-/* A ceiling as well as a floor. Without it a noisy room pushes the threshold
-   above ordinary speech and nothing is ever detected — the loud case fails in
-   exactly the same way the quiet one used to. Checked against measured levels
-   for built-in laptop mics, headsets, quiet rooms and noisy ones: 1.8x the
-   floor, capped here, detects speech in all of them. */
-/* Lowered from 0.035. The ceiling exists so a very loud room cannot push the
-   threshold above any realistic voice — but at 0.035 it was doing exactly
-   that: a soft voice against a fan measured 0.030 and could never clear it.
-   A cap below normal speech is worse than no cap, because it fails silently
-   and only for the quietest speech, which is when you most need it to work. */
-/* Raised from 0.026 after measuring a real setup. A room measuring 0.0252
-   had its threshold pinned by that cap to 0.0260 — barely 1.03x above the
-   noise itself, so the room was constantly read as speech. The cap was
-   meant to protect a weak microphone and instead broke a noisy room, which
-   is the more common problem. 0.075 still sits far below any normal speaking
-   level, so a quiet voice is never locked out. */
-/* The ceiling now also acts as a guarantee that you stay audible: it is held
-   below a normal speaking level, so however loud the room measures, the
-   threshold can never climb past your voice. A cap above speech would fail
-   silently and only in the noisiest rooms — the hardest kind of fault to
-   diagnose, because it looks like the microphone simply stopped working. */
-const VAD_MAX_LEVEL    = 0.038;
+/* The minimum, fixed rather than learned. 0.020 RMS (-34 dBFS) is the
+   geometric middle of his measured room (0.0056) and voice (0.0745): 3.6x
+   above the room and 3.7x below the voice. Equal headroom both ways, because
+   both numbers are estimates that move — the room gets louder (a fan, an open
+   window), he speaks softer (tired, leaning back) — and loudness moves by
+   ratios, not by fixed amounts. After a new microphone or a new room,
+   re-measure with mic-test.html, which works out this same middle. */
+const VAD_LEVEL        = 0.020;
 const VAD_METER_MS     = 50;     // how often the level is sampled
 
 let whisperStream = null, whisperRec = null, whisperCtx = null;
@@ -5246,11 +5151,9 @@ async function startWhisperCapture(){
   src.connect(an);
   const buf = new Uint8Array(an.fftSize);
   const started = Date.now();
-  let lastLoud = 0, everSpoke = false, loudSince = 0, noiseFloor = 0, bargeSince = 0;
-  let speculated = false, speculativeText = null, speculativeAt = 0;
+  let lastLoud = 0, everSpoke = false, loudSince = 0, bargeSince = 0;
+  let speculated = false, speculativeAt = 0;
   let hushProbeAt = 0, hushProbes = 0, hushProbeBusy = false;
-  let firstLoudAt = 0, speculativeJudged = false;
-  let floorSum = 0, floorCount = 0, threshold = 0;
 
   /* setInterval, deliberately NOT requestAnimationFrame. Browsers throttle
      rAF to almost nothing in a window that is not focused — and this orb is
@@ -5268,122 +5171,10 @@ async function startWhisperCapture(){
     const rms = Math.sqrt(sum / buf.length);
     const now = Date.now();
 
-    /* Learn the room, then judge against it — but only from samples that are
-       plausibly the room. The calibration window opens the instant the
-       microphone does, which in continuous conversation is the instant you
-       carry on talking: your own voice was being averaged in as "background",
-       which raised the floor, which raised the threshold, which meant the
-       rest of the sentence fell below it and nothing was ever heard. Loud
-       samples are therefore excluded from the floor, and the threshold is
-       recomputed rather than frozen on the first pass. */
-    /* Calibration is SUSPENDED while he is speaking. The recording opens the
-       instant he starts talking, so whatever leaks past echo cancellation was
-       being averaged in as room noise — pushing the threshold up by three to
-       five times and making you inaudible exactly when you are trying to cut
-       him off. His voice is not the room. */
-    /* Calibration keeps running even while he speaks, but only accepts
-       samples quiet enough to plausibly BE the room. Suspending it outright
-       meant that when he was mid-sentence — which is most of the time in a
-       continuous conversation — nothing was sampled at all. Filtering by
-       level gets the same protection without the blackout. */
-    if(now - started < VAD_CALIBRATE_MS){
-      const roomLike = isSpeaking ? 0.012 : VAD_MAX_LEVEL;
-      if(rms < roomLike){ floorSum += rms; floorCount++; }
-      // Not returning: speech during calibration still counts as speech.
-    }
-    if(!threshold || now - started < VAD_CALIBRATE_MS){
-      /* A floor of zero is not a measurement, it is the absence of one — and
-         it collapses the threshold to its minimum, which sits BELOW ordinary
-         room noise. The turn then never ends, the recorder runs to its
-         ceiling, and fifteen seconds of nothing goes to Whisper. From the
-         outside that is indistinguishable from deafness, and it is what
-         suspending calibration during his speech caused: if he was talking
-         when the recorder opened, not a single sample was collected.
-
-         So an empty calibration falls back to a typical indoor floor rather
-         than to zero, and any later quiet sample replaces it. */
-      noiseFloor = floorCount ? floorSum / floorCount : (noiseFloor || 0.007);
-      /* The multiplier now scales with how noisy the room is, rather than
-         being one number for every situation. A fixed 1.8x failed in both
-         directions: in a quiet room it sat far higher than it needed to,
-         and against a fan or music it left almost no margin — a soft voice
-         at 0.030 against a floor of 0.018 never cleared the bar at all.
-
-         Quiet rooms get a wider multiplier because there is headroom for it;
-         noisy rooms get a narrower one plus a fixed offset, which separates
-         speech from a steady hum far better than scaling alone, since a loud
-         room does not make your voice proportionally louder. */
-      /* Noisy rooms now get MORE clearance, not less. The old 1.25x left the
-         threshold sitting on top of the noise; a measured room at 0.0252
-         needs roughly double its own level before speech can be told apart
-         from it. There is room for that: a normal speaking voice measured
-         ten times the room noise, so doubling the threshold still leaves
-         you able to speak at a fifth of your usual volume. */
-      /* 1.9 across the board now. The quiet-room case was 2.4, which was
-         more clearance than a quiet room needs — measured at a floor of
-         0.0068 it put the threshold 2.4x up and left only a 2.9x speaking
-         margin. Dropping to 1.9 keeps clearance comfortably above the
-         ~1.7x where room noise starts crossing, and buys back margin so
-         you can speak softly instead of projecting. */
-      /* Lowered again, from 1.9. Measured at a floor of 0.0068 that put the
-         threshold at 0.0129 and left a 3.7x margin, which sounds generous but
-         still meant projecting. 1.45 brings it to about 0.0099 — still 1.45x
-         clear of the room, and now nearly 5x below a normal speaking level,
-         so an ordinary indoor voice is comfortably enough. */
-      /* The noisy-room multiplier came down from 1.7. At that value a room
-         measuring 0.030 produced a threshold of 0.055 — above a normal
-         speaking level, so in a genuinely noisy room you became inaudible.
-         A noisy room does not make your voice proportionally louder, so
-         scaling hard with the noise is the wrong instinct; 1.25 plus the
-         fixed offset still clears the room while leaving your voice well
-         above the bar. */
-      const mult = noiseFloor < 0.010 ? 1.45
-                 : noiseFloor < 0.025 ? 1.40
-                 : 1.25;
-      const offset = noiseFloor < 0.010 ? 0 : 0.004;
-      threshold = Math.min(VAD_MAX_LEVEL,
-                  Math.max(VAD_MIN_LEVEL, noiseFloor * mult + offset));
-    }
-
-    /* Two thresholds, not one. Speech has to clear the higher bar to count as
-       started, but the turn only stays open while the level is above a lower
-       one. With a single threshold — and after it was lowered to catch a
-       quiet voice — ordinary room noise sat just above it and kept the turn
-       alive indefinitely, which is why he never stopped listening. */
-    /* The sustain bar is derived from the measured noise floor, not from a
-       fraction of the threshold. A fraction can land BELOW the room's own
-       noise — which is what happened at first, and the turn then never ended
-       at all. Anchoring it above the floor guarantees that silence, however
-       noisy the room, always reads as silence. */
-    const sustainBar = Math.max(noiseFloor * 1.25, threshold * 0.7);
-
-    /* Interrupting him uses a FIXED bar, not the calibrated one. The
-       calibrated threshold can be dragged upward by his own leakage, and
-       tying barge-in to it means the louder he is, the harder it becomes to
-       stop him — the opposite of what is wanted. Echo cancellation already
-       removes most of his voice, so anything at normal speaking level while
-       he talks is you. */
-    /* A fixed 0.020 was wrong in one direction that matters: it sits BELOW
-       the noise floor of a genuinely noisy room. This room measured 0.0252
-       (the same measurement the threshold cap above was raised for), so the
-       room's own hum cleared the barge bar continuously — 220ms into every
-       reply he concluded he was being interrupted and cut himself off. He
-       could not finish a sentence, and nothing on screen said why.
-
-       So: still fixed at the bottom, so barge-in never depends on a
-       calibration his own voice can drag upward, but never allowed to sit
-       under the room itself.
-
-       And capped at the top, which the first version of this fix forgot.
-       noiseFloor has no ceiling of its own — only the speech threshold above
-       is capped — so scaling it without a bound traded one failure for its
-       mirror image: in a loud enough room the bar climbed past any realistic
-       voice and he could not be interrupted at all. 1.6x clears steady noise
-       with margin, and 0.055 is the highest the bar may ever sit, a little
-       above VAD_MAX_LEVEL, which is itself held below a normal speaking
-       level. A room louder than that defeats speech detection outright, so
-       there is nothing left for barge-in alone to rescue. */
-    const BARGE_BAR = Math.min(0.055, Math.max(0.020, noiseFloor * 1.6));
+    /* Noticing someone talking over him uses the same minimum. It only ever
+       hurries the transcript so his name is seen sooner; it never stops him
+       by itself. */
+    const BARGE_BAR = VAD_LEVEL;
     /* LOUDNESS NO LONGER STOPS HIM, and that is the point of this block now.
 
        A level meter knows how loud the room is and nothing whatsoever about
@@ -5435,7 +5226,7 @@ async function startWhisperCapture(){
       }
     }
 
-    if(rms > (everSpoke ? sustainBar : threshold)){
+    if(rms > VAD_LEVEL){
       lastLoud = now;
       micVoiceAt = now;
       if(!loudSince) loudSince = now;
@@ -5444,7 +5235,6 @@ async function startWhisperCapture(){
          what is left really is you. */
 
       if(now - loudSince > 120){
-        if(!everSpoke) firstLoudAt = loudSince;   // when the sentence actually began
         everSpoke = true;
       }
     } else {
@@ -5470,32 +5260,18 @@ async function startWhisperCapture(){
         /* The guess is also the earliest moment his name could be seen. It was
            only ever used to decide whether the sentence sounded finished,
            which meant the interrupt still waited for the turn to end. */
-        speculativePromise.then(t => { speculativeText = t; if(t) hushIfNamed(t); }).catch(()=>{});
+        speculativePromise.then(t => { if(t) hushIfNamed(t); }).catch(()=>{});
       }
     }
     /* You resumed: the speculative guess covers only part of the sentence,
        so it is discarded and a fresh one will be taken at the next pause. */
-    if(speculated && rms > threshold && now - speculativeAt > 150){
+    if(speculated && rms > VAD_LEVEL && now - speculativeAt > 150){
       speculated = false;
-      speculativeText = null;
-      speculativeJudged = false;   // whatever it said, it was about half a sentence
       speculativePromise = null;   // it only covers half the sentence now
     }
 
-    /* The window, sized to the sentence rather than fixed. */
-    const spokenMs = (everSpoke && firstLoudAt) ? Math.max(0, lastLoud - firstLoudAt) : 0;
-    let quietLongEnough = everSpoke && lastLoud && (now - lastLoud > silenceWindowFor(spokenMs));
-
-    /* The speculative transcript came back and reads as a complete thought, so
-       the rest of the window is time spent waiting for something that already
-       happened. Judged once — not every 50ms — and never before
-       VAD_EARLY_MIN_MS, so a fast transcription cannot end a turn inside the
-       ordinary gap between two words. */
-    if(!quietLongEnough && everSpoke && lastLoud && speculativeText && !speculativeJudged &&
-       now - lastLoud > VAD_EARLY_MIN_MS){
-      speculativeJudged = true;
-      if(looksFinished(speculativeText)) quietLongEnough = true;
-    }
+    /* A full second below the minimum: he has finished. */
+    const quietLongEnough = everSpoke && lastLoud && (now - lastLoud > VAD_END_SILENCE_MS);
     const ranTooLong = now - started > (IS_DESKTOP ? VAD_MAX_MS : VAD_MAX_MS_MANUAL);
     if(quietLongEnough || ranTooLong){
       clearInterval(meterTimer);

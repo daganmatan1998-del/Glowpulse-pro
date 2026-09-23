@@ -86,8 +86,44 @@
 
   /* How often a frame is handed to the orb. Fast enough that "look at
      this" never shows something stale, slow enough to be free. */
-  var PUSH_MS = 600;
+  var PUSH_MS = 400;
   var MAX_W   = 768;
+
+  /* THE FRAME THAT GOT A CONTROLLER CALLED A WATER BOTTLE.
+
+     pushFrame ran the instant getUserMedia resolved, before the sensor
+     had done anything with the light it was pointed at. Almost every
+     webcam spends its first several frames ramping auto-exposure, which
+     on plenty of hardware means one or more genuinely black or
+     near-featureless frames before the picture settles — and a vision
+     model handed a blank rectangle does not say so, it completes the
+     sentence with whatever is statistically likely, which is a very
+     good description of how a bottle gets invented for a joypad.
+
+     Same variance test the continuous "eye" already uses to reject a
+     covered lens or a blank wall (0.0012 — a spread of about ten grey
+     levels, which nothing with a real object in it fails to clear).
+     Reused rather than re-derived, so both places agree on what "blank"
+     means. A probe this small costs nothing next to the encode it is
+     gating. */
+  var PROBE_W = 24, PROBE_H = 18, DARK_VARIANCE = 0.0012;
+  var probeCanvas = null;
+  function frameLooksBlank(){
+    if(!probeCanvas){ probeCanvas = document.createElement('canvas'); probeCanvas.width = PROBE_W; probeCanvas.height = PROBE_H; }
+    var ctx = probeCanvas.getContext('2d', { willReadFrequently: true });
+    try{ ctx.drawImage(feed, 0, 0, PROBE_W, PROBE_H); }catch(e){ return true; }
+    var px;
+    try{ px = ctx.getImageData(0, 0, PROBE_W, PROBE_H).data; }catch(e){ return true; }
+    var n = PROBE_W * PROBE_H, mean = 0, vals = new Float32Array(n);
+    for(var i = 0, j = 0; i < px.length; i += 4, j++){
+      vals[j] = (px[i]*0.299 + px[i+1]*0.587 + px[i+2]*0.114) / 255;
+      mean += vals[j];
+    }
+    mean /= n;
+    var v = 0;
+    for(var k = 0; k < n; k++){ var d = vals[k] - mean; v += d*d; }
+    return (v / n) < DARK_VARIANCE;
+  }
 
   function say(text, live){
     state.textContent = text;
@@ -134,6 +170,11 @@
 
   function pushFrame(){
     if(!stream || !feed.videoWidth) return;
+    /* A blank frame is skipped rather than sent: the interval tries again
+       in PUSH_MS, and the orb simply keeps whichever real frame it had
+       before (or none yet, which it is told honestly rather than shown
+       a guess dressed up as an answer). */
+    if(frameLooksBlank()) return;
     try{
       var scale = Math.min(1, MAX_W / feed.videoWidth);
       var c = document.createElement('canvas');

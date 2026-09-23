@@ -267,14 +267,14 @@
   }
   html.tauri.orb-expanded #livePane{ width:300px; }
 
-  /* Everything that belongs to the working interface, gone. */
+  /* Everything that belongs to the working interface, gone. The custom
+     cursor is deliberately NOT in this list any more — see below. */
   html.tauri #vignette, html.tauri #grain,
   html.tauri .hud, html.tauri .corner,
   html.tauri #commPanel, html.tauri #optionsBtn, html.tauri #optionsPanel,
   html.tauri #htmlPreview,
   html.tauri #lightbox, html.tauri #ctxMenu, html.tauri #loading,
-  html.tauri #desktopBar,
-  html.tauri #cursorDot, html.tauri #cursorRing{
+  html.tauri #desktopBar{
     display:none !important;
   }
   /* Dragging is the outer ring only: with the whole body as a drag region the
@@ -294,7 +294,22 @@
      by stacking rather than clipping: #orbHit sits on top of the centre and
      carries no attribute, so the topmost element under the pointer decides,
      and its events still bubble to the document handlers below. */
-  html.tauri body{ cursor:default !important; }
+  /* THE VANISHING MOUSE.
+
+     This used to force the real OS arrow back on over the orb, on the
+     theory that the fancy reticle belonged to the website and the orb
+     just needed a plain pointer. It does not: this window is
+     `transparent:true`, a layered window Windows composites specially,
+     and drawing the SYSTEM cursor over a layered surface is exactly the
+     combination that makes it flicker out or disappear entirely on some
+     GPU/driver pairings — which is what "the mouse vanishes over him"
+     was. The fix is the one the website already uses: never ask the OS
+     to draw a cursor here at all. #cursorDot and #cursorRing are real
+     painted pixels with their own alpha, so they show up over a
+     transparent surface exactly where the system arrow would not. The
+     rule below is removed rather than only weakened, so the same
+     finePointer-gated `cursor:none` further down applies here too — one
+     rule, one cursor, instead of two things trying to own it. */
   /* Both exist only in the desktop orb; on the website they are two empty
      divs that must not take part in the layout. */
   #orbDrag, #orbHit{ display:none; }
@@ -1849,6 +1864,7 @@ const I18N = {
     seeing: 'Looking at: {what}',
     saidNotDone: 'He described doing something and no tool ran, so it did not happen. The sentence was not spoken. Nothing was changed on your machine.',
     cameraDescribed: 'Note: no engine on your worker takes pictures directly, so anything you show him is described by a vision model first and he answers from the description. Fine detail — small print, exact shades — may not survive that. Set ANTHROPIC_API_KEY, or point the chain at a model that sees, for him to look at it himself.',
+    cameraNoFrameYet: 'The camera has not produced a usable picture yet — give it a second and ask again.',
     cameraBlind: 'The camera is on, but no engine connected to your worker can see pictures — the worker strips them out on the way, so what you hold up will not reach him. Fix it on Cloudflare: set ANTHROPIC_API_KEY, or point the chain at a model that can see (Gemini, GPT-4o, Grok, Llama 4), or add that model to VISION_ENGINES.',
     sttOldWorker: 'Your Cloudflare worker is the old one, which forces Whisper into one language and is why requests come back as "Thank you". Run: wrangler deploy',
     captureReset: 'The microphone had stopped responding. Reopened it.',
@@ -2073,6 +2089,7 @@ const I18N = {
     seeing: 'מסתכל על: {what}',
     saidNotDone: 'הוא תיאר פעולה ושום כלי לא רץ, אז זה לא קרה. המשפט לא הושמע. שום דבר לא השתנה במחשב שלך.',
     cameraDescribed: 'שים לב: אף מנוע ב-worker שלך לא מקבל תמונות ישירות, אז כל מה שתראה לו עובר קודם תיאור על ידי מודל ראייה, והוא עונה מהתיאור. פרטים עדינים — אותיות קטנות, גוונים מדויקים — עלולים לא לשרוד. להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה, כדי שיסתכל בעצמו.',
+    cameraNoFrameYet: 'המצלמה עוד לא הפיקה תמונה שמישהי — תן לה עוד רגע ותנסה שוב.',
     cameraBlind: 'המצלמה פתוחה, אבל אף מנוע שמחובר ל-worker שלך לא יכול לראות תמונות — ה-worker מסנן אותן בדרך, ומה שתרים לא יגיע אליו. לתקן ב-Cloudflare: להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה (Gemini, GPT-4o, Grok, Llama 4), או להוסיף אותו ל-VISION_ENGINES.',
     sttOldWorker: 'ה-worker ב-Cloudflare הוא הישן — הוא כופה על Whisper שפה אחת, וזו הסיבה שבקשות חוזרות כמו "Thank you". הרץ: wrangler deploy',
     captureReset: 'המיקרופון הפסיק להגיב. פתחתי אותו מחדש.',
@@ -5055,6 +5072,21 @@ const VAD_METER_MS     = 50;     // how often the level is sampled
 
 let whisperStream = null, whisperRec = null, whisperCtx = null;
 let whisperActive = false;
+/* Bumped on every start and every stop. getUserMedia has no cancellation —
+   once asked, it keeps running until it resolves or rejects, on its own
+   schedule. Nothing stops a second start (a resumed conversation) or a
+   stop (the mic being closed) from happening while an earlier start is
+   still waiting on it, and when that earlier call finally resolves it
+   would otherwise barrel straight into creating a MediaRecorder and
+   overwriting whisperStream/whisperRec regardless of anything that has
+   happened since it was asked to run.
+
+   Same idiom as eyeGen elsewhere in this file: the number handed out at
+   the top of a start is checked again after the only real wait in it, and
+   a mismatch means something superseded this attempt while it was
+   in flight — its stream is closed and it exits quietly instead of
+   resurrecting a capture that was supposed to be gone. */
+let whisperCaptureGen = 0;
 let sttFailures = 0;
 let lastThinkStart = 0;   // when the current request began, for the stall check
 let pendingSpeculative = null;   // a transcript that arrived before we asked for it
@@ -5073,6 +5105,7 @@ function whisperAvailable(){
 async function startWhisperCapture(){
   if(whisperActive) return;
   whisperActive = true;
+  const myCaptureGen = ++whisperCaptureGen;
   captureStartedAt = Date.now();
   /* Only suspect if he is ACTUALLY talking, or stopped a breath ago.
 
@@ -5105,13 +5138,25 @@ async function startWhisperCapture(){
       new Promise((_, reject) => setTimeout(()=> reject(new Error('the microphone did not open')), 8000))
     ]);
   }catch(err){
-    whisperActive = false;
+    if(myCaptureGen === whisperCaptureGen) whisperActive = false;
     captureStartedAt = 0;
     micBtn.classList.remove('listening');
     addMessage('system', t('micDenied'));
     /* Do not leave the loop dead on one refusal — the microphone may simply
        have been busy for a moment. */
     if(conversationMode && !isThinking) setTimeout(startListening, 2000);
+    return;
+  }
+
+  /* THE ACTUAL RACE. getUserMedia above is the only await in this function,
+     so it is the only place another start or stop can have overtaken this
+     one — and on a rapid hide/show of the window (a full-screen transition
+     firing a spurious visibilitychange is the case that surfaced this),
+     it reliably does. Superseded: close what was just opened and stop,
+     rather than build a MediaRecorder nothing above is expecting any more
+     and silently replace whatever the newer attempt already set up. */
+  if(myCaptureGen !== whisperCaptureGen){
+    try{ whisperStream.getTracks().forEach(t => t.stop()); }catch(e){}
     return;
   }
 
@@ -5432,6 +5477,7 @@ function stopWhisperStream(){
 }
 
 function stopWhisperCapture(){
+  whisperCaptureGen++;
   whisperActive = false;
   if(whisperRec && whisperRec.state === 'recording'){ try{ whisperRec.stop(); }catch(e){} }
   else { stopWhisperStream(); micBtn.classList.remove('listening'); }
@@ -8904,7 +8950,12 @@ const LOOK_INSTRUCTION =
   'he is holding up or pointing at. That name is shown to him beside the picture so he can see at ' +
   'once whether you fastened onto the right object, and it is what you will be working from for the ' +
   'next minute and a half.\n\nTHEN answer him in one or two short sentences. He can see the thing ' +
-  'himself, so do not inventory it — tell him what matters about it, or answer whatever he asked.';
+  'himself, so do not inventory it — tell him what matters about it, or answer whatever he asked.' +
+  '\n\nIF THE FRAME IS DARK, BLURRED, TOO CLOSE TO MAKE OUT, OR THE OBJECT IS AMBIGUOUS, SAY SO ' +
+  'rather than naming the first plausible thing that comes to mind. A camera frame is a small, ' +
+  'compressed picture and is sometimes genuinely unclear — "I can\'t make out what that is, can you ' +
+  'hold it a little closer or turn the light up?" is a correct answer and a confident wrong guess is ' +
+  'not. He would rather be asked again than be told he is holding something he is not.';
 
 /* The frame as it looks right now. Kept small on purpose: this rides along
    with every message while live is on, and a full-resolution still each
@@ -9399,8 +9450,11 @@ if(finePointer){
     dot.style.transform = at;
     ring.style.transform = at;   // locked together — a lagging ring reads as lag
     document.body.classList.remove('cursor-hidden');
+    /* #orbHit and #micDot exist only in the orb and are plain divs, not
+       buttons — without naming them the ring never collapses over the two
+       things the orb is actually clicked for: talk, and mute. */
     const hot = e.target && e.target.closest &&
-                e.target.closest('button, a, .historyItem, .msgImg, input, textarea, select, [role="button"]');
+                e.target.closest('button, a, .historyItem, .msgImg, input, textarea, select, [role="button"], #orbHit, #micDot');
     ring.classList.toggle('hot', !!hot);
   }, { passive:true });
 
@@ -13633,6 +13687,31 @@ async function handleSend(){
       lookFrame = frame;
       lookPending = true;
       noteSeenCalled = false;
+    } else {
+      /* THE CAMERA SAYS IT IS ON AND HAS NOTHING TO SHOW.
+
+         Sending "look at this" through with no picture attached used to
+         reach the model anyway — as bare text, with the LOOK_INSTRUCTION
+         it needs skipped (that only fires when a frame actually came
+         along), so it had no way to know a look was even asked for. The
+         one honest thing to do with a request that cannot be answered is
+         say so and stop, the same as the camera-window commands already
+         do when there is nothing to act on. This is what a still-warming-
+         up sensor, a lens pointed at the ceiling, or the window simply
+         not having sent its first frame yet all look like from here — a
+         request with real intent behind it that this turn cannot serve. */
+      addMessage('system', t('cameraNoFrameYet'));
+      /* Recorded rather than dropped silently: the transcript should show
+         he asked and why nothing followed, the same as any other local
+         command that answers without reaching the model. */
+      chatHistory.push({ role:'user', content: text });
+      persistCurrentSession();
+      chatInput.value = '';
+      autoResizeChatInput();
+      if(conversationMode && !isThinking && typeof startListening === 'function'){
+        setTimeout(startListening, 250);
+      }
+      return;
     }
   }
   if((!text && !images.length) || isThinking) return;
@@ -14016,7 +14095,7 @@ adjustLayout();
        A minute is far past any sentence. */
     if(whisperActive && captureStartedAt && Date.now() - captureStartedAt > 60000){
       console.warn('JARVIS: capture stuck open, resetting');
-      try{ stopWhisperCapture(); }catch(e){}
+      try{ stopWhisperCapture(); }catch(e){}   // already bumps the generation
       whisperActive = false;
       captureStartedAt = 0;
       captureSawSpeech = false;
@@ -14043,13 +14122,41 @@ adjustLayout();
 
   /* Shown and hidden by a global hotkey the page never sees, so visibility is
      the only signal that the orb has just been summoned. */
+  /* GOING FULL SCREEN USED TO DEAFEN HIM.
+
+     w.setFullscreen() below is a real OS-level resize of this window, not a
+     CSS class flip, and Windows can report a layered/transparent window as
+     briefly OCCLUDED while DWM rebuilds its swap chain for the new size —
+     which Chromium surfaces as exactly this event, document.hidden true and
+     then false again a moment later, with nothing having actually gone to
+     the background. The old handler could not tell that apart from a real
+     hide and tore the capture down on every single trip through full
+     screen: conversationMode false, the recorder stopped, the recognizer
+     aborted. The window then reappeared and the 250ms restart usually
+     covered it — usually, because tearing an in-flight getUserMedia down
+     and immediately asking for a new one is exactly the race
+     whisperCaptureGen exists to survive, and until now nothing did.
+
+     A blip this short does not reach endListening() at all: the hide is
+     held for VISIBILITY_HIDE_DEBOUNCE_MS, and becoming visible again inside
+     that window cancels it, so the capture that was already running is
+     simply left alone. A real hide — switching away, minimising — stays
+     hidden well past that and closes the microphone exactly as before,
+     just very slightly later than instantly. */
+  const VISIBILITY_HIDE_DEBOUNCE_MS = 700;
+  let visibilityHideTimer = null;
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState === 'visible'){
+      if(visibilityHideTimer){ clearTimeout(visibilityHideTimer); visibilityHideTimer = null; }
       /* Becoming visible is how the hotkey reaches a sleeping orb — the page
          never sees the key itself, so this is the wake signal. */
       if(window.__orbAsleep && window.__orbAsleep()) window.__orbWake();
       else if(!(window.__orbMuted && window.__orbMuted())) setTimeout(beginListening, 250);
-    } else endListening();
+    } else {
+      if(visibilityHideTimer) clearTimeout(visibilityHideTimer);
+      visibilityHideTimer = setTimeout(()=>{ visibilityHideTimer = null; endListening(); },
+                                       VISIBILITY_HIDE_DEBOUNCE_MS);
+    }
   });
   window.addEventListener('focus', ()=>{
     if(window.__orbAsleep && window.__orbAsleep()){ window.__orbWake(); return; }

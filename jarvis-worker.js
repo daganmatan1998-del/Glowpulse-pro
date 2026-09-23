@@ -60,9 +60,12 @@
                                page can check a stored token before trusting it.
      POST /fallback/test       (no body)              → { ok, engines: [...] } — asks
                                every configured engine, before you need them
+     GET  /router/stats, GET /router/registry, POST /router/explain,
+     POST /router/feedback     the Claude model router — see its section at the
+                               end of this file
    ===================================================================== */
 
-const WORKER_VERSION = '2.3.0';
+const WORKER_VERSION = '2.4.0';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -75,7 +78,8 @@ function pinSecret(env)   { return env.JARVIS_PIN || env.AUTH_PIN || ''; }
 function tokenSecret(env) { return env.JARVIS_TOKEN_SECRET || env.SESSION_SECRET || ''; }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
+    routerCtx = ctx || null;
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
 
@@ -104,6 +108,7 @@ export default {
       if (path === '/shopify/query')               return await handleShopify(request, env);
       if (path === '/fallback/test')               return await handleFallbackTest(env, request);
       if (path === '/session')                     return json({ ok: true }, 200, env, request);
+      if (path.indexOf('/router/') === 0)          return await handleRouter(request, env, path);
 
       return json({ error: 'not found: ' + path }, 404, env, request);
     } catch (err) {
@@ -127,7 +132,7 @@ function cors(env, request) {
        fallen back to another model, that an image was dropped — arrived and was
        then discarded by the browser. That is why the debug line said
        "engine=unknown" while the worker knew perfectly well which engine it was. */
-    'Access-Control-Expose-Headers': 'X-Jarvis-Engine, X-Jarvis-Fallback, X-Jarvis-Voice, X-Jarvis-Blind, X-Jarvis-Vision',
+    'Access-Control-Expose-Headers': 'X-Jarvis-Engine, X-Jarvis-Fallback, X-Jarvis-Voice, X-Jarvis-Blind, X-Jarvis-Vision, X-Jarvis-Route, X-Jarvis-Model, X-Jarvis-Task, X-Jarvis-Escalated',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };
@@ -277,6 +282,9 @@ async function health(env) {
       handle: String(s.store || '').trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0].replace(/\.myshopify\.com$/, '')
     })),
     calendar: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN),
+    router: routerEnabled(env) && !!env.ANTHROPIC_API_KEY
+      ? { enabled: true, models: loadRegistry(env).filter(m => m.enabled).map(m => m.id) }
+      : { enabled: false },
     missing: missing
   };
 }
@@ -402,6 +410,11 @@ async function callEngine(engine, body, env, request, announce, describedBy) {
   /* Workers AI is a binding, not an endpoint: no fetch, no key, no streaming
      to convert. Handled up front so the HTTP path below stays untouched. */
   if (engine.vendor === 'workers-ai') return await callWorkersAI(engine, body, env, request, announce, describedBy);
+  /* Anthropic goes through the model router first, which calls back in here
+     once per model it tries, marked `routed` so it does not route again. */
+  if (engine.vendor === 'anthropic' && !engine.routed && routerEnabled(env)) {
+    return await callAnthropicRouted(engine, body, env, request, announce, describedBy);
+  }
   let upstream;
   try {
     upstream = engine.vendor === 'anthropic'
@@ -1460,7 +1473,9 @@ async function probeEngine(engine, env) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': engine.key,
                      'anthropic-version': ANTHROPIC_VERSION },
-          body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 16,
+          /* The cheapest model the router may use: this proves the key, and
+             pinging the most expensive one to hear "ready" would be waste. */
+          body: JSON.stringify({ model: (loadRegistry(env).find(m => m.enabled) || { id: 'claude-haiku-4-5' }).id, max_tokens: 16,
                                  messages: [{ role: 'user', content: 'Reply with the single word: ready' }] })
         })
       : await fetch(engine.url, {
@@ -2265,3 +2280,1096 @@ async function handleCalendarCreate(request, env) {
     }
   }, 200, env, request);
 }
+
+/* =====================================================================
+   Claude model router
+   =====================================================================
+
+   Every request used to go to one hard-coded model, whether it was "hi" or
+   "rewrite the whole checkout flow". This section picks, per request, the
+   least expensive Claude model that can still do that particular job at the
+   required quality — and climbs to a stronger one when it could not.
+
+     request ─► analyzeTask ─► requirement ─► candidates ─► estimate ─► score
+             ─► route ─► Claude ─► evaluateResponse ─► ok? return : escalate
+
+   Nothing about which model wins is written into the code. The models live
+   in ROUTER_DEFAULT_REGISTRY, and every field of it can be changed from the
+   environment without touching this file:
+
+     ROUTER                 "off" to send every request to the model the page
+                            asked for, exactly as before. Anything else = on.
+     ROUTER_MODELS          comma list of model ids that are available, e.g.
+                            "claude-haiku-4-5,claude-sonnet-5,claude-opus-5".
+                            Replaces the registry's own enabled flags.
+     ROUTER_REGISTRY        JSON: an array of model entries, merged by id onto
+                            the defaults (new ids are added). A new Claude
+                            release is one entry here, not a code change.
+     ROUTER_TASKS           JSON: per-task overrides of the task profiles
+                            (required capability, output estimate, minQuality).
+     ROUTER_WEIGHTS         JSON: { quality, cost, tokens, latency, risk }.
+     ROUTER_MIN_QUALITY     the floor no choice may fall under (default 0.8).
+     ROUTER_SUFFICIENT_QUALITY  quality past which a stronger model earns no
+                            more credit (default 0.95), so it cannot outbid a
+                            cheaper model that already does the job.
+     ROUTER_TOKEN_BUDGET    JSON: { maxCostUsd, maxTotalTokens } per request.
+     ROUTER_KV              optional KV binding: what the router has learned
+                            survives the isolate being recycled.
+
+   Endpoints (all behind the session token):
+     GET  /router/stats     decisions, token and cost savings, per-model health
+     GET  /router/registry  the registry exactly as the router sees it now
+     POST /router/explain   a messages body → the decision, without calling
+     POST /router/feedback  { id, rating: "good" | "bad" } for a routed reply
+   ===================================================================== */
+
+const ROUTER_DEFAULT_REGISTRY = [
+  {
+    id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', family: 'haiku', version: '4.5',
+    enabled: true, contextWindow: 200000, maxOutput: 64000,
+    pricing: { input: 1.00, output: 5.00, cacheRead: 0.10, cacheWrite: 1.25 },
+    capability: 58,
+    capabilities: ['vision', 'tools', 'web_search', 'mcp', 'sampling', 'forced_tool_choice'],
+    thinking: 'none', effortLevels: [],
+    recommendedTasks: ['chit_chat', 'simple_question', 'translation', 'summarization', 'extraction'],
+    strengths: { chit_chat: 4, simple_question: 3, translation: 3 },
+    tokenizerFactor: 1.0,
+    latency: { ttftMs: 350, tokensPerSec: 160 },
+    budget: { minOutput: 64, maxOutput: 16000 }
+  },
+  {
+    id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', family: 'sonnet', version: '4.6',
+    /* Superseded by Sonnet 5, which is both stronger and cheaper. Kept so the
+       page's own default is priced (it is the savings baseline) and so it can
+       be switched back on with ROUTER_MODELS if an account lacks Sonnet 5. */
+    enabled: false, contextWindow: 1000000, maxOutput: 128000,
+    pricing: { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+    capability: 74,
+    capabilities: ['vision', 'tools', 'web_search', 'mcp', 'sampling', 'forced_tool_choice', 'effort'],
+    thinking: 'optional', effortLevels: ['low', 'medium', 'high', 'max'],
+    recommendedTasks: ['coding', 'data_analysis', 'creative_writing'],
+    strengths: {},
+    tokenizerFactor: 1.0,
+    latency: { ttftMs: 600, tokensPerSec: 80 },
+    budget: { minOutput: 64, maxOutput: 64000 }
+  },
+  {
+    id: 'claude-sonnet-5', name: 'Claude Sonnet 5', family: 'sonnet', version: '5',
+    enabled: true, contextWindow: 1000000, maxOutput: 128000,
+    pricing: { input: 2.00, output: 10.00, cacheRead: 0.20, cacheWrite: 2.50 },
+    capability: 82,
+    capabilities: ['vision', 'tools', 'web_search', 'mcp', 'forced_tool_choice', 'effort', 'thinking'],
+    thinking: 'adaptive-default', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    recommendedTasks: ['coding', 'debugging', 'data_analysis', 'creative_writing', 'agentic', 'long_context', 'vision'],
+    strengths: { coding: 3, agentic: 2, data_analysis: 2 },
+    tokenizerFactor: 1.0,
+    latency: { ttftMs: 650, tokensPerSec: 85 },
+    budget: { minOutput: 64, maxOutput: 64000 }
+  },
+  {
+    id: 'claude-opus-5', name: 'Claude Opus 5', family: 'opus', version: '5',
+    enabled: true, contextWindow: 1000000, maxOutput: 128000,
+    pricing: { input: 5.00, output: 25.00, cacheRead: 0.50, cacheWrite: 6.25 },
+    capability: 91,
+    capabilities: ['vision', 'tools', 'web_search', 'mcp', 'forced_tool_choice', 'effort', 'thinking'],
+    thinking: 'adaptive-default', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    recommendedTasks: ['complex_reasoning', 'debugging', 'coding', 'agentic'],
+    strengths: { complex_reasoning: 2, debugging: 2, agentic: 2 },
+    tokenizerFactor: 1.15,
+    latency: { ttftMs: 1100, tokensPerSec: 55 },
+    budget: { minOutput: 128, maxOutput: 64000 }
+  },
+  {
+    id: 'claude-opus-5-5', name: 'Claude Opus 5.5', family: 'opus', version: '5.5',
+    /* Off until switched on by name (ROUTER_MODELS), as it is still launching.
+       Cheaper than Opus 5 and at least as strong, so once enabled it simply
+       takes Opus 5's place in the ladder. */
+    enabled: false, contextWindow: 1000000, maxOutput: 128000,
+    pricing: { input: 4.00, output: 20.00, cacheRead: 0.20, cacheWrite: 5.00 },
+    capability: 93,
+    capabilities: ['vision', 'tools', 'web_search', 'mcp', 'effort', 'thinking'],
+    thinking: 'always', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    recommendedTasks: ['complex_reasoning', 'debugging', 'coding', 'agentic'],
+    strengths: { complex_reasoning: 2, debugging: 2, agentic: 2 },
+    tokenizerFactor: 1.15,
+    latency: { ttftMs: 1100, tokensPerSec: 55 },
+    budget: { minOutput: 128, maxOutput: 64000 }
+  },
+  {
+    id: 'claude-fable-5-1', name: 'Claude Fable 5.1', family: 'fable', version: '5.1',
+    enabled: true, contextWindow: 1000000, maxOutput: 128000,
+    pricing: { input: 10.00, output: 50.00, cacheRead: 0.25, cacheWrite: 12.50 },
+    capability: 100,
+    capabilities: ['vision', 'tools', 'web_search', 'mcp', 'effort', 'thinking'],
+    thinking: 'always', effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    recommendedTasks: ['complex_reasoning', 'agentic'],
+    strengths: { complex_reasoning: 2 },
+    tokenizerFactor: 1.15,
+    latency: { ttftMs: 2500, tokensPerSec: 45 },
+    budget: { minOutput: 256, maxOutput: 64000 }
+  }
+];
+
+/* What each kind of task needs. `required` is the capability score at which
+   the task is reliably done; complexity moves it from 5 below to 15 above.
+   `output` is a typical reply length in tokens before complexity scales it. */
+const ROUTER_TASK_PROFILES = {
+  chit_chat:         { label: 'Small talk',              required: 40, output: 120,  why: 'Conversational reply, no reasoning load' },
+  simple_question:   { label: 'Simple question',         required: 50, output: 300,  why: 'Short factual answer' },
+  translation:       { label: 'Translation',             required: 54, output: 0,    why: 'Faithful translation; length follows the source' },
+  summarization:     { label: 'Summarization',           required: 57, output: 450,  why: 'Condensing supplied text' },
+  extraction:        { label: 'Structured extraction',   required: 62, output: 700,  why: 'Must return valid structured output' },
+  vision:            { label: 'Image understanding',     required: 62, output: 400,  why: 'Needs to read an image' },
+  creative_writing:  { label: 'Creative writing',        required: 64, output: 700,  why: 'Tone and style matter more than reasoning depth' },
+  general:           { label: 'General request',         required: 62, output: 600,  why: 'Open request with no strong signal' },
+  data_analysis:     { label: 'Data analysis',           required: 72, output: 900,  why: 'Numbers must be read and reasoned about correctly' },
+  long_context:      { label: 'Long-context analysis',   required: 72, output: 900,  why: 'Must hold a large input in view at once' },
+  coding:            { label: 'Coding',                  required: 74, output: 1500, why: 'Requires code generation that has to run' },
+  agentic:           { label: 'Agentic / multi-step',    required: 76, output: 800,  why: 'Multi-step tool use; a wrong step compounds' },
+  debugging:         { label: 'Code debugging',          required: 78, output: 1200, why: 'Requires code reasoning to find a root cause' },
+  complex_reasoning: { label: 'Complex reasoning',       required: 84, output: 1500, why: 'Multi-step reasoning where shallow answers are wrong' }
+};
+
+const ROUTER_DEFAULT_WEIGHTS = { quality: 1.0, cost: 0.35, tokens: 0.10, latency: 0.10, risk: 0.50 };
+const ROUTER_DEFAULT_MIN_QUALITY = 0.8;
+
+/* Checked in order; the first type with the most hits wins. Hebrew has no \b
+   (JS word boundaries are ASCII-only), so those terms are matched bare. */
+const ROUTER_TASK_PATTERNS = [
+  ['debugging',         /\b(debug|bug|error|exception|traceback|stack ?trace|crash(es|ed)?|doesn'?t work|not working|broken|fails?|failing|undefined is not|typeerror|syntaxerror|segfault|fix (this|it|the))\b|שגיאה|באג|לא עובד|קורס|נשבר|תתקן/i],
+  ['coding',            /\b(code|function|class|script|implement|refactor|regex|api|endpoint|sql|javascript|typescript|python|html|css|react|rust|component|compile|unit tests?|write a program)\b|```|קוד|פונקציה|סקריפט|תכנת|תכתוב (לי )?(אפליקציה|אתר|תוכנה)/i],
+  ['translation',       /\b(translate|translation|in (english|hebrew|spanish|french|german|arabic))\b|תרגם|תתרגם|תרגום|לאנגלית|לעברית/i],
+  ['summarization',     /\b(summari[sz]e|summary|tl;?dr|key points|recap|condense)\b|סכם|תסכם|סיכום|תקציר|נקודות עיקריות/i],
+  ['extraction',        /\b(extract|parse|as json|in json|json object|respond with only|csv of|fill (in )?the fields)\b|חלץ|תחלץ/i],
+  ['data_analysis',     /\b(analy[sz]e (the )?(data|numbers|sales|metrics)|dataset|spreadsheet|statistics|revenue|conversion rate|kpi|trend|forecast|average|median|correlation|report on)\b|נתונים|מכירות|הכנסות|דוח|סטטיסטיק|המרה/i],
+  ['creative_writing',  /\b(poem|story|lyrics|slogan|tagline|caption|ad copy|marketing copy|blog post|product description|write (me )?a (post|story|poem)|creative)\b|שיר|סיפור|סלוגן|כיתוב|פוסט|תיאור מוצר|קופי/i],
+  ['complex_reasoning', /\b(prove|proof|derive|trade-?offs?|strategy|architecture|design a system|step by step|think (hard|carefully)|reason about|pros and cons|compare .* (and|vs\.?) |optimi[sz]e|root cause|why does|what would happen)\b|אסטרטגיה|ארכיטקטורה|תנתח לעומק|יתרונות וחסרונות|למה זה|שלב אחר שלב/i],
+  ['agentic',           /\b(and then|after that|step \d|multi-?step|go through (all|every)|for each|automate|set up|deploy|build (me )?(a|an|the) (site|app|store|website|tool))\b|ואז|אחר כך|תבנה לי|תקים|אוטומצי/i]
+];
+
+const ROUTER_HARD_WORDS = /\b(complex|production|architecture|concurren|race condition|security|vulnerab|proof|algorithm|distributed|scalab|from scratch|end-to-end|entire|whole (app|codebase|project)|performance|memory leak|deadlock|edge cases?|rigorous)\w*|מורכב|ארכיטקטורה|אופטימיזציה|מאפס|כל הפרויקט|ביצועים|אבטחה/gi;
+const ROUTER_EASY_WORDS = /\b(quick(ly)?|simple|short|brief(ly)?|one (line|word|sentence)|just tell me|yes or no|tl;?dr)\b|בקצרה|פשוט|מהר|במשפט אחד|כן או לא/i;
+const ROUTER_GREETING = /^(?:\s*(?:hi|hey|hello|yo|thanks|thank you|good (morning|evening|night)|how are you|what'?s up|שלום|היי|הי|תודה|בוקר טוב|ערב טוב|לילה טוב|מה נשמע|מה קורה|מה שלומך)[\s!.?,]*)+$/i;
+
+/* ---------------------------------------------------------------- state */
+
+/* Lives as long as the isolate does, and is mirrored to ROUTER_KV when one is
+   bound. Everything here is either a count or a short string: nothing from a
+   conversation's content is ever kept. */
+const routerState = {
+  loaded: false,
+  stats: {},            // "task|model" → { n, ok, fail, escalated, good, bad, retries, tokens, cost }
+  models: {},           // model → { n, ok, fail, tokensIn, tokensOut, cost, latencyMs }
+  totals: { requests: 0, tokens: 0, cost: 0, baselineCost: 0, topCost: 0, escalations: 0 },
+  recent: [],           // last ROUTER_RECENT decisions, newest first
+  byId: new Map(),      // decision id → decision (bounded)
+  lastModel: new Map(), // conversation fingerprint → model id (cache + thinking continuity)
+  seenTurns: new Map(), // conversation+turn fingerprint → { at, id } (retry detection)
+  unavailable: new Map(), // model id → until (ms) after a 404 / "no such model"
+  dirty: 0, lastSave: 0
+};
+const ROUTER_RECENT = 200;
+const ROUTER_BY_ID = 500;
+let routerCtx = null;
+
+function routerLog(event, fields) {
+  /* One JSON line per event: Cloudflare's log tail and Logpush both index it
+     as-is. No message content, only what the decision was made from. */
+  try { console.log(JSON.stringify(Object.assign({ at: new Date().toISOString(), component: 'router', event: event }, fields || {}))); }
+  catch (e) {}
+}
+
+function parseJsonEnv(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(String(value)); }
+  catch (err) { routerLog('config_error', { error: 'invalid JSON in router setting: ' + String(err.message || err) }); return fallback; }
+}
+
+function routerEnabled(env) {
+  return String((env && env.ROUTER) || 'on').toLowerCase() !== 'off';
+}
+
+/* ------------------------------------------------------------- registry */
+
+function loadRegistry(env) {
+  env = env || {};
+  const byId = new Map(ROUTER_DEFAULT_REGISTRY.map(m => [m.id, JSON.parse(JSON.stringify(m))]));
+  const overrides = parseJsonEnv(env.ROUTER_REGISTRY, []);
+  for (const o of Array.isArray(overrides) ? overrides : []) {
+    if (!o || typeof o.id !== 'string') continue;
+    const base = byId.get(o.id);
+    if (base) {
+      byId.set(o.id, Object.assign({}, base, o,
+        { pricing: Object.assign({}, base.pricing, o.pricing || {}),
+          latency: Object.assign({}, base.latency, o.latency || {}),
+          budget: Object.assign({}, base.budget, o.budget || {}),
+          strengths: Object.assign({}, base.strengths, o.strengths || {}) }));
+    } else {
+      byId.set(o.id, Object.assign({
+        name: o.id, family: 'custom', version: '?', enabled: true, contextWindow: 200000, maxOutput: 64000,
+        pricing: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, capability: 70,
+        capabilities: ['vision', 'tools', 'web_search', 'mcp'], thinking: 'none', effortLevels: [],
+        recommendedTasks: [], strengths: {}, tokenizerFactor: 1, latency: { ttftMs: 800, tokensPerSec: 70 },
+        budget: { minOutput: 64, maxOutput: 64000 }
+      }, o));
+    }
+  }
+  const list = [...byId.values()];
+  if (env.ROUTER_MODELS) {
+    const allowed = String(env.ROUTER_MODELS).split(',').map(s => s.trim()).filter(Boolean);
+    for (const m of list) m.enabled = allowed.indexOf(m.id) >= 0;
+  }
+  return list.sort((a, b) => a.capability - b.capability);
+}
+
+function loadTaskProfiles(env) {
+  const out = JSON.parse(JSON.stringify(ROUTER_TASK_PROFILES));
+  const o = parseJsonEnv(env && env.ROUTER_TASKS, {});
+  for (const k of Object.keys(o || {})) out[k] = Object.assign({ label: k, required: 62, output: 600, why: '' }, out[k] || {}, o[k]);
+  return out;
+}
+
+function routerSettings(env) {
+  env = env || {};
+  const weights = Object.assign({}, ROUTER_DEFAULT_WEIGHTS, parseJsonEnv(env.ROUTER_WEIGHTS, {}));
+  const minQ = Number(env.ROUTER_MIN_QUALITY);
+  const suffQ = Number(env.ROUTER_SUFFICIENT_QUALITY);
+  const minQuality = isFinite(minQ) && minQ > 0 && minQ < 1 ? minQ : ROUTER_DEFAULT_MIN_QUALITY;
+  return {
+    weights: weights,
+    minQuality: minQuality,
+    sufficientQuality: isFinite(suffQ) && suffQ > minQuality && suffQ <= 1 ? suffQ : Math.max(0.95, minQuality),
+    budget: Object.assign({ maxCostUsd: Infinity, maxTotalTokens: Infinity }, parseJsonEnv(env.ROUTER_TOKEN_BUDGET, {}))
+  };
+}
+
+function hasCap(model, cap) { return (model.capabilities || []).indexOf(cap) >= 0; }
+
+/* ------------------------------------------------------------- analysis */
+
+function blockText(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content.map(b => {
+    if (!b) return '';
+    if (b.type === 'text') return b.text || '';
+    if (b.type === 'tool_result') return typeof b.content === 'string' ? b.content : blockText(b.content);
+    if (b.type === 'tool_use' || b.type === 'server_tool_use') { try { return JSON.stringify(b.input || {}); } catch (e) { return ''; } }
+    if (b.type === 'document' && b.source && typeof b.source.data === 'string' && b.source.type === 'text') return b.source.data;
+    return '';
+  }).join('\n');
+}
+
+/* ~3.6 characters per token for English and code; Hebrew and other non-Latin
+   scripts tokenize closer to one token per 2 characters, so the estimate is
+   blended by how much of the text is non-ASCII. Estimates, not billing — the
+   real counts come back in `usage` and are what the stats record. */
+function estimateTokens(text) {
+  const s = String(text || '');
+  if (!s) return 0;
+  let wide = 0;
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) > 127) wide++;
+  const ratio = wide / s.length;
+  return Math.ceil(s.length / (3.6 * (1 - ratio) + 2.0 * ratio));
+}
+
+function isToolResultTurn(msg) {
+  return !!(msg && msg.role === 'user' && Array.isArray(msg.content) && msg.content.length &&
+            msg.content.every(b => b && b.type === 'tool_result'));
+}
+
+function lastUserText(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && m.role === 'user' && !isToolResultTurn(m)) {
+      const t = typeof m.content === 'string' ? m.content
+        : (m.content || []).filter(b => b && b.type === 'text').map(b => b.text || '').join('\n');
+      if (t.trim()) return t;
+    }
+  }
+  return '';
+}
+
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  const s = String(str || '');
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(36);
+}
+
+function conversationKey(body) {
+  const msgs = (body && body.messages) || [];
+  const first = msgs.find(m => m && m.role === 'user');
+  return fnv1a(systemText(body && body.system).slice(0, 400) + '\u0000' + blockText(first && first.content).slice(0, 400));
+}
+
+function analyzeTask(body, env) {
+  body = body || {};
+  const profiles = loadTaskProfiles(env);
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  const userText = lastUserText(messages);
+  const system = systemText(body.system);
+
+  const systemTokens = estimateTokens(system);
+  const toolsTokens = estimateTokens(JSON.stringify(body.tools || []));
+  let images = 0;
+  let historyTokens = 0;
+  for (const m of messages) {
+    historyTokens += estimateTokens(blockText(m && m.content));
+    if (m && Array.isArray(m.content)) {
+      for (const b of m.content) {
+        if (b && b.type === 'image') images++;
+        if (b && b.type === 'tool_result' && Array.isArray(b.content)) images += b.content.filter(x => x && x.type === 'image').length;
+      }
+    }
+  }
+  const inputTokens = systemTokens + toolsTokens + historyTokens + images * 1600;
+  const userTokens = estimateTokens(userText);
+
+  /* How deep into a tool loop this turn is: consecutive tool_result turns at
+     the end of the conversation. */
+  let toolDepth = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!m) continue;
+    if (m.role === 'assistant') continue;
+    if (isToolResultTurn(m)) toolDepth++; else break;
+  }
+
+  const serverTools = (body.tools || []).filter(t => t && t.type && !t.input_schema).map(t => String(t.type));
+  const needs = {
+    vision: images > 0,
+    tools: Array.isArray(body.tools) && body.tools.length > 0,
+    webSearch: serverTools.some(t => /^web_search/.test(t)),
+    mcp: Array.isArray(body.mcp_servers) && body.mcp_servers.length > 0,
+    forcedToolChoice: !!(body.tool_choice && (body.tool_choice.type === 'any' || body.tool_choice.type === 'tool')),
+    sampling: body.temperature !== undefined || body.top_p !== undefined || body.top_k !== undefined,
+    jsonOnly: /respond with only (a )?raw json|only a raw json|return only json|respond only with json/i.test(system)
+  };
+
+  /* ---- classify: count pattern hits on the user's words; the system prompt
+     only votes for the JSON-extraction case, because every chat turn carries
+     the same long persona prompt and it would otherwise win every vote. */
+  const signals = [];
+  let type = null;
+  let best = 0;
+  /* A pasted document votes with its own vocabulary — a sales report is full
+     of "revenue" whatever is being asked about it. Past a couple of thousand
+     characters only the ends are read, which is where the instruction is. */
+  const ask = userText.length > 2400 ? userText.slice(0, 800) + '\n' + userText.slice(-800) : userText;
+  for (const [t, re] of ROUTER_TASK_PATTERNS) {
+    const g = new RegExp(re.source, re.flags.indexOf('g') >= 0 ? re.flags : re.flags + 'g');
+    const hits = (ask.match(g) || []).length;
+    if (hits > best) { best = hits; type = t; }
+  }
+  if (needs.jsonOnly && (!type || type === 'summarization')) { type = 'extraction'; signals.push('System prompt demands raw JSON output'); }
+  if (!type) {
+    if (ROUTER_GREETING.test(userText)) type = 'chit_chat';
+    else if (images && userTokens < 60) type = 'vision';
+    else if (userTokens <= 40 && toolDepth === 0) type = 'simple_question';
+    else type = 'general';
+  }
+  if (type === 'simple_question' && ROUTER_GREETING.test(userText)) type = 'chit_chat';
+  if (inputTokens > 60000 && ['coding', 'debugging', 'complex_reasoning', 'agentic', 'extraction'].indexOf(type) < 0) type = 'long_context';
+  if (toolDepth >= 3 && ['chit_chat', 'simple_question', 'general'].indexOf(type) >= 0) type = 'agentic';
+
+  /* ---- complexity, 0..1 */
+  let c = 0.3;
+  const hard = (ask.match(ROUTER_HARD_WORDS) || []).length;
+  if (hard) { c += Math.min(0.5, hard * 0.15); signals.push(hard + ' difficulty marker' + (hard > 1 ? 's' : '') + ' in the request'); }
+  if (ROUTER_EASY_WORDS.test(userText)) { c -= 0.2; signals.push('Request asks for something short or simple'); }
+  if (userTokens > 1500) { c += 0.2; signals.push('Long request (~' + userTokens + ' tokens)'); }
+  else if (userTokens > 400) { c += 0.1; }
+  else if (userTokens < 25 && !images) { c -= 0.1; }
+  const reqLines = (userText.match(/^\s*(?:[-*•]|\d+[.)])\s+/gm) || []).length;
+  if (reqLines >= 5) { c += 0.15; signals.push(reqLines + ' separate requirements listed'); }
+  if (/```|\bat .+:\d+:\d+|Traceback \(most recent call last\)/.test(userText)) { c += 0.1; signals.push('Contains code or a stack trace'); }
+  if (messages.length > 24) c += 0.1;
+  if (toolDepth >= 6) { c += 0.2; signals.push('Deep in a tool loop (' + toolDepth + ' tool rounds)'); }
+  else if (toolDepth >= 3) { c += 0.1; signals.push('In a tool loop (' + toolDepth + ' tool rounds)'); }
+  if ((body.max_tokens || 0) >= 10000) { c += 0.1; signals.push('Caller allowed a long reply (' + body.max_tokens + ' tokens)'); }
+  if (inputTokens > 60000) { c += 0.15; }
+  if (type === 'chit_chat') c = Math.min(c, 0.2);
+  c = Math.max(0, Math.min(1, c));
+
+  const profile = profiles[type] || profiles.general;
+  const required = Math.round(profile.required - 5 + c * 20);
+
+  let output = profile.output || Math.max(150, Math.round(userTokens * 1.15));
+  output = Math.round(output * (0.6 + c * 1.2));
+  if (body.max_tokens) output = Math.min(output, body.max_tokens);
+
+  return {
+    type: type, label: profile.label, why: profile.why,
+    complexity: Math.round(c * 100) / 100,
+    required: required,
+    tokens: { input: inputTokens, system: systemTokens, tools: toolsTokens, user: userTokens, output: output },
+    cacheablePrefix: system.length >= 4000 ? systemTokens + toolsTokens : 0,
+    images: images, toolDepth: toolDepth, needs: needs, signals: signals,
+    requestedModel: typeof body.model === 'string' ? body.model : null,
+    maxTokens: body.max_tokens || 4096,
+    conversation: conversationKey(body),
+    turn: fnv1a(userText.slice(0, 2000))
+  };
+}
+
+/* ----------------------------------------------------------- estimation */
+
+function pickEffort(model, analysis) {
+  if (!hasCap(model, 'effort') || !(model.effortLevels || []).length) return null;
+  const c = analysis.complexity;
+  let want = c < 0.35 ? 'low' : c < 0.65 ? 'medium' : 'high';
+  if (c >= 0.85 && ['coding', 'debugging', 'agentic', 'complex_reasoning'].indexOf(analysis.type) >= 0) want = 'xhigh';
+  const levels = model.effortLevels;
+  if (levels.indexOf(want) >= 0) return want;
+  if (want === 'xhigh' && levels.indexOf('high') >= 0) return 'high';
+  return levels[0];
+}
+
+const ROUTER_THINKING_OVERHEAD = { low: 0.15, medium: 0.5, high: 1.0, xhigh: 1.6, max: 2.2 };
+
+function learnedStats(type, modelId) {
+  return routerState.stats[type + '|' + modelId] || null;
+}
+
+/* Beta-smoothed success rate with a prior worth nine good outcomes and one
+   bad, so a single failure nudges and a run of them moves the decision. */
+function reliabilityOf(type, modelId) {
+  const s = learnedStats(type, modelId);
+  const prior = { a: 9, b: 1 };
+  if (!s) return { value: prior.a / (prior.a + prior.b), samples: 0 };
+  const good = s.ok + 2 * (s.good || 0);
+  const bad = s.fail + s.escalated + 2 * (s.bad || 0) + (s.retries || 0);
+  return { value: (good + prior.a) / (good + bad + prior.a + prior.b), samples: s.n };
+}
+
+function expectedQuality(model, analysis) {
+  const rel = reliabilityOf(analysis.type, model.id);
+  /* What has been learned shifts the model's effective capability for THIS
+     task type: up to +4 for a clean record, down to -12 for a bad one. */
+  const learned = Math.max(-12, Math.min(4, (rel.value - 0.9) * 40));
+  const bonus = ((model.strengths || {})[analysis.type] || 0) +
+                ((model.recommendedTasks || []).indexOf(analysis.type) >= 0 ? 1 : 0);
+  const margin = model.capability + bonus + learned - analysis.required;
+  /* 0.88 at margin 0, 0.98 ten points above, under 0.8 three below: a model
+     just short of the need is already a real risk, and headroom beyond ten
+     points buys almost nothing — which is what keeps the router frugal. */
+  const fit = 1 / (1 + Math.exp(-(margin + 8) / 4));
+  /* And the observed success rate scales it directly: a model that has been
+     failing this kind of task half the time is not a 0.9 model for it,
+     however much headroom its capability score suggests. At the prior (no
+     history) the factor is exactly 1. */
+  const q = Math.min(1, fit * rel.value / 0.9);
+  return { quality: q, margin: margin, learned: learned, reliability: rel };
+}
+
+function estimateFor(model, analysis, lastModel) {
+  const f = model.tokenizerFactor || 1;
+  const effort = pickEffort(model, analysis);
+  const thinks = model.thinking === 'always' || model.thinking === 'adaptive-default';
+  const input = Math.round(analysis.tokens.input * f);
+  const visible = Math.round(analysis.tokens.output * f);
+  const thinking = thinks ? Math.round(visible * (ROUTER_THINKING_OVERHEAD[effort || 'high'] || 1)) : 0;
+  const output = visible + thinking;
+
+  /* Prompt caches are per model. Staying on the model that served the last
+     turn reads the long system prompt back at the cache price; switching
+     writes it again at the cache-write price. Priced in, so the router does
+     not flip-flop between two near-equal models and pay for it every turn. */
+  const prefix = Math.min(input, Math.round(analysis.cacheablePrefix * f));
+  const p = model.pricing;
+  const prefixRate = !prefix ? 0 : (lastModel === model.id ? p.cacheRead : p.cacheWrite);
+  const cost = ((input - prefix) * p.input + prefix * prefixRate + output * p.output) / 1e6;
+  const latencyMs = (model.latency.ttftMs || 800) + output / Math.max(1, model.latency.tokensPerSec || 60) * 1000;
+
+  return { input: input, output: output, thinking: thinking, total: input + output, cost: cost,
+           latencyMs: Math.round(latencyMs), effort: effort, cachedPrefix: prefix, cacheHit: !!prefix && lastModel === model.id };
+}
+
+/* Hard requirements: a model that fails any of these cannot be picked at any
+   price, and the reason is kept for the explanation. */
+function disqualify(model, analysis, now) {
+  if (!model.enabled) return 'not enabled';
+  const until = routerState.unavailable.get(model.id);
+  if (until && until > now) return 'unavailable on this account (recently returned "no such model")';
+  const need = analysis.tokens.input * (model.tokenizerFactor || 1) + Math.min(analysis.maxTokens, model.maxOutput);
+  if (need > model.contextWindow) return 'context window too small (' + Math.round(need / 1000) + 'k > ' + Math.round(model.contextWindow / 1000) + 'k)';
+  if (analysis.needs.vision && !hasCap(model, 'vision')) return 'cannot read images';
+  if (analysis.needs.tools && !hasCap(model, 'tools')) return 'no tool use';
+  if (analysis.needs.webSearch && !hasCap(model, 'web_search')) return 'no web search tool';
+  if (analysis.needs.mcp && !hasCap(model, 'mcp')) return 'no MCP connector';
+  if (analysis.needs.forcedToolChoice && !hasCap(model, 'forced_tool_choice')) return 'rejects a forced tool_choice';
+  if (analysis.needs.sampling && !hasCap(model, 'sampling')) return 'rejects temperature/top_p';
+  return null;
+}
+
+/* ---------------------------------------------------------------- route */
+
+function route(body, env, opts) {
+  opts = opts || {};
+  const now = opts.now || Date.now();
+  const registry = opts.registry || loadRegistry(env);
+  const settings = routerSettings(env);
+  const w = settings.weights;
+  const analysis = opts.analysis || analyzeTask(body, env);
+  const lastModel = routerState.lastModel.get(analysis.conversation) || null;
+
+  const rows = registry.map(model => {
+    const reason = disqualify(model, analysis, now);
+    const est = estimateFor(model, analysis, lastModel);
+    const q = expectedQuality(model, analysis);
+    return { model: model, excluded: reason, est: est, q: q };
+  });
+  const usable = rows.filter(r => !r.excluded);
+
+  const decision = {
+    id: 'r_' + now.toString(36) + Math.random().toString(36).slice(2, 7),
+    at: new Date(now).toISOString(),
+    task: analysis.type, taskLabel: analysis.label, complexity: analysis.complexity,
+    required: analysis.required, minQuality: settings.minQuality,
+    tokens: analysis.tokens, conversation: analysis.conversation, turn: analysis.turn,
+    requestedModel: analysis.requestedModel,
+    candidates: [], model: null, effort: null, ladder: [], reasons: [], explanation: '',
+    estimate: null, baseline: null, savingsPct: 0, savingsVsTopPct: 0, sticky: false
+  };
+
+  if (!usable.length) {
+    decision.reasons.push('No enabled Claude model meets the hard requirements');
+    for (const r of rows) decision.reasons.push(r.model.name + ': ' + r.excluded);
+    decision.explanation = decision.reasons.join('\n');
+    return decision;
+  }
+
+  /* Each penalty is how much worse than the best candidate a model is, as a
+     ratio: 0 for the cheapest, 0.5 at twice the price, 0.9 at ten times.
+     Dividing by the most expensive instead would let one pricey model squash
+     the gap between two cheap ones until 3× the cost barely registered. */
+  for (const r of usable) r.meets = r.q.quality >= settings.minQuality;
+  /* Measured against the qualified models only: a model that cannot do the
+     job is not a price anyone can actually pay, and letting it set the scale
+     would flatten every difference between the ones that can. */
+  const ref = usable.some(r => r.meets) ? usable.filter(r => r.meets) : usable;
+  const minCost = Math.min(...ref.map(r => r.est.cost)) || 1e-9;
+  const minTokens = Math.min(...ref.map(r => r.est.total)) || 1;
+  const minLatency = Math.min(...ref.map(r => r.est.latencyMs)) || 1;
+  const worse = (best, x) => x > best ? 1 - best / x : 0;
+  for (const r of usable) {
+    r.withinBudget = r.est.cost <= settings.budget.maxCostUsd && r.est.total <= settings.budget.maxTotalTokens;
+    r.penalties = {
+      cost: w.cost * worse(minCost, r.est.cost),
+      tokens: w.tokens * worse(minTokens, r.est.total),
+      latency: w.latency * worse(minLatency, r.est.latencyMs),
+      risk: w.risk * (1 - r.q.reliability.value)
+    };
+    /* Quality counts up to "sufficient" and no further: past it, a stronger
+       model is the same answer at a higher price, so it must not outbid a
+       cheaper model that already does the job. */
+    r.utility = w.quality * Math.min(r.q.quality, settings.sufficientQuality) - r.penalties.cost - r.penalties.tokens - r.penalties.latency - r.penalties.risk;
+  }
+
+  /* Quality is a floor, not a weight: only models expected to clear it are
+     scored against each other on cost, tokens, latency and risk. If none
+     clears it, the strongest one available is used — never a cheaper model
+     that is expected to fail. A token/cost budget narrows the qualified set
+     but cannot push the choice below the floor. */
+  let pool = usable.filter(r => r.meets && r.withinBudget);
+  if (!pool.length) pool = usable.filter(r => r.meets);
+  let chosen;
+  if (pool.length) chosen = pool.slice().sort((a, b) => (b.utility - a.utility) || (b.q.quality - a.q.quality) || (a.est.cost - b.est.cost))[0];
+  else chosen = usable.slice().sort((a, b) => (b.q.quality - a.q.quality) || (a.est.cost - b.est.cost))[0];
+
+  /* Mid tool-loop, stay on the model that started the loop when it is still
+     qualified: its thinking and its prompt cache belong to this exchange, and
+     a hand-off halfway through a job is where work gets repeated. */
+  if (analysis.toolDepth > 0 && lastModel && lastModel !== chosen.model.id) {
+    const prev = usable.find(r => r.model.id === lastModel);
+    if (prev && prev.meets) { chosen = prev; decision.sticky = true; }
+  }
+
+  /* Escalation ladder: the choice, then every stronger usable model in order
+     of capability, then — only as a last resort, for when the stronger ones
+     are down — the weaker ones from the top. */
+  const stronger = usable.filter(r => r.model.capability > chosen.model.capability).sort((a, b) => a.model.capability - b.model.capability);
+  const weaker = usable.filter(r => r.model.capability < chosen.model.capability && r !== chosen).sort((a, b) => b.model.capability - a.model.capability);
+  decision.ladder = [chosen].concat(stronger, weaker).map(r => r.model.id);
+
+  decision.model = chosen.model.id;
+  decision.modelName = chosen.model.name;
+  decision.effort = chosen.est.effort;
+  decision.estimate = { inputTokens: chosen.est.input, outputTokens: chosen.est.output, thinkingTokens: chosen.est.thinking,
+                        totalTokens: chosen.est.total, costUsd: round6(chosen.est.cost), latencyMs: chosen.est.latencyMs,
+                        quality: round3(chosen.q.quality), cacheHit: chosen.est.cacheHit };
+  decision.candidates = rows.map(r => ({
+    model: r.model.id, excluded: r.excluded || null,
+    quality: round3(r.q.quality), capability: r.model.capability, learned: round3(r.q.learned),
+    costUsd: round6(r.est.cost), totalTokens: r.est.total, latencyMs: r.est.latencyMs,
+    utility: r.utility === undefined ? null : round3(r.utility), meets: !!r.meets,
+    penalties: r.penalties ? { cost: round3(r.penalties.cost), tokens: round3(r.penalties.tokens),
+                               latency: round3(r.penalties.latency), risk: round3(r.penalties.risk) } : null
+  }));
+
+  /* Savings against what would have run without the router: the model the
+     page asked for, when it is in the registry, else the strongest usable. */
+  const regById = new Map(registry.map(m => [m.id, m]));
+  const baseModel = regById.get(analysis.requestedModel) || usable.slice().sort((a, b) => b.model.capability - a.model.capability)[0].model;
+  const baseEst = estimateFor(baseModel, analysis, lastModel);
+  const top = usable.slice().sort((a, b) => b.model.capability - a.model.capability)[0];
+  decision.baseline = { model: baseModel.id, costUsd: round6(baseEst.cost), totalTokens: baseEst.total };
+  decision.savingsPct = baseEst.cost > 0 ? Math.round((1 - chosen.est.cost / baseEst.cost) * 100) : 0;
+  decision.savingsVsTopPct = top.est.cost > 0 ? Math.round((1 - chosen.est.cost / top.est.cost) * 100) : 0;
+  decision.topModel = top.model.id;
+  decision.topCost = round6(top.est.cost);
+
+  decision.reasons = explainReasons(analysis, chosen, rows, decision);
+  decision.explanation = formatExplanation(decision);
+  return decision;
+}
+
+function round3(x) { return Math.round(x * 1000) / 1000; }
+function round6(x) { return Math.round(x * 1e6) / 1e6; }
+function kTokens(n) { return n >= 1000 ? (Math.round(n / 100) / 10) + 'k' : String(n); }
+
+function explainReasons(analysis, chosen, rows, decision) {
+  const out = [analysis.why];
+  for (const s of analysis.signals) out.push(s);
+  out.push('Context size: ' + kTokens(analysis.tokens.input) + ' tokens' +
+           (analysis.cacheablePrefix ? ' (' + kTokens(analysis.cacheablePrefix) + ' cacheable prefix' + (chosen.est.cacheHit ? ', warm on this model' : '') + ')' : ''));
+  if (decision.sticky) out.push('Stays on ' + chosen.model.name + ' mid tool-loop to keep its thinking and cache');
+  out.push(chosen.model.name + ' meets the required capability (' + chosen.model.capability +
+           (chosen.q.learned ? (chosen.q.learned > 0 ? ' +' : ' ') + round3(chosen.q.learned) + ' learned' : '') +
+           ' vs ' + analysis.required + ' needed), expected quality ' + round3(chosen.q.quality));
+  for (const r of rows) {
+    if (r === chosen) continue;
+    if (r.excluded) {
+      if (r.excluded !== 'not enabled') out.push(r.model.name + ' is excluded: ' + r.excluded);
+      continue;
+    }
+    if (r.model.capability > chosen.model.capability) {
+      const x = chosen.est.cost > 0 ? r.est.cost / chosen.est.cost : 0;
+      out.push(r.model.name + ' would provide ' + (r.q.quality - chosen.q.quality < 0.05 ? 'similar' : 'higher') +
+               ' quality (' + round3(r.q.quality) + ') at ' + (Math.round(x * 10) / 10) + '× the cost');
+    } else if (!r.meets) {
+      out.push(r.model.name + ' is below the required threshold (quality ' + round3(r.q.quality) + ' < ' + decision.minQuality + ')');
+    } else {
+      out.push(r.model.name + ' qualifies but scores lower overall (utility ' + round3(r.utility) + ' vs ' + round3(chosen.utility) + ')');
+    }
+  }
+  return out;
+}
+
+function formatExplanation(d) {
+  return [
+    'Task: ' + d.taskLabel + ' (complexity ' + d.complexity + ', needs capability ≥ ' + d.required + ')',
+    'Selected model: ' + d.modelName + ' (' + d.model + ')' + (d.effort ? ', effort ' + d.effort : ''),
+    'Reason:'
+  ].concat(d.reasons.map(r => '- ' + r)).concat([
+    'Estimated cost: $' + d.estimate.costUsd.toFixed(5) + ' vs $' + d.baseline.costUsd.toFixed(5) + ' on ' + d.baseline.model,
+    'Estimated savings: ' + d.savingsPct + '%' + (d.topModel && d.topModel !== d.baseline.model ? ' (' + d.savingsVsTopPct + '% vs ' + d.topModel + ')' : ''),
+    'Escalation ladder: ' + d.ladder.join(' → ')
+  ]).join('\n');
+}
+
+/* ------------------------------------------------------ request shaping */
+
+/* The page writes one request for one model. What changes per model is done
+   here, on a copy: the model id, effort, room for thinking, and anything the
+   target model would reject. The original body is never touched, so an
+   escalation starts from exactly what the page sent. */
+function adaptBodyForModel(body, model, decision) {
+  const out = Object.assign({}, body, { model: model.id });
+  const thinks = model.thinking === 'always' || model.thinking === 'adaptive-default';
+
+  const effort = model.id === decision.model ? decision.effort
+    : pickEffort(model, { complexity: decision.complexity, type: decision.task });
+  if (effort && hasCap(model, 'effort') && !(body.output_config && body.output_config.effort)) {
+    out.output_config = Object.assign({}, body.output_config || {}, { effort: effort });
+  }
+
+  /* On a thinking model max_tokens covers the thinking too, so the page's
+     reply budget would be quietly eaten by it. Headroom is added in
+     proportion to the effort, capped for non-streamed requests so a long
+     generation cannot time out. */
+  let max = body.max_tokens || 4096;
+  if (thinks) {
+    const room = { low: 1.25, medium: 1.5, high: 2, xhigh: 2.5, max: 3 }[effort || 'high'] || 1.5;
+    max = Math.round(max * room);
+    if (!body.stream) max = Math.min(max, 16000);
+  }
+  out.max_tokens = Math.max(1, Math.min(max, model.maxOutput, (model.budget && model.budget.maxOutput) || Infinity));
+
+  if (!hasCap(model, 'sampling')) { delete out.temperature; delete out.top_p; delete out.top_k; }
+  if (!hasCap(model, 'effort') && out.output_config) {
+    const oc = Object.assign({}, out.output_config); delete oc.effort;
+    if (Object.keys(oc).length) out.output_config = oc; else delete out.output_config;
+  }
+  if (model.thinking === 'always' && out.thinking && out.thinking.type !== 'adaptive') delete out.thinking;
+
+  /* A model that does not think cannot be handed thinking blocks from one
+     that did; strip them from the history rather than have the turn refused. */
+  if (!thinks && Array.isArray(out.messages)) {
+    out.messages = out.messages.map(m => {
+      if (!m || m.role !== 'assistant' || !Array.isArray(m.content)) return m;
+      const kept = m.content.filter(b => !b || (b.type !== 'thinking' && b.type !== 'redacted_thinking'));
+      return kept.length === m.content.length || !kept.length ? m : Object.assign({}, m, { content: kept });
+    });
+  }
+  return out;
+}
+
+/* ------------------------------------------------- quality evaluation */
+
+/* Only what can be checked without a second model call: a refusal, an empty
+   reply, a reply whose whole budget went to thinking, and a JSON-only prompt
+   answered with something that is not JSON. Each is a reply the user would
+   have to retry by hand, which is what escalation saves them. */
+function evaluateResponse(data, analysis) {
+  if (!data || typeof data !== 'object') return { ok: false, reason: 'unparseable response' };
+  if (data.type === 'error') return { ok: false, reason: 'error body' };
+  if (data.stop_reason === 'refusal') return { ok: false, reason: 'refusal' };
+  const content = Array.isArray(data.content) ? data.content : [];
+  const text = content.filter(b => b && b.type === 'text').map(b => b.text || '').join('').trim();
+  const acted = content.some(b => b && (b.type === 'tool_use' || b.type === 'server_tool_use' || b.type === 'mcp_tool_use'));
+  if (!text && !acted) {
+    return { ok: false, reason: data.stop_reason === 'max_tokens' ? 'token budget spent before any answer' : 'empty reply' };
+  }
+  if (analysis && analysis.needs && analysis.needs.jsonOnly && !acted) {
+    const raw = text.replace(/^```(?:json)?\s*|\s*```$/g, '');
+    try { JSON.parse(raw); } catch (e) { return { ok: false, reason: 'JSON was required and the reply is not valid JSON' }; }
+  }
+  return { ok: true };
+}
+
+/* ------------------------------------------------------------- metrics */
+
+function statRow(type, model) {
+  const k = type + '|' + model;
+  return routerState.stats[k] || (routerState.stats[k] = { n: 0, ok: 0, fail: 0, escalated: 0, good: 0, bad: 0, retries: 0, tokens: 0, cost: 0 });
+}
+function modelRow(model) {
+  return routerState.models[model] || (routerState.models[model] = { n: 0, ok: 0, fail: 0, tokensIn: 0, tokensOut: 0, cost: 0, latencyMs: 0 });
+}
+
+function costOfUsage(model, usage) {
+  if (!model || !usage) return 0;
+  const p = model.pricing;
+  return ((usage.input_tokens || 0) * p.input +
+          (usage.cache_creation_input_tokens || 0) * p.cacheWrite +
+          (usage.cache_read_input_tokens || 0) * p.cacheRead +
+          (usage.output_tokens || 0) * p.output) / 1e6;
+}
+
+function remember(decision) {
+  routerState.recent.unshift(decision);
+  if (routerState.recent.length > ROUTER_RECENT) routerState.recent.length = ROUTER_RECENT;
+  routerState.byId.set(decision.id, decision);
+  if (routerState.byId.size > ROUTER_BY_ID) routerState.byId.delete(routerState.byId.keys().next().value);
+}
+
+/* Called once per model attempt. `usage` is the real count from Anthropic
+   when there is one; the estimate stands in only when there is not. */
+function recordAttempt(decision, model, outcome, usage, latencyMs) {
+  const s = statRow(decision.task, model.id);
+  const m = modelRow(model.id);
+  s.n++; m.n++;
+  if (outcome === 'ok') { s.ok++; m.ok++; }
+  else if (outcome === 'escalated') { s.escalated++; m.fail++; }
+  else { s.fail++; m.fail++; }
+  if (usage) {
+    const tokens = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0) + (usage.output_tokens || 0);
+    const cost = costOfUsage(model, usage);
+    s.tokens += tokens; s.cost += cost;
+    m.tokensIn += (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
+    m.tokensOut += usage.output_tokens || 0;
+    m.cost += cost;
+    decision.actual = decision.actual || { tokens: 0, costUsd: 0 };
+    decision.actual.tokens += tokens;
+    decision.actual.costUsd = round6(decision.actual.costUsd + cost);
+  }
+  if (latencyMs) m.latencyMs += latencyMs;
+  routerState.dirty++;
+}
+
+function finishDecision(decision, finalModel, outcome) {
+  decision.finalModel = finalModel || null;
+  decision.outcome = outcome;
+  const t = routerState.totals;
+  t.requests++;
+  if (decision.escalations) t.escalations += decision.escalations;
+  const cost = decision.actual ? decision.actual.costUsd : (decision.estimate ? decision.estimate.costUsd : 0);
+  const tokens = decision.actual ? decision.actual.tokens : (decision.estimate ? decision.estimate.totalTokens : 0);
+  t.cost += cost; t.tokens += tokens;
+  /* The baseline is re-priced with the real token counts where there are
+     some, so "savings" compares like with like instead of estimate vs bill. */
+  const ratio = decision.estimate && decision.estimate.costUsd > 0 ? cost / decision.estimate.costUsd : 1;
+  t.baselineCost += decision.baseline ? decision.baseline.costUsd * ratio : cost;
+  t.topCost += decision.topCost ? decision.topCost * ratio : cost;
+  if (finalModel) routerState.lastModel.set(decision.conversation, finalModel);
+  if (routerState.lastModel.size > 1000) routerState.lastModel.delete(routerState.lastModel.keys().next().value);
+  routerLog('decision', { id: decision.id, task: decision.task, complexity: decision.complexity, model: decision.model,
+                          final: finalModel, outcome: outcome, escalations: decision.escalations || 0,
+                          est_cost: decision.estimate && decision.estimate.costUsd, actual: decision.actual || null,
+                          savings_pct: decision.savingsPct });
+  scheduleSave();
+}
+
+/* The same question asked again within three minutes, in the same
+   conversation, means the last answer did not land. Counted against the
+   model that gave it. */
+function noteRetry(decision, now) {
+  const key = decision.conversation + ':' + decision.turn;
+  const prev = routerState.seenTurns.get(key);
+  routerState.seenTurns.set(key, { at: now, id: decision.id });
+  if (routerState.seenTurns.size > 1000) routerState.seenTurns.delete(routerState.seenTurns.keys().next().value);
+  if (!prev || now - prev.at > 3 * 60 * 1000 || prev.id === decision.id) return false;
+  const old = routerState.byId.get(prev.id);
+  if (old && old.finalModel) { statRow(old.task, old.finalModel).retries++; decision.retryOf = old.id; return true; }
+  return false;
+}
+
+function recordFeedback(id, rating) {
+  const d = routerState.byId.get(id);
+  if (!d || !d.finalModel) return { ok: false, error: 'unknown decision id' };
+  const s = statRow(d.task, d.finalModel);
+  const good = rating === 'good' || rating === 'up' || rating === 1 || rating === true || Number(rating) > 0;
+  if (good) s.good++; else s.bad++;
+  d.feedback = good ? 'good' : 'bad';
+  routerState.dirty++;
+  routerLog('feedback', { id: id, task: d.task, model: d.finalModel, rating: d.feedback });
+  scheduleSave();
+  return { ok: true, id: id, model: d.finalModel, task: d.task, rating: d.feedback };
+}
+
+async function loadRouterState(env) {
+  if (routerState.loaded) return;
+  routerState.loaded = true;
+  if (!env || !env.ROUTER_KV) return;
+  try {
+    const saved = await env.ROUTER_KV.get('router-state', 'json');
+    if (saved && saved.stats) {
+      routerState.stats = Object.assign(saved.stats, routerState.stats);
+      routerState.models = Object.assign(saved.models || {}, routerState.models);
+      routerState.totals = Object.assign({}, saved.totals || {}, routerState.totals.requests ? routerState.totals : {});
+    }
+  } catch (err) { routerLog('kv_error', { op: 'get', error: String(err && err.message || err) }); }
+  routerState.env = env;
+}
+
+function scheduleSave() {
+  const env = routerState.env;
+  if (!env || !env.ROUTER_KV) return;
+  const now = Date.now();
+  if (routerState.dirty < 20 && now - routerState.lastSave < 60 * 1000) return;
+  routerState.dirty = 0; routerState.lastSave = now;
+  const snapshot = JSON.stringify({ stats: routerState.stats, models: routerState.models, totals: routerState.totals, savedAt: new Date(now).toISOString() });
+  const p = env.ROUTER_KV.put('router-state', snapshot).catch(err => routerLog('kv_error', { op: 'put', error: String(err && err.message || err) }));
+  if (routerCtx && typeof routerCtx.waitUntil === 'function') routerCtx.waitUntil(p);
+}
+
+function routerStatsReport(env) {
+  const t = routerState.totals;
+  const saved = t.baselineCost - t.cost;
+  return {
+    enabled: routerEnabled(env),
+    totals: {
+      requests: t.requests, escalations: t.escalations,
+      tokens: t.tokens, costUsd: round6(t.cost),
+      baselineCostUsd: round6(t.baselineCost), savedUsd: round6(saved),
+      savingsPct: t.baselineCost > 0 ? Math.round(saved / t.baselineCost * 100) : 0,
+      vsStrongestPct: t.topCost > 0 ? Math.round((1 - t.cost / t.topCost) * 100) : 0
+    },
+    models: routerState.models,
+    byTask: routerState.stats,
+    recent: routerState.recent.slice(0, 50).map(d => ({
+      id: d.id, at: d.at, task: d.task, complexity: d.complexity, model: d.model, final: d.finalModel,
+      effort: d.effort, outcome: d.outcome, escalations: d.escalations || 0, savingsPct: d.savingsPct,
+      estimate: d.estimate, actual: d.actual || null, feedback: d.feedback || null, explanation: d.explanation
+    }))
+  };
+}
+
+function resetRouterState() {
+  routerState.stats = {}; routerState.models = {};
+  routerState.totals = { requests: 0, tokens: 0, cost: 0, baselineCost: 0, topCost: 0, escalations: 0 };
+  routerState.recent = []; routerState.byId.clear(); routerState.lastModel.clear();
+  routerState.seenTurns.clear(); routerState.unavailable.clear();
+  routerState.dirty = 0; routerState.loaded = false; routerState.env = null;
+}
+
+/* ------------------------------------------------ streaming usage tap */
+
+/* Streams are handed to the page untouched, byte for byte; this only reads
+   the usage figures as they pass so that a streamed reply is metered as
+   accurately as a buffered one. */
+function tapUsage(stream, onDone) {
+  const decoder = new TextDecoder();
+  let buf = '';
+  const usage = {};
+  let stop = null;
+  let text = 0;
+  const scan = (line) => {
+    if (line.indexOf('data:') !== 0) return;
+    let ev; try { ev = JSON.parse(line.slice(5).trim()); } catch (e) { return; }
+    if (ev.type === 'message_start' && ev.message && ev.message.usage) Object.assign(usage, ev.message.usage);
+    else if (ev.type === 'message_delta') { if (ev.usage) Object.assign(usage, ev.usage); if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason; }
+    else if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') text += (ev.delta.text || '').length;
+  };
+  let done = false;
+  const finish = () => { if (done) return; done = true; try { onDone(usage, stop, text); } catch (e) {} };
+  return stream.pipeThrough(new TransformStream({
+    transform(chunk, controller) {
+      controller.enqueue(chunk);
+      buf += decoder.decode(chunk, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) { scan(buf.slice(0, nl).trim()); buf = buf.slice(nl + 1); }
+    },
+    flush() { if (buf.trim()) scan(buf.trim()); finish(); }
+  }));
+}
+
+/* ------------------------------------------------------ the routed call */
+
+function escalatable(attempt, detail) {
+  /* A rejected key or an empty balance is the account, not the model: every
+     rung would fail the same way, so the turn goes straight back to the
+     engine chain, which fails over to the next vendor. */
+  if (attempt.reason === 'key_rejected' || attempt.reason === 'no_credit') return false;
+  if (attempt.retriable) return true;
+  if (attempt.reason === 'no_such_model') return true;
+  /* A 400 that is about this model's surface — a parameter it does not take —
+     is a reason to try the next model, not to give up on the turn. */
+  return /not supported|does not support|unsupported|thinking|effort|tool_choice|temperature|top_p|sampling|retention|not available/i.test(detail || '');
+}
+
+async function callAnthropicRouted(engine, body, env, request, announce, describedBy) {
+  await loadRouterState(env);
+  routerState.env = env;
+  const registry = loadRegistry(env);
+  const started = Date.now();
+  let decision, analysis;
+  try {
+    analysis = analyzeTask(body, env);
+    decision = route(body, env, { registry: registry, now: started, analysis: analysis });
+  } catch (err) {
+    /* A routing bug must never cost the user an answer: fall straight back
+       to exactly what the page asked for. */
+    routerLog('route_error', { error: String(err && err.stack || err).slice(0, 400) });
+    return await callEngine(Object.assign({}, engine, { routed: true }), body, env, request, announce, describedBy);
+  }
+  if (!decision.model) {
+    routerLog('no_candidate', { reasons: decision.reasons });
+    return await callEngine(Object.assign({}, engine, { routed: true }), body, env, request, announce, describedBy);
+  }
+  noteRetry(decision, started);
+  remember(decision);
+  decision.escalations = 0;
+  decision.attempts = [];
+
+  const byId = new Map(registry.map(m => [m.id, m]));
+  let last = null;
+
+  for (let i = 0; i < decision.ladder.length; i++) {
+    const model = byId.get(decision.ladder[i]);
+    const shaped = adaptBodyForModel(body, model, decision);
+    const t0 = Date.now();
+    const sub = Object.assign({}, engine, { model: model.id, label: 'anthropic/' + model.id, routed: true });
+    /* `announce` stays the chain's own: climbing from one Claude model to the
+       next is not a vendor fallback and must not be reported to the page as
+       one. That is what X-Jarvis-Escalated is for. */
+    const attempt = await callEngine(sub, shaped, env, request, announce, describedBy);
+    const elapsed = Date.now() - t0;
+
+    if (!attempt.ok) {
+      let detail = '';
+      try { detail = JSON.stringify(await attempt.response.clone().json()); } catch (e) {}
+      if (attempt.reason === 'no_such_model' || /not_found|no such model|model.*(not found|does not exist)|retention/i.test(detail)) {
+        routerState.unavailable.set(model.id, Date.now() + 60 * 60 * 1000);
+      }
+      const next = escalatable(attempt, detail) && i < decision.ladder.length - 1;
+      recordAttempt(decision, model, next ? 'escalated' : 'fail', null, elapsed);
+      decision.attempts.push({ model: model.id, outcome: 'http_' + (attempt.reason || 'error') });
+      routerLog('attempt_failed', { id: decision.id, model: model.id, reason: attempt.reason, escalate: next });
+      last = attempt;
+      if (!next) break;
+      decision.escalations++;
+      continue;
+    }
+
+    const res = attempt.response;
+    const type = res.headers.get('Content-Type') || '';
+    if (type.includes('text/event-stream') && res.body) {
+      /* Once a stream has started it belongs to the page; it cannot be taken
+         back and re-asked. It is metered on the way through and judged after
+         the fact, so a streamed failure still teaches the next decision. */
+      const headers = new Headers(res.headers);
+      addRouteHeaders(headers, decision, model);
+      const tapped = tapUsage(res.body, (usage, stop, textChars) => {
+        const failed = stop === 'refusal' || (!textChars && stop === 'max_tokens');
+        recordAttempt(decision, model, failed ? 'fail' : 'ok', usage, Date.now() - t0);
+        finishDecision(decision, model.id, failed ? 'streamed_' + stop : 'ok');
+      });
+      return Object.assign({}, attempt, { response: new Response(tapped, { status: res.status, headers: headers }) });
+    }
+
+    const raw = await res.text();
+    let data = null;
+    try { data = JSON.parse(raw); } catch (e) {}
+    const verdict = evaluateResponse(data, analysis);
+    const usage = data && data.usage;
+    if (!verdict.ok && i < decision.ladder.length - 1 && byId.get(decision.ladder[i + 1]).capability > model.capability) {
+      recordAttempt(decision, model, 'escalated', usage, elapsed);
+      decision.attempts.push({ model: model.id, outcome: 'inadequate: ' + verdict.reason });
+      decision.escalations++;
+      routerLog('escalate', { id: decision.id, from: model.id, to: decision.ladder[i + 1], reason: verdict.reason });
+      last = Object.assign({}, attempt, { response: new Response(raw, { status: res.status, headers: res.headers }) });
+      continue;
+    }
+    recordAttempt(decision, model, verdict.ok ? 'ok' : 'fail', usage, elapsed);
+    decision.attempts.push({ model: model.id, outcome: verdict.ok ? 'ok' : 'accepted: ' + verdict.reason });
+    finishDecision(decision, model.id, verdict.ok ? 'ok' : 'inadequate');
+    const headers = new Headers(res.headers);
+    addRouteHeaders(headers, decision, model);
+    return Object.assign({}, attempt, { response: new Response(raw, { status: res.status, headers: headers }) });
+  }
+
+  finishDecision(decision, null, 'failed');
+  return last || { ok: false, retriable: true, reason: 'other', engine: engine,
+                   response: json({ error: 'no Claude model answered' }, 502, env, request) };
+}
+
+function addRouteHeaders(headers, decision, model) {
+  headers.set('X-Jarvis-Route', decision.id);
+  headers.set('X-Jarvis-Model', model.id);
+  headers.set('X-Jarvis-Task', decision.task);
+  if (decision.escalations) headers.set('X-Jarvis-Escalated', String(decision.escalations));
+}
+
+/* ------------------------------------------------------------ endpoints */
+
+async function handleRouter(request, env, path) {
+  await loadRouterState(env);
+  if (path === '/router/stats') return json(routerStatsReport(env), 200, env, request);
+  if (path === '/router/registry') {
+    return json({ enabled: routerEnabled(env), settings: routerSettings(env), models: loadRegistry(env), tasks: loadTaskProfiles(env) }, 200, env, request);
+  }
+  if (request.method !== 'POST') return json({ error: 'use POST' }, 405, env, request);
+  const body = await request.json().catch(() => null);
+  if (!body) return json({ error: 'invalid JSON body' }, 400, env, request);
+  if (path === '/router/explain') {
+    const msg = typeof body.prompt === 'string' ? { messages: [{ role: 'user', content: body.prompt }], model: body.model, max_tokens: body.max_tokens } : body;
+    const d = route(msg, env);
+    return json(d, 200, env, request);
+  }
+  if (path === '/router/feedback') {
+    const out = recordFeedback(String(body.id || ''), body.rating);
+    return json(out, out.ok ? 200 : 404, env, request);
+  }
+  return json({ error: 'not found: ' + path }, 404, env, request);
+}
+
+export const __router = {
+  ROUTER_DEFAULT_REGISTRY, ROUTER_TASK_PROFILES, loadRegistry, routerSettings, analyzeTask, route,
+  estimateFor, expectedQuality, adaptBodyForModel, evaluateResponse, recordAttempt, finishDecision,
+  recordFeedback, remember, routerStatsReport, resetRouterState, estimateTokens, formatExplanation,
+  state: routerState
+};

@@ -58,6 +58,13 @@ The worker runs under plain Node — import it as an ES module, stub
 `globalThis.fetch`, and drive it through `worker.fetch(new Request(...), env)`.
 It exports `__test` for cooldown and chain inspection.
 
+The Claude model router lives at the end of `jarvis-worker.js` and exports
+`__router`. `node --test tests/*.test.mjs` runs its unit, simulation and
+end-to-end tests, and `node tools/router-cli.mjs simulate` shows every decision.
+Changing a task pattern, the registry or the scoring moves every scenario, so
+run both after any change. The scenarios in `tools/router-scenarios.mjs` are
+the spec.
+
 The page's CSS can be checked in the pre-installed Chromium via Playwright
 (`/opt/node22/lib/node_modules/playwright`), forcing state by setting
 `document.documentElement.className`. Wait out any transition before reading

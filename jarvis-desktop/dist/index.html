@@ -2290,7 +2290,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.5.1';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -11890,6 +11890,11 @@ async function readMessageStream(response, onText){
         block.__partial += (d.partial_json || '');
       } else if(d.type === 'thinking_delta'){
         block.thinking = (block.thinking || '') + (d.thinking || '');
+      } else if(d.type === 'signature_delta'){
+        /* The worker now routes to models that think by default, and a
+           thinking block handed back in a tool loop without its signature
+           is refused — the next round of that job would fail outright. */
+        block.signature = (block.signature || '') + (d.signature || '');
       }
       return;
     }

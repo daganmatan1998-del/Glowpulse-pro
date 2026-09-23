@@ -110,6 +110,94 @@ a frame was there, so referring back to what you showed him still makes sense.
 Photographs attached deliberately are never touched — those are the
 conversation.
 
+## Which Claude model answers
+
+Every request used to go to Sonnet 4.6, whether it was "thanks" or "find the
+race condition in the webhook workers". The worker now routes each one to the
+least expensive Claude model that can still do that job at the required
+quality, and climbs to a stronger model when it could not.
+
+For each request it works out what kind of task it is (small talk, a simple
+question, translation, summarising, structured extraction, an image, creative
+writing, data analysis, a long document, coding, debugging, multi-step tool
+work, or hard reasoning) and how hard it is, in English and Hebrew. That gives
+the capability the task needs. Every model is then estimated for tokens, cost,
+latency and expected quality, and scored:
+
+    utility = quality (up to "sufficient") − cost − tokens − latency − failure risk
+
+Quality is a floor, not a weight. A model expected to fall below it is never
+picked to save money. Above "sufficient" a stronger model earns nothing more,
+so it cannot outbid a cheaper one that already does the job. In practice small
+talk and errands go to Haiku 4.5, most real work to Sonnet 5, hard debugging
+and architecture to Opus 5, and only the hardest reasoning to Fable 5.1.
+
+If the chosen model is overloaded, rate-limited, missing from the account, or
+returns a reply the worker can see is inadequate (a refusal, an empty answer,
+a thinking budget that consumed the whole reply, prose where raw JSON was
+required), the same request goes to the next stronger model, unchanged. A
+rejected key or an empty balance is the account, not the model, so those go
+straight to the next vendor instead. Streams cannot be taken back once they
+start, so they are escalated only on an HTTP failure. They are still metered
+and judged afterwards.
+
+The router learns. Each model's success rate on each task type, escalations,
+repeated questions and 👍/👎 feedback all feed back into its expected quality
+for that task type, so a model that keeps failing at something stops being
+picked for it. The prompt cache is per model, so mid tool-loop the router also
+stays on the model that started the job, and it prices cache reads into every
+choice so it does not flip between two near-equal models.
+
+Every decision carries its reasoning:
+
+    Task: Code debugging (complexity 0.2, needs capability ≥ 77)
+    Selected model: Claude Sonnet 5 (claude-sonnet-5), effort low
+    Reason:
+    - Requires code reasoning to find a root cause
+    - Context size: 1.4k tokens (1.4k cacheable prefix)
+    - Claude Sonnet 5 meets the required capability (82 vs 77 needed), expected quality 0.971
+    - Claude Haiku 4.5 is below the required threshold (quality 0.06 < 0.8)
+    - Claude Opus 5 would provide similar quality (0.998) at 2.9× the cost
+    Estimated savings: 26% (83% vs claude-fable-5-1)
+
+**Nothing about the models is hard-coded.** The registry (context window,
+pricing, capability score, what each model supports, latency, token budgets)
+is at the end of `jarvis-worker.js`, and every field can be overridden from
+the environment:
+
+| Setting | What it does |
+|---|---|
+| `ROUTER` | `off` sends the page's own model, exactly as before |
+| `ROUTER_MODELS` | comma list of the models available, e.g. `claude-haiku-4-5,claude-sonnet-5,claude-opus-5` |
+| `ROUTER_REGISTRY` | JSON array of model entries merged by id. A new Claude release is one entry here |
+| `ROUTER_TASKS` | JSON overrides for the task profiles (required capability, typical output) |
+| `ROUTER_WEIGHTS` | JSON `{ quality, cost, tokens, latency, risk }` |
+| `ROUTER_MIN_QUALITY` / `ROUTER_SUFFICIENT_QUALITY` | the floor (0.8) and the ceiling of credit (0.95) |
+| `ROUTER_TOKEN_BUDGET` | JSON `{ maxCostUsd, maxTotalTokens }` per request. It narrows the choice but never breaks the floor |
+| `ROUTER_KV` | optional KV binding, so what it has learned survives the isolate being recycled |
+
+Opus 5.5 and Sonnet 4.6 are in the registry but off: Opus 5.5 until it is
+switched on by name, and Sonnet 4.6 because Sonnet 5 is stronger and cheaper.
+
+To see it, use `GET /router/stats` (decisions, real token counts, cost, and
+savings against Sonnet 4.6 and against always using the strongest model),
+`GET /router/registry`, `POST /router/explain` (the decision for a request,
+without calling anything) and `POST /router/feedback` `{ id, rating }`, where
+`id` is the `X-Jarvis-Route` header on the reply. From a terminal:
+
+```bash
+node tools/router-cli.mjs simulate --explain   # every task type, decisions and savings
+node tools/router-cli.mjs explain "fix this TypeError in checkout"
+node tools/router-cli.mjs registry
+node tools/router-cli.mjs stats --url https://<worker> --token <session token>
+node --test tests/*.test.mjs                   # unit, simulation and end-to-end tests
+```
+
+On the scenario suite, routing saves about 30% on the requests Sonnet 4.6 could
+already handle. It also spends more on the three hard ones, where Sonnet 4.6
+falls below the quality floor. That trade is deliberate: quality first, then
+tokens, cost and latency.
+
 ## Installing it on a phone
 
 `dist/` is now also a progressive web app, so the same `index.html` is the

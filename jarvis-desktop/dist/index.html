@@ -1985,6 +1985,7 @@ const I18N = {
     saving: '\u25B8 saving to memory\u2026', readingCalendar: '\u25B8 checking the calendar\u2026',
     bookingEvent: '\u25B8 booking it\u2026', queryingStore: '\u25B8 querying the store\u2026',
     sendingWhatsApp: '\u25B8 sending the WhatsApp\u2026',
+    placingCall: '\u25B8 calling you\u2026',
     openingSite: '\u25B8 opening it\u2026',
     toolRoundsExhausted: 'He used all {n} working steps and is still going. Ask him to carry on, or narrow it down.',
     voiceTestRunning: 'Testing\u2026',
@@ -2211,6 +2212,7 @@ const I18N = {
     saving: '\u25B8 שומר בזיכרון\u2026', readingCalendar: '\u25B8 בודק ביומן\u2026',
     bookingEvent: '\u25B8 קובע\u2026', queryingStore: '\u25B8 שולף מהחנות\u2026',
     sendingWhatsApp: '\u25B8 שולח וואטסאפ\u2026',
+    placingCall: '\u25B8 מתקשר אליך\u2026',
     openingSite: '\u25B8 פותח\u2026',
     toolRoundsExhausted: 'הוא ניצל את כל {n} שלבי העבודה ועדיין באמצע. תבקש ממנו להמשיך, או תצמצם את המשימה.',
     voiceTestRunning: 'בודק\u2026',
@@ -4117,14 +4119,14 @@ function getSystemPrompt(calendarAvailable){
         ? ' יש לך send_whatsapp: הודעת וואטסאפ לטלפון שלו' + (tail ? ' (המספר שמור, מסתיים ב-' + tail + ')' : '') +
           ' — לעולם אל תשאל אותו מה המספר. "שלח לי הודעה" בלי תוכן — תשאל "מה לכתוב?" ותשלח רק אחרי שענה.' +
           (later
-            ? ' לשעה מסוימת ("בארבע", "בעוד שעתיים", "מחר בבוקר") תעביר send_at, והיא נשלחת מהשרת גם כשהמחשב כבוי. manage_whatsapp_reminders מציג ומבטל הודעות מתוזמנות.' +
+            ? ' לשעה מסוימת ("בארבע", "בעוד שעתיים", "מחר בבוקר") תעביר send_at, והיא נשלחת מהשרת גם כשהמחשב כבוי. manage_scheduled מציג ומבטל הודעות ושיחות מתוזמנות.' +
               (cron ? '' : ' שים לב: הטיימר בוורקר (Cron Trigger) עוד לא רץ, אז הודעה לשעה מאוחרת יותר תישמר אבל לא תצא עד שיוגדר — תגיד לו את זה.')
             : ' שליחה לשעה מאוחרת יותר עוד לא מוגדרת בוורקר (חסר מסד D1 בשם JARVIS_DB) — אם הוא מבקש, תגיד לו את זה במקום להבטיח.') +
           ' אם תוצאה חוזרת עם warning — תמסור לו אותה במקום לאשר.'
         : ' You have send_whatsapp: a WhatsApp message to his own phone' + (tail ? ' (the number is on file, ending ' + tail + ')' : '') +
           ' — never ask him for the number. "Send me a message" with no content means ask "What should it say?" and send only after he answers.' +
           (later
-            ? ' For a set time ("at 4pm", "in two hours", "tomorrow morning") pass send_at; the server sends it then, even with his computer off. manage_whatsapp_reminders lists and cancels scheduled ones.' +
+            ? ' For a set time ("at 4pm", "in two hours", "tomorrow morning") pass send_at; the server sends it then, even with his computer off. manage_scheduled lists and cancels scheduled messages and calls.' +
               (cron ? '' : ' Note: the worker\'s Cron Trigger has not run yet, so a message for later will be saved but will not go out until it is set up — tell him so.')
             : ' Sending at a later time is not set up on the worker yet (no D1 database bound as JARVIS_DB) — if he asks for one, say so rather than promise it.') +
           ' If a result comes back with a warning, pass it on instead of confirming.';
@@ -4147,6 +4149,42 @@ function getSystemPrompt(calendarAvailable){
             ? 'the Cloudflare worker is an older version without it — the new jarvis-worker.js needs pasting in and deploying.'
             : 'the Cloudflare worker is missing the secret(s) ' + (missing || 'WHATSAPP_PHONE / CALLMEBOT_APIKEY') + ' (Settings → Variables and Secrets).') +
           ' When he asks for a message, tell him exactly that in one sentence — not "I can\'t send messages", and do not offer the calendar instead.';
+    }
+    if(backendCapabilities && backendCapabilities.call){
+      const who = String(backendCapabilities.call_to || '');
+      const tailC = who.startsWith('@') ? who : who.replace(/\D/g, '').slice(-4);
+      const laterC = !!backendCapabilities.whatsapp_later;
+      const cronC = !!backendCapabilities.whatsapp_cron;
+      prompt += currentLang === 'he'
+        ? ' יש לך call_me: שיחה קולית לטלגרם שלו' + (tailC ? ' (' + (who.startsWith('@') ? tailC : 'המספר שמור, מסתיים ב-' + tailC) + ')' : '') +
+          ', שבה קול סינתטי מקריא את הטקסט שלך כשהוא עונה. כשהוא מבקש שתתקשר אליו ולא אמר גם על מה וגם מתי — תשאל בדיוק את זה ולא יותר: "על מה, ומתי?" — ותתקשר רק אחרי שענה; "עכשיו" זו תשובה.' +
+          ' הטקסט הוא מה שהוא ישמע: מילים מדוברות, עד 256 תווים, בשפה שבה דיבר ("ג\'רוויס כאן. הגיע הזמן לצאת לאימון.") — לא תיאור של השיחה.' +
+          (laterC
+            ? ' לשעה מאוחרת יותר תעביר send_at, והשרת מתקשר אליו אז גם כשהמחשב כבוי.' +
+              (cronC ? '' : ' הטיימר בוורקר (Cron Trigger) עוד לא רץ, אז שיחה לשעה מאוחרת לא תתבצע עד שיוגדר — תגיד לו את זה.')
+            : ' שיחה לשעה מאוחרת יותר עוד לא מוגדרת בוורקר (חסר מסד D1 בשם JARVIS_DB) — תגיד את זה במקום להבטיח.') +
+          ' אם התוצאה אומרת ש-CallMeBot עוד לא מורשה להתקשר אליו, תמסור לו את ההוראה: לשלוח /start ל-@CallMeBot_txtbot בטלגרם.'
+        : ' You have call_me: a voice call to his Telegram' + (tailC ? ' (' + (who.startsWith('@') ? tailC : 'the number is on file, ending ' + tailC) + ')' : '') +
+          ', where a synthetic voice reads your text aloud when he answers. When he asks you to call him and has not told you both what the call is for and when, ask exactly that and nothing more — "Why, and when, sir?" — and call only once he has answered; "now" is an answer.' +
+          ' The text is what he will hear: spoken words, under 256 characters, in the language he used ("This is JARVIS. Time to leave for your workout."), never a description of the call.' +
+          (laterC
+            ? ' For a later time pass send_at; the server rings him then, even with his computer off.' +
+              (cronC ? '' : ' The worker\'s Cron Trigger has not run yet, so a call for later will not happen until it is set up — tell him so.')
+            : ' Calling at a later time is not set up on the worker yet (no D1 database bound as JARVIS_DB) — say so rather than promise it.') +
+          ' If the result says CallMeBot is not allowed to call him yet, pass on its instruction: send /start to @CallMeBot_txtbot in Telegram.';
+    } else if(backendCapabilities){
+      /* Same reason as the message note above: without this he says he
+         cannot make calls, when the only thing missing is on the worker. */
+      const olderC = !('call' in backendCapabilities);
+      prompt += currentLang === 'he'
+        ? ' שיחות קוליות אליו (דרך טלגרם) כבר בנויות, אבל כרגע לא פעילות: ' +
+          (olderC ? 'הוורקר ב-Cloudflare הוא גרסה ישנה — צריך להדביק את jarvis-worker.js החדש ולעשות Deploy.'
+                  : 'חסר בוורקר הסוד WHATSAPP_PHONE (או CALL_USER).') +
+          ' כשהוא מבקש שתתקשר, תגיד לו בדיוק את זה במשפט אחד.'
+        : ' Voice calls to him (through Telegram) are built but not switched on right now: ' +
+          (olderC ? 'the Cloudflare worker is an older version — the new jarvis-worker.js needs pasting in and deploying.'
+                  : 'the worker is missing the WHATSAPP_PHONE (or CALL_USER) secret.') +
+          ' When he asks to be called, tell him exactly that in one sentence.';
     }
   }
   /* The single biggest lever on answer quality: tell him he is allowed to
@@ -7559,7 +7597,7 @@ function toolStatusLabel(tu, round){
     generate_image: 'makingImage', make_zip: 'packaging',
     remember: 'saving', get_calendar_events: 'readingCalendar',
     create_calendar_event: 'bookingEvent', shopify_admin_query: 'queryingStore',
-    send_whatsapp: 'sendingWhatsApp',
+    send_whatsapp: 'sendingWhatsApp', call_me: 'placingCall',
     open_url: 'openingSite'
   };
   const label = t(names[tu.name] || 'workingLabel');
@@ -7997,9 +8035,25 @@ const WHATSAPP_TOOL = {
   }
 };
 
-const WHATSAPP_MANAGE_TOOL = {
-  name: 'manage_whatsapp_reminders',
-  description: "See or cancel WhatsApp messages scheduled for later. action 'list' returns what is still waiting and what recently went out, failed or was cancelled — use it for 'what reminders do I have' and 'did my message go out'. action 'cancel' with an id from list stops one; when he names it by content or time rather than id, list first and match.",
+/* A voice call, through Telegram: CallMeBot rings him and a synthetic voice
+   reads the text when he answers. Same shape as the message — no recipient,
+   now or at a time — and the same outbox on the worker behind it. */
+const CALL_TOOL = {
+  name: 'call_me',
+  description: "Ring the user on Telegram: a voice call in which a synthetic voice reads your text aloud when he picks up. It can only ever reach him — never ask him for a number. Use it when he says 'call me', 'ring me', '\u05ea\u05ea\u05e7\u05e9\u05e8 \u05d0\u05dc\u05d9\u05d9'. Two things are needed first: what the call should say, and when. If he has not given you both, ask exactly that and nothing else — 'Why, and when, sir?' — and call only once he has answered; 'now' is an answer. text is exactly what he will hear: spoken words, under 256 characters, in the language he used ('This is JARVIS. Time to leave for your workout.'), never a description of the call. For a later time pass send_at: the server places the call at that moment, even with his computer switched off. Afterwards confirm in one sentence what he will hear and when; if the result carries a warning or tell_the_user, say that instead of confirming.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      text: { type:'string', description:'What the voice will say when he answers. Under 256 characters.' },
+      send_at: { type:'string', description:'Optional. When to call, ISO 8601 with his UTC offset, e.g. 2026-09-23T16:00:00+03:00. Leave out to call right now.' }
+    },
+    required: ['text']
+  }
+};
+
+const SCHEDULE_MANAGE_TOOL = {
+  name: 'manage_scheduled',
+  description: "See or cancel the WhatsApp messages and calls scheduled for later. action 'list' returns what is still waiting, each with its channel (whatsapp or call), and what recently went out, failed or was cancelled — use it for 'what reminders do I have', 'did my message go out', 'is my call still on'. action 'cancel' with an id from list stops one; when he names it by content or time rather than id, list first and match.",
   input_schema: {
     type: 'object',
     properties: {
@@ -11742,8 +11796,16 @@ async function callCalendarCreateTool(input){
 }
 
 async function callWhatsAppTool(input){
+  return await sendThroughOutbox('/whatsapp/send', input, 'send the WhatsApp');
+}
+
+async function callCallTool(input){
+  return await sendThroughOutbox('/call/start', input, 'place the call');
+}
+
+async function sendThroughOutbox(path, input, what){
   try{
-    const res = await fetch(backendUrl + '/whatsapp/send', {
+    const res = await fetch(backendUrl + path, {
       method:'POST',
       headers: jarvisHeaders(),
       body: JSON.stringify({
@@ -11754,21 +11816,21 @@ async function callWhatsAppTool(input){
     });
     if(res.status === 401){ await forceReauth(); return { error:'session expired' }; }
     const data = await res.json().catch(()=> ({}));
-    if(!res.ok) return { error: data.error || ('WhatsApp failed (HTTP ' + res.status + ')'), tell_the_user: data.tell_the_user };
+    if(!res.ok) return { error: data.error || ('could not ' + what + ' (HTTP ' + res.status + ')'), tell_the_user: data.tell_the_user };
     return data;
   }catch(err){
-    return { error: 'Could not reach the worker to send the WhatsApp: ' + err.message };
+    return { error: 'Could not reach the worker to ' + what + ': ' + err.message };
   }
 }
 
-async function callWhatsAppManageTool(input){
+async function callScheduledManageTool(input){
   const action = input && input.action;
   try{
     let res;
     if(action === 'list'){
-      res = await fetch(backendUrl + '/whatsapp/scheduled', { headers: jarvisHeaders() });
+      res = await fetch(backendUrl + '/outbox/scheduled', { headers: jarvisHeaders() });
     } else if(action === 'cancel'){
-      res = await fetch(backendUrl + '/whatsapp/cancel', {
+      res = await fetch(backendUrl + '/outbox/cancel', {
         method:'POST', headers: jarvisHeaders(),
         body: JSON.stringify({ id: (input && input.id) || '' })
       });
@@ -11950,10 +12012,10 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     }
     /* Same rule: offered only when the worker says it is configured, so he
        is never handed a tool whose only answer is "not set up". */
-    if(backendCapabilities && backendCapabilities.whatsapp){
-      everydayTools.push(WHATSAPP_TOOL);
-      if(backendCapabilities.whatsapp_later) everydayTools.push(WHATSAPP_MANAGE_TOOL);
-    }
+    const caps = backendCapabilities || {};
+    if(caps.whatsapp) everydayTools.push(WHATSAPP_TOOL);
+    if(caps.call) everydayTools.push(CALL_TOOL);
+    if(caps.whatsapp_later && (caps.whatsapp || caps.call)) everydayTools.push(SCHEDULE_MANAGE_TOOL);
     const advancedTools = [BUILD3D_TOOL, MODEL3D_TOOL, PHOTO3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
     if(IS_DESKTOP) advancedTools.push(MODEL_WINDOW_TOOL);
     requestBody.tools = fullCapability()
@@ -12338,8 +12400,10 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCalendarCreateTool(tu.input);
           } else if(tu.name === 'send_whatsapp'){
             payload = await callWhatsAppTool(tu.input);
-          } else if(tu.name === 'manage_whatsapp_reminders'){
-            payload = await callWhatsAppManageTool(tu.input);
+          } else if(tu.name === 'call_me'){
+            payload = await callCallTool(tu.input);
+          } else if(tu.name === 'manage_scheduled'){
+            payload = await callScheduledManageTool(tu.input);
           } else if(tu.name === 'build_3d_model'){
             payload = await callBuild3dTool(tu.input);
           } else if(tu.name === 'generate_3d_model'){

@@ -24,6 +24,9 @@
      WHATSAPP_PHONE        his own number, e.g. 0552813729 or +972552813729
      CALLMEBOT_APIKEY      the key CallMeBot sends back on WhatsApp
                            → both together: send_whatsapp, to him and only him
+     CALL_USER             optional: a Telegram @username or phone number to ring.
+                           Without it, calls ring WHATSAPP_PHONE. Calls need no
+                           key — only a one-time /start to @CallMeBot_txtbot.
      JARVIS_DB             a D1 database BINDING (not a secret) → messages for
                            later. With a Cron Trigger of "* * * * *" on this
                            worker they go out on time with the computer off.
@@ -61,8 +64,9 @@
      POST /calendar/create     { title, start, end, ... } → { ok, event }
      POST /shopify/query       { query, variables }     → GraphQL result
      POST /whatsapp/send       { text, send_at? }       → sends now, or queues it
-     GET  /whatsapp/scheduled                           → { pending, recent }
-     POST /whatsapp/cancel     { id }                   → { ok }
+     POST /call/start          { text, send_at? }       → rings him now, or queues it
+     GET  /outbox/scheduled                             → { pending, recent }, both kinds
+     POST /outbox/cancel       { id }                   → { ok }
      GET  /health                                       → capability report
      GET  /session                                      → { ok:true } if the token
                                is good. Costs nothing and calls nobody, so the
@@ -71,7 +75,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.4.0';
+const WORKER_VERSION = '2.5.0';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -84,7 +88,7 @@ function pinSecret(env)   { return env.JARVIS_PIN || env.AUTH_PIN || ''; }
 function tokenSecret(env) { return env.JARVIS_TOKEN_SECRET || env.SESSION_SECRET || ''; }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
 
@@ -111,9 +115,12 @@ export default {
       if (path === '/calendar/upcoming')           return await handleCalendarUpcoming(request, env, url);
       if (path === '/calendar/create')             return await handleCalendarCreate(request, env);
       if (path === '/shopify/query')               return await handleShopify(request, env);
-      if (path === '/whatsapp/send')               return await handleWhatsAppSend(request, env);
-      if (path === '/whatsapp/scheduled')          return await handleWhatsAppList(request, env);
-      if (path === '/whatsapp/cancel')             return await handleWhatsAppCancel(request, env);
+      if (path === '/whatsapp/send')               return await handleOutboxSend(request, env, ctx, 'whatsapp');
+      if (path === '/call/start')                  return await handleOutboxSend(request, env, ctx, 'call');
+      /* The /whatsapp/ names are what a page from before calls existed asks
+         for; the site and the worker are deployed separately. */
+      if (path === '/outbox/scheduled' || path === '/whatsapp/scheduled') return await handleOutboxList(request, env);
+      if (path === '/outbox/cancel'    || path === '/whatsapp/cancel')    return await handleOutboxCancel(request, env);
       if (path === '/fallback/test')               return await handleFallbackTest(env, request);
       if (path === '/session')                     return json({ ok: true }, 200, env, request);
 
@@ -127,7 +134,7 @@ export default {
      off: nothing on his side is involved, Cloudflare wakes the worker every
      minute and it sends whatever has come due. */
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runWhatsAppQueue(env).catch(err => console.error('whatsapp queue', err)));
+    ctx.waitUntil(runOutbox(env).catch(err => console.error('outbox', err)));
   }
 };
 
@@ -307,6 +314,9 @@ async function health(env) {
     /* Masked: /health answers anyone, and his number is his. The last four
        digits are enough for JARVIS to say which phone it is going to. */
     whatsapp_to: whatsAppConfigured(env) ? maskPhone(whatsAppPhone(env)) : null,
+    call: callConfigured(env),
+    call_to: callConfigured(env) ? maskTarget(callTarget(env)) : null,
+    call_missing: callConfigured(env) ? [] : ['CALL_USER (or WHATSAPP_PHONE)'],
     whatsapp_later: !!env.JARVIS_DB,
     /* Whether the Cron Trigger is really firing, read from the last time it
        did rather than assumed. A queue with no cron behind it is a promise
@@ -1003,7 +1013,9 @@ export const __test = {
   chain(env) { return engineChain(env).map(e => e.label); },
   normalizePhone(p) { return normalizePhone(p); },
   parseSendAt(v, tz) { return parseSendAt(v, tz); },
-  runWhatsAppQueue(env) { return runWhatsAppQueue(env); },
+  runOutbox(env) { return runOutbox(env); },
+  readCallReply(status, body) { return readCallReply(status, body); },
+  callTarget(env) { return callTarget(env); },
   resetSchema() { schemaReady = null; }
 };
 
@@ -2306,27 +2318,33 @@ async function handleCalendarCreate(request, env) {
 }
 
 /* =====================================================================
-   WHATSAPP — to him, and only him
+   THE OUTBOX — WhatsApp messages and phone calls, to him and only him
 
-   Sent through CallMeBot, which delivers to the one number that registered
-   the key. That is a limit and also the safety: there is no recipient
-   argument anywhere, so nothing JARVIS is told can turn this into a way of
-   messaging somebody else.
+   Both go through CallMeBot, and both can only ever reach him: there is no
+   recipient argument anywhere, so nothing JARVIS is told can turn either
+   into a way of contacting somebody else.
+
+     whatsapp  a WhatsApp message. Needs WHATSAPP_PHONE + CALLMEBOT_APIKEY.
+     call      a Telegram voice call: a synthetic voice reads the text when
+               he answers. Needs no key — only who to ring (CALL_USER, or
+               WHATSAPP_PHONE when that is not set) and a one-time /start to
+               @CallMeBot_txtbot in his Telegram.
 
    "Now" goes straight out. "At 4pm" is written to D1 and sent by the Cron
-   Trigger below, which Cloudflare runs whether his computer is on, off or
-   in a drawer. D1 rather than KV: KV is eventually consistent, and a queue
-   read in one place and rewritten in another loses the message that
-   arrived in between. Here every row is its own record and a send is
-   claimed with a conditional UPDATE, so two overlapping runs cannot both
-   send it.
+   Trigger, which Cloudflare runs whether his computer is on, off or in a
+   drawer. D1 rather than KV: KV is eventually consistent, and a queue read
+   in one place and rewritten in another loses the entry that arrived in
+   between. Here every entry is its own row and a send is claimed with a
+   conditional UPDATE, so two overlapping runs cannot both send it.
    ===================================================================== */
 
 const WA_MAX_TEXT      = 1000;
+const CALL_MAX_TEXT    = 256;                // CallMeBot cuts anything longer
+const CALL_WAIT_MS     = 15000;              // how long the page waits on a call being placed
 const WA_MAX_AHEAD_MS  = 366 * 86400000;
 const WA_NOW_WINDOW_MS = 60 * 1000;          // this close to now just means now
 const WA_PAST_GRACE_MS = 10 * 60 * 1000;     // a little in the past: send; more: a wrong date
-const WA_LATE_MS       = 15 * 60 * 1000;     // later than this, the message says it is late
+const WA_LATE_MS       = 15 * 60 * 1000;     // later than this, it says it is late
 const WA_MAX_TRIES     = 3;
 const WA_STUCK_MS      = 10 * 60 * 1000;     // a claim this old died mid-send
 const WA_CRON_FRESH_MS = 5 * 60 * 1000;
@@ -2334,6 +2352,18 @@ const WA_KEEP_MS       = 30 * 86400000;      // finished rows kept this long
 
 function whatsAppPhone(env) { return normalizePhone(env.WHATSAPP_PHONE || ''); }
 function whatsAppConfigured(env) { return !!(env.CALLMEBOT_APIKEY && whatsAppPhone(env)); }
+
+/* Who a call rings: a Telegram @username, or a phone number with its
+   country code. His WhatsApp number is the default, so calls work the moment
+   that one secret exists. */
+function callTarget(env) {
+  const u = String(env.CALL_USER || '').trim();
+  if (!u) return whatsAppPhone(env);
+  if (/^@?[A-Za-z][A-Za-z0-9_]{4,31}$/.test(u)) return u.startsWith('@') ? u : '@' + u;
+  return normalizePhone(u);
+}
+function callConfigured(env) { return !!callTarget(env); }
+function maskTarget(t) { return !t ? null : t.startsWith('@') ? t : maskPhone(t); }
 
 /* 0552813729, 055-281-3729, 972552813729, +972 55 281 3729 and
    00972552813729 are all the same phone. A leading single 0 is an Israeli
@@ -2400,6 +2430,9 @@ function wallClock(ms, tz) {
   } catch (e) { return new Date(ms).toISOString().slice(11, 16); }
 }
 
+const hebrew = s => /[֐-׿]/.test(String(s || ''));
+const plainText = body => String(body || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+
 /* CallMeBot answers 200 with a sentence either way, so the sentence is
    read. Only a network failure, a 429 or a 5xx is worth trying again: a
    bad key will be exactly as bad in a minute, and retrying something that
@@ -2416,7 +2449,7 @@ async function callMeBot(env, text) {
   } catch (err) {
     return { ok: false, retry: true, detail: 'could not reach CallMeBot: ' + ((err && err.message) || err) };
   }
-  const plain = String(body).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+  const plain = plainText(body);
   if (res.status === 429 || res.status >= 500) {
     return { ok: false, retry: true, status: res.status, detail: plain || ('HTTP ' + res.status) };
   }
@@ -2427,18 +2460,108 @@ async function callMeBot(env, text) {
   return { ok: true, status: res.status, detail: plain };
 }
 
+/* A voice call through Telegram. The voice is picked from the text: a
+   Hebrew sentence read by an English voice is noise. Standard voices only —
+   CallMeBot does not take the premium ones. cc=missed leaves the text in
+   Telegram if he does not pick up, so a missed call is not a lost one. */
+function callVoice(text, env) {
+  return hebrew(text) ? (env.CALL_VOICE_HE || 'he-IL-Standard-B') : (env.CALL_VOICE_EN || 'en-GB-Standard-B');
+}
+const CALL_NOT_AUTHORISED =
+  'CallMeBot is not allowed to call you yet — open Telegram and send /start to @CallMeBot_txtbot, then try again.';
+
+function readCallReply(status, body) {
+  const plain = plainText(body);
+  if (status === 429 || status >= 500) return { ok: false, retry: true, status, detail: plain || ('HTTP ' + status) };
+  const authorised = /authori[sz]ation ok/i.test(plain);
+  const notAuthorised = /not authori[sz]ed|authori[sz]ation (?:failed|error|denied|required)|\/start/i.test(plain) && !authorised;
+  const refused = status < 200 || status >= 300 || notAuthorised ||
+    (/invalid|error|blocked|denied|not found|wrong/i.test(plain) && !authorised);
+  if (refused) {
+    return { ok: false, retry: false, status, detail: plain || ('HTTP ' + status),
+             tell_the_user: notAuthorised ? CALL_NOT_AUTHORISED : undefined };
+  }
+  return { ok: true, status, detail: plain };
+}
+
+/* The request stays open while the phone rings, which can be half a
+   minute. The page is not made to sit through that: after CALL_WAIT_MS it is
+   told the call is being placed, and the rest runs on in the background.
+   Anything that fails fast — no authorisation, a bad number — comes back
+   well inside that and is reported properly. The cron passes no wait: it has
+   all the time it needs. */
+async function callMeBotCall(env, text, waitMs) {
+  const url = 'https://api.callmebot.com/start.php' +
+    '?user=' + encodeURIComponent(callTarget(env)) +
+    '&text=' + encodeURIComponent(text) +
+    '&lang=' + encodeURIComponent(callVoice(text, env)) +
+    '&rpt=2&cc=missed&timeout=30';
+  const attempt = (async () => {
+    let res, body = '';
+    try {
+      res = await fetch(url, { method: 'GET' });
+      body = await res.text().catch(() => '');
+    } catch (err) {
+      return { ok: false, retry: true, detail: 'could not reach CallMeBot: ' + ((err && err.message) || err) };
+    }
+    return readCallReply(res.status, body);
+  })();
+  if (!waitMs) return attempt;
+  let timer;
+  const waited = new Promise(resolve => { timer = setTimeout(() => resolve(null), waitMs); });
+  const first = await Promise.race([attempt, waited]);
+  clearTimeout(timer);
+  if (first) return first;
+  return { ok: true, placing: true, detail: 'the call is being placed', rest: attempt };
+}
+
+/* One entry per kind of thing the outbox can send. Adding the next
+   automation is a row here, not another copy of the queue. */
+const CHANNELS = {
+  whatsapp: {
+    configured: whatsAppConfigured,
+    maxText: WA_MAX_TEXT,
+    to: env => maskPhone(whatsAppPhone(env)),
+    send: (env, text) => callMeBot(env, text),
+    late: (text, due) => '⏰ ' + due + ' · ' + text,
+    notConfigured: 'WhatsApp is not set up on the worker yet — it needs the WHATSAPP_PHONE and CALLMEBOT_APIKEY secrets.',
+    emptyText: 'text is required — ask him what the message should say'
+  },
+  call: {
+    configured: callConfigured,
+    maxText: CALL_MAX_TEXT,
+    to: env => maskTarget(callTarget(env)),
+    send: (env, text, waitMs) => callMeBotCall(env, text, waitMs),
+    late: (text, due) => (hebrew(text) ? 'השיחה הזאת הייתה אמורה להגיע ב-' + due + '. ' : 'This call was due at ' + due + '. ') + text,
+    notConfigured: 'Calls are not set up on the worker yet — it needs CALL_USER (a Telegram @username or phone number) or WHATSAPP_PHONE.',
+    emptyText: 'text is required — ask him what the call should say'
+  }
+};
+
 let schemaReady = null;
 function ensureSchema(env) {
   if (!schemaReady) {
     schemaReady = (async () => {
-      await env.JARVIS_DB.prepare(
-        'CREATE TABLE IF NOT EXISTS whatsapp_queue (' +
-        ' id TEXT PRIMARY KEY, text TEXT NOT NULL, send_at INTEGER NOT NULL,' +
-        ' tz TEXT, created INTEGER NOT NULL,' +
+      const db = env.JARVIS_DB;
+      /* The queue began as WhatsApp's alone. Renamed in place, keeping
+         whatever it holds, the first time a worker that knows about calls
+         touches it. */
+      const tables = await db.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('whatsapp_queue', 'outbox')"
+      ).all();
+      const names = ((tables && tables.results) || []).map(r => r.name);
+      if (names.includes('whatsapp_queue') && !names.includes('outbox')) {
+        await db.prepare('ALTER TABLE whatsapp_queue RENAME TO outbox').run();
+        await db.prepare("ALTER TABLE outbox ADD COLUMN channel TEXT NOT NULL DEFAULT 'whatsapp'").run();
+      }
+      await db.prepare(
+        'CREATE TABLE IF NOT EXISTS outbox (' +
+        " id TEXT PRIMARY KEY, channel TEXT NOT NULL DEFAULT 'whatsapp', text TEXT NOT NULL," +
+        ' send_at INTEGER NOT NULL, tz TEXT, created INTEGER NOT NULL,' +
         " status TEXT NOT NULL DEFAULT 'pending', tries INTEGER NOT NULL DEFAULT 0," +
         ' claimed_at INTEGER, sent_at INTEGER, last_error TEXT)'
       ).run();
-      await env.JARVIS_DB.prepare(
+      await db.prepare(
         'CREATE TABLE IF NOT EXISTS jarvis_meta (key TEXT PRIMARY KEY, value TEXT)'
       ).run();
     })().catch(err => { schemaReady = null; throw err; });
@@ -2455,9 +2578,10 @@ async function cronAlive(env) {
   } catch (e) { return false; }
 }
 
-function waRow(r) {
+function outboxRow(r) {
   return {
     id: r.id,
+    channel: r.channel || 'whatsapp',
     text: r.text,
     send_at: new Date(r.send_at).toISOString(),
     status: r.status,
@@ -2467,18 +2591,16 @@ function waRow(r) {
   };
 }
 
-async function handleWhatsAppSend(request, env) {
-  if (!whatsAppConfigured(env)) {
-    return json({
-      error: 'whatsapp not configured',
-      tell_the_user: 'WhatsApp is not set up on the worker yet — it needs the WHATSAPP_PHONE and CALLMEBOT_APIKEY secrets.'
-    }, 503, env, request);
+async function handleOutboxSend(request, env, ctx, channel) {
+  const ch = CHANNELS[channel];
+  if (!ch.configured(env)) {
+    return json({ error: channel + ' not configured', tell_the_user: ch.notConfigured }, 503, env, request);
   }
   const body = await request.json().catch(() => ({}));
   const text = String((body && body.text) || '').trim();
-  if (!text) return json({ error: 'text is required — ask him what the message should say' }, 400, env, request);
-  if (text.length > WA_MAX_TEXT) {
-    return json({ error: 'message too long: ' + text.length + ' characters, the limit is ' + WA_MAX_TEXT }, 400, env, request);
+  if (!text) return json({ error: ch.emptyText }, 400, env, request);
+  if (text.length > ch.maxText) {
+    return json({ error: 'too long: ' + text.length + ' characters, the limit is ' + ch.maxText }, 400, env, request);
   }
   const tz = validTimeZone(String((body && body.timeZone) || 'Asia/Jerusalem'));
   const parsed = parseSendAt(body && body.send_at, tz);
@@ -2497,31 +2619,41 @@ async function handleWhatsAppSend(request, env) {
   }
 
   if (at === null || at <= now + WA_NOW_WINDOW_MS) {
-    const r = await callMeBot(env, text);
+    const r = await ch.send(env, text, CALL_WAIT_MS);
     if (!r.ok) {
-      return json({ error: 'WhatsApp send failed: ' + r.detail, status: r.status || null }, 502, env, request);
+      return json({ error: channel + ' failed: ' + r.detail, status: r.status || null,
+                    tell_the_user: r.tell_the_user }, 502, env, request);
     }
-    return json({ ok: true, sent: true, to: maskPhone(whatsAppPhone(env)), provider_said: r.detail }, 200, env, request);
+    if (r.rest) {
+      const rest = r.rest.catch(() => null);
+      if (ctx && ctx.waitUntil) ctx.waitUntil(rest);
+    }
+    const out = { ok: true, sent: true, channel, to: ch.to(env), provider_said: r.detail };
+    if (r.placing) {
+      out.placing = true;
+      out.note = 'The call is being placed now and rings for about 30 seconds.';
+    }
+    return json(out, 200, env, request);
   }
 
   if (!env.JARVIS_DB) {
     return json({
       error: 'sending later needs the JARVIS_DB binding (a D1 database) on the worker',
-      tell_the_user: 'I can send you a WhatsApp right now, but not at a set time yet — the worker still needs its D1 database bound as JARVIS_DB, plus a Cron Trigger.'
+      tell_the_user: 'I can do that right now, but not at a set time yet — the worker still needs its D1 database bound as JARVIS_DB, plus a Cron Trigger.'
     }, 503, env, request);
   }
   await ensureSchema(env);
-  const id = 'wa' + now.toString(36) + Math.random().toString(36).slice(2, 6);
+  const id = (channel === 'call' ? 'call' : 'wa') + now.toString(36) + Math.random().toString(36).slice(2, 6);
   await env.JARVIS_DB.prepare(
-    'INSERT INTO whatsapp_queue (id, text, send_at, tz, created) VALUES (?, ?, ?, ?, ?)'
-  ).bind(id, text, at, tz, now).run();
+    'INSERT INTO outbox (id, channel, text, send_at, tz, created) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(id, channel, text, at, tz, now).run();
 
   const cron = await cronAlive(env);
   const out = {
-    ok: true, scheduled: true, id,
+    ok: true, scheduled: true, id, channel,
     send_at: new Date(at).toISOString(),
     local_time: wallClock(at, tz),
-    to: maskPhone(whatsAppPhone(env)),
+    to: ch.to(env),
     cron_running: cron
   };
   if (!cron) {
@@ -2532,43 +2664,43 @@ async function handleWhatsAppSend(request, env) {
   return json(out, 200, env, request);
 }
 
-async function handleWhatsAppList(request, env) {
+async function handleOutboxList(request, env) {
   if (!env.JARVIS_DB) return json({ pending: [], recent: [], later_available: false }, 200, env, request);
   await ensureSchema(env);
   const db = env.JARVIS_DB;
   const pending = await db.prepare(
-    "SELECT * FROM whatsapp_queue WHERE status IN ('pending', 'sending') ORDER BY send_at LIMIT 50"
+    "SELECT * FROM outbox WHERE status IN ('pending', 'sending') ORDER BY send_at LIMIT 50"
   ).all();
   const recent = await db.prepare(
-    "SELECT * FROM whatsapp_queue WHERE status IN ('sent', 'failed', 'cancelled') " +
+    "SELECT * FROM outbox WHERE status IN ('sent', 'failed', 'cancelled') " +
     'ORDER BY COALESCE(sent_at, send_at) DESC LIMIT 10'
   ).all();
   return json({
-    pending: ((pending && pending.results) || []).map(waRow),
-    recent: ((recent && recent.results) || []).map(waRow),
+    pending: ((pending && pending.results) || []).map(outboxRow),
+    recent: ((recent && recent.results) || []).map(outboxRow),
     later_available: true,
     cron_running: await cronAlive(env)
   }, 200, env, request);
 }
 
-async function handleWhatsAppCancel(request, env) {
+async function handleOutboxCancel(request, env) {
   if (!env.JARVIS_DB) return json({ error: 'nothing is scheduled: the worker has no JARVIS_DB' }, 503, env, request);
   await ensureSchema(env);
   const body = await request.json().catch(() => ({}));
   const id = String((body && body.id) || '').trim();
-  if (!id) return json({ error: 'id is required — list the scheduled messages first' }, 400, env, request);
+  if (!id) return json({ error: 'id is required — list what is scheduled first' }, 400, env, request);
   const db = env.JARVIS_DB;
   const r = await db.prepare(
-    "UPDATE whatsapp_queue SET status = 'cancelled' WHERE id = ? AND status = 'pending'"
+    "UPDATE outbox SET status = 'cancelled' WHERE id = ? AND status = 'pending'"
   ).bind(id).run();
   if (r && r.meta && r.meta.changes === 1) return json({ ok: true, cancelled: id }, 200, env, request);
-  const row = await db.prepare('SELECT status FROM whatsapp_queue WHERE id = ?').bind(id).first();
+  const row = await db.prepare('SELECT status FROM outbox WHERE id = ?').bind(id).first();
   return json({
-    error: row ? 'cannot cancel: that message is already ' + row.status : 'no scheduled message with id ' + id
+    error: row ? 'cannot cancel: that one is already ' + row.status : 'nothing scheduled with id ' + id
   }, row ? 409 : 404, env, request);
 }
 
-async function runWhatsAppQueue(env) {
+async function runOutbox(env) {
   if (!env.JARVIS_DB) return { skipped: 'no JARVIS_DB' };
   await ensureSchema(env);
   const db = env.JARVIS_DB;
@@ -2581,45 +2713,50 @@ async function runWhatsAppQueue(env) {
     'ON CONFLICT(key) DO UPDATE SET value = excluded.value'
   ).bind(String(now)).run();
   await db.prepare(
-    "DELETE FROM whatsapp_queue WHERE status IN ('sent', 'failed', 'cancelled') AND created < ?"
+    "DELETE FROM outbox WHERE status IN ('sent', 'failed', 'cancelled') AND created < ?"
   ).bind(now - WA_KEEP_MS).run();
 
-  if (!whatsAppConfigured(env)) return { skipped: 'whatsapp not configured' };
-
   await db.prepare(
-    "UPDATE whatsapp_queue SET status = 'pending' WHERE status = 'sending' AND claimed_at < ?"
+    "UPDATE outbox SET status = 'pending' WHERE status = 'sending' AND claimed_at < ?"
   ).bind(now - WA_STUCK_MS).run();
 
   const due = await db.prepare(
-    "SELECT * FROM whatsapp_queue WHERE status = 'pending' AND send_at <= ? ORDER BY send_at LIMIT 20"
+    "SELECT * FROM outbox WHERE status = 'pending' AND send_at <= ? ORDER BY send_at LIMIT 20"
   ).bind(now).all();
   const report = { sent: 0, failed: 0, retrying: 0 };
   for (const row of ((due && due.results) || [])) {
+    const ch = CHANNELS[row.channel || 'whatsapp'];
+    if (!ch || !ch.configured(env)) {
+      await db.prepare("UPDATE outbox SET status = 'failed', last_error = ? WHERE id = ? AND status = 'pending'")
+        .bind(ch ? ch.notConfigured : 'unknown channel ' + row.channel, row.id).run();
+      report.failed++;
+      continue;
+    }
     const claim = await db.prepare(
-      "UPDATE whatsapp_queue SET status = 'sending', claimed_at = ? WHERE id = ? AND status = 'pending'"
+      "UPDATE outbox SET status = 'sending', claimed_at = ? WHERE id = ? AND status = 'pending'"
     ).bind(now, row.id).run();
     if (!claim || !claim.meta || claim.meta.changes !== 1) continue;   // another run took it
 
     /* A reminder that arrives hours late with no word about it reads as
        nonsense — "go to your workout" at nine at night. Say when it was for. */
     const late = now - row.send_at > WA_LATE_MS;
-    const text = late ? '⏰ ' + wallClock(row.send_at, row.tz) + ' · ' + row.text : row.text;
+    const text = late ? ch.late(row.text, wallClock(row.send_at, row.tz)).slice(0, ch.maxText) : row.text;
 
-    const r = await callMeBot(env, text);
+    const r = await ch.send(env, text, 0);
     const tries = (row.tries || 0) + 1;
     if (r.ok) {
       await db.prepare(
-        "UPDATE whatsapp_queue SET status = 'sent', sent_at = ?, tries = ?, last_error = NULL WHERE id = ?"
+        "UPDATE outbox SET status = 'sent', sent_at = ?, tries = ?, last_error = NULL WHERE id = ?"
       ).bind(Date.now(), tries, row.id).run();
       report.sent++;
     } else if (r.retry && tries < WA_MAX_TRIES) {
       await db.prepare(
-        "UPDATE whatsapp_queue SET status = 'pending', tries = ?, last_error = ? WHERE id = ?"
+        "UPDATE outbox SET status = 'pending', tries = ?, last_error = ? WHERE id = ?"
       ).bind(tries, r.detail, row.id).run();
       report.retrying++;
     } else {
       await db.prepare(
-        "UPDATE whatsapp_queue SET status = 'failed', tries = ?, last_error = ? WHERE id = ?"
+        "UPDATE outbox SET status = 'failed', tries = ?, last_error = ? WHERE id = ?"
       ).bind(tries, r.detail, row.id).run();
       report.failed++;
     }

@@ -49,6 +49,10 @@ single file `dist/index.html`.
   automatic restart ends there. Whether a recording is a key recording is fixed
   when it starts (`myPtt`); endpointing, speculation and the echo guard are
   skipped for it. A build whose Rust lacks `push_to_talk_key` stays hands-free.
+- **Before worker 2.5.1, /stt answered 200 with empty text when every model
+  FAILED** (allowance spent, binding broken) — indistinguishable from silence,
+  so he said "Say that again?" or nothing. The page now tells them apart by
+  the `tried` list; keep that working for workers that are not redeployed.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.
@@ -69,6 +73,12 @@ windows-sys APIs, and a broken file fails it, so run it after every Rust
 change. It also puts the resolved crates' source under `~/.cargo/registry/src`
 to read — check that version, not a guessed one (global-hotkey 0.8 is not
 0.7).
+
+The real microphone pipeline (getUserMedia with its processing, the real
+MediaRecorder) can be driven with Chromium's `--use-fake-device-for-media-stream
+--use-fake-ui-for-media-stream --use-file-for-fake-audio-capture=file.wav`.
+Capture the body POSTed to `/stt` and decode it in the page with
+`OfflineAudioContext.decodeAudioData` to see exactly what Whisper receives.
 
 The worker runs under plain Node — import it as an ES module, stub
 `globalThis.fetch`, and drive it through `worker.fetch(new Request(...), env)`.

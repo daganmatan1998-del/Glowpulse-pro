@@ -1929,10 +1929,14 @@ const I18N = {
     orbListenOff: 'Stop listening',
     orbPushToTalk: 'Switch to push-to-talk ({key})',
     orbHandsFree: 'Switch to hands-free',
-    pttOn: '\u25B8 push-to-talk: hold {key} and speak \u2014 let go and he answers. The microphone is off the rest of the time. Right-click the orb for hands-free.',
+    pttOn: '\u25B8 push-to-talk: hold {key}, wait for the short tone, and speak \u2014 let go and he answers. The microphone is off the rest of the time. Right-click the orb for hands-free.',
     pttOff: '\u25B8 hands-free: he is listening all the time again.',
     pttMuted: '\u25B8 standby \u2014 {key} does nothing until you right-click \u2192 Resume listening.',
-    pttNearSilent: 'The microphone gave almost nothing while you held the key (peak {peak}). Windows may be recording from a different microphone: Settings \u2192 System \u2192 Sound \u2192 Input.',
+    pttNearSilent: 'The microphone gave almost nothing while you held the key (peak {peak}). Windows may be recording from a different microphone, or its input volume is turned down: Settings \u2192 System \u2192 Sound \u2192 Input.',
+    pttHeardNothing: '\u25B8 heard no words \u2014 recorded {rec}, microphone live after {live}, loudest {peak} \u00b7 {why}',
+    pttLateMic: 'the microphone took {live} to start: wait for the tone before speaking',
+    pttNoSound: 'I am not getting any sound from the microphone.',
+    pttNever: 'never',
     orbResetPlace: 'Reset position',
     orbHide: 'Hide',
     hushed: '\u25B8 stopped — Ctrl+Shift+X anytime',
@@ -2162,10 +2166,14 @@ const I18N = {
     orbListenOff: 'תפסיק להקשיב',
     orbPushToTalk: 'עבור ללחיצה לדיבור ({key})',
     orbHandsFree: 'עבור להאזנה רציפה',
-    pttOn: '\u25B8 לחיצה לדיבור: תחזיק את {key} ותדבר \u2014 כשתשחרר הוא עונה. בשאר הזמן המיקרופון כבוי. קליק ימני על הכדור להאזנה רציפה.',
+    pttOn: '\u25B8 לחיצה לדיבור: תחזיק את {key}, תחכה לצליל הקצר ותדבר \u2014 כשתשחרר הוא עונה. בשאר הזמן המיקרופון כבוי. קליק ימני על הכדור להאזנה רציפה.',
     pttOff: '\u25B8 האזנה רציפה: הוא שוב מקשיב כל הזמן.',
     pttMuted: '\u25B8 מצב המתנה \u2014 {key} לא עושה כלום עד שתעשה קליק ימני \u2190 תחזור להקשיב.',
-    pttNearSilent: 'המיקרופון כמעט לא קלט כלום בזמן שהחזקת את המקש (שיא {peak}). ייתכן שווינדוז מקליט ממיקרופון אחר: הגדרות \u2190 מערכת \u2190 קול \u2190 קלט.',
+    pttNearSilent: 'המיקרופון כמעט לא קלט כלום בזמן שהחזקת את המקש (שיא {peak}). ייתכן שווינדוז מקליט ממיקרופון אחר, או שעוצמת הקלט שלו נמוכה: הגדרות \u2190 מערכת \u2190 קול \u2190 קלט.',
+    pttHeardNothing: '\u25B8 לא נשמעו מילים \u2014 הוקלטו {rec}, המיקרופון התחיל לקלוט אחרי {live}, השיא {peak} \u00b7 {why}',
+    pttLateMic: 'למיקרופון לקח {live} להתחיל לקלוט: לחכות לצליל ורק אז לדבר',
+    pttNoSound: 'אני לא מקבל שום קול מהמיקרופון.',
+    pttNever: 'אף פעם',
     orbResetPlace: 'אפס מיקום',
     orbHide: 'הסתר',
     hushed: '\u25B8 נעצר — Ctrl+Shift+X בכל רגע',
@@ -2339,7 +2347,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.7.1';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -4356,6 +4364,33 @@ let conversationMode = false;
 let pttMode = false;      // the key, not the room, decides when he listens
 let pttHeld = false;      // the key is down right now
 let pttKeyLabel = '';     // "Caps Lock"; empty when this build has no key
+let pttLive = false;      // the key recording is actually receiving sound
+
+/* The "go ahead" tone. Opening a microphone is not instant — a Bluetooth
+   headset can take a second or two to switch into its talking mode, and
+   nothing reaches the recording until it has — so words said the moment
+   the key goes down can be lost before the microphone exists. The tone
+   plays when the first real audio arrives, which is when talking starts
+   to count. Quiet and short; echo cancellation keeps it out of the
+   recording. */
+let pttChirpCtx = null;
+function pttChirp(){
+  try{
+    const C = window.AudioContext || window.webkitAudioContext;
+    if(!C) return;
+    const ctx = pttChirpCtx || (pttChirpCtx = new C());
+    if(ctx.state === 'suspended') ctx.resume().catch(()=>{});
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = 880;
+    const t0 = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.07, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.11);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t0); o.stop(t0 + 0.12);
+  }catch(e){}
+}
 let silentMode = false; // mic in, text-only replies, no TTS — for offices/nights/meetings
 let researchMode = false; // sub-question, cross-check, cite — instead of one quick search
 let currentAbortController = null; // in-flight Claude request, if any
@@ -5168,6 +5203,7 @@ async function startWhisperCapture(){
      key recording until it stops, even through the short tail after the
      key comes up. */
   const myPtt = pttMode && pttHeld;
+  const askedAt = Date.now();
   if(myPtt){
     /* A guess left over from hands-free listening must never stand in for
        what is about to be said. */
@@ -5255,9 +5291,17 @@ async function startWhisperCapture(){
     }
     /* What the microphone actually delivered while the key was held. If he
        is still not hearing, this line says whether the sound ever arrived. */
+    /* What this key recording was, for the report if it comes back empty:
+       how long it ran, when sound actually started, how loud it got. */
+    const pttInfo = myPtt ? {
+      recMs: Date.now() - askedAt,
+      liveMs: firstLiveAt ? firstLiveAt - askedAt : -1,
+      peak: peakRms, bytes: blob.size
+    } : false;
     if(myPtt){
+      pttLive = false;
       console.info('JARVIS: push-to-talk, ' + Math.round(Date.now() - started) + 'ms, ' + blob.size +
-                   ' bytes, peak level ' + peakRms.toFixed(4));
+                   ' bytes, peak level ' + peakRms.toFixed(4) + ', live after ' + pttInfo.liveMs + 'ms');
       if(peakRms < PTT_NEAR_SILENT) addMessage('system', t('pttNearSilent').replace('{peak}', peakRms.toFixed(3)));
     }
 
@@ -5303,7 +5347,7 @@ async function startWhisperCapture(){
        the capital of France?". Opening the next recording before waiting on
        this one closes the gap; every later restart finds it already open. */
     if(IS_DESKTOP && conversationMode) startListening();
-    await transcribeAndSend(blob, sawSpeech, myPtt ? started : speechBeganAt, myPtt);
+    await transcribeAndSend(blob, sawSpeech, myPtt ? started : speechBeganAt, pttInfo);
   };
   /* Chunked, so the audio recorded so far can be read without stopping the
      recorder. That is what makes the speculative pass below possible. */
@@ -5321,6 +5365,7 @@ async function startWhisperCapture(){
   const started = Date.now();
   let lastLoud = 0, everSpoke = false, loudSince = 0, bargeSince = 0, speechBeganAt = 0;
   let peakRms = 0;
+  let firstLiveAt = 0;     // the first sample that was not digital silence
   let speculated = false, speculativeAt = 0;
   let hushProbeAt = 0, hushProbes = 0, hushProbeBusy = false;
 
@@ -5345,6 +5390,13 @@ async function startWhisperCapture(){
        applies — no early transcript, no barge-in probe, no one-second rule.
        The recording runs until the key comes up, or the ceiling. */
     if(myPtt){
+      /* Exact zeros are a microphone that is open but delivering nothing
+         yet; anything else, however faint, is a live one. */
+      if(!firstLiveAt && rms > 0){
+        firstLiveAt = now;
+        pttLive = true;
+        if(pttHeld) pttChirp();
+      }
       if(rms > VAD_LEVEL){
         lastLoud = now;
         micVoiceAt = now;
@@ -6053,15 +6105,25 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt, ptt){
     });
     if(res.status === 401){ await forceReauth(); return; }
     const data = await res.json().catch(()=> ({}));
-    if(!res.ok){
+    /* A FAILURE DRESSED AS SILENCE. A worker before 2.5.1 answers 200 with
+       empty text when every model FAILED — the daily allowance spent, the
+       binding broken — exactly as when he said nothing. That reached here
+       as "nothing was said": "Say that again?" to every sentence with the
+       key held, and hands-free, no reaction at all. Its `tried` list tells
+       them apart: a model that ran says "empty result" or "hallucination";
+       anything else is an error. */
+    const tried = Array.isArray(data.tried) ? data.tried.map(String) : [];
+    const allFailed = res.ok && !String(data.text || '').trim() && tried.length > 0 &&
+                      tried.every(s => !/: (empty result|hallucination)/.test(s));
+    if(!res.ok || allFailed){
       /* Say what actually failed and what to do, rather than a raw status.
          "DEBUG (stt): 500" tells you nothing about whether the worker is
          old, the AI binding is missing, or the daily allowance is spent —
          and those need completely different fixes. */
-      const raw = String(data.error || res.status);
+      const raw = allFailed ? tried.join(' | ') : String(data.error || res.status);
       const hint = res.status === 404 ? 'this worker has no /stt yet — deploy the updated jarvis-worker.js'
                  : /binding|not bound/i.test(raw) ? 'add the Workers AI binding named AI in the Cloudflare dashboard'
-                 : /limit|quota|neuron/i.test(raw) ? 'the daily free Workers AI allowance is spent; it resets at 00:00 UTC'
+                 : /limit|quota|neuron|4006|allocation/i.test(raw) ? 'the daily free Workers AI allowance is spent; it resets at 00:00 UTC'
                  : raw;
       addMessage('system', t('sttFailed').replace('{why}', hint));
       // Silent on the desktop: the detail is on screen for when you look.
@@ -6072,7 +6134,7 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt, ptt){
       /* Back off rather than give up. Switching conversationMode off left the
          orb permanently deaf after three transient failures, with no obvious
          way back — which is far worse than retrying slowly. */
-      noteSttFailure(hint, /limit|quota|neuron/i.test(raw));
+      noteSttFailure(hint, /limit|quota|neuron|4006|allocation/i.test(raw));
       if(sttFailures === 3) addMessage('system', t('sttGaveUp'));
       const wait = Math.min(1000 * sttFailures, 5000);
       if(conversationMode && !isThinking) setTimeout(startListening, wait);
@@ -6096,7 +6158,13 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt, ptt){
       console.info('JARVIS: ignored Whisper noise —', heard);
       /* You held the key and nothing usable came back: say so, rather than
          leave you waiting for an answer. */
-      if(ptt) return handleTranscript('', sawSpeech, spokeAt, ptt);
+      if(ptt){
+        if(pttReportNothing(ptt, heard || data.dropped || '', tried)){
+          speak(t('pttNoSound'));
+          return;
+        }
+        return handleTranscript('', sawSpeech, spokeAt, ptt);
+      }
       if(conversationMode && !isThinking) setTimeout(startListening, 250);
       return;
     }
@@ -6107,6 +6175,28 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt, ptt){
     noteSttFailure('could not reach the worker: ' + why, false);
     if(conversationMode && !isThinking) setTimeout(startListening, Math.min(600 * sttFailures, 5000));
   }
+}
+
+/* A key recording came back with no words. Says why, on screen, in numbers:
+   how long it recorded, when the microphone actually started delivering
+   sound, how loud it got, and what Whisper made of it. From outside, "no
+   sound reached him", "the microphone woke up too late" and "the words
+   arrived and Whisper found none" all look like "Say that again?", and
+   they need different fixes. Returns true when no sound arrived at all, so
+   he says THAT instead of asking to hear it again. */
+function pttReportNothing(info, junk, tried){
+  if(!info || typeof info !== 'object') return false;
+  const secs = ms => (ms / 1000).toFixed(1) + (currentLang === 'he' ? ' שנ׳' : 's');
+  const live = info.liveMs < 0 ? t('pttNever') : secs(info.liveMs);
+  const noSound = info.liveMs < 0 || info.peak < PTT_NEAR_SILENT;
+  let why = junk ? 'Whisper: "' + String(junk).slice(0, 40) + '"'
+          : tried.length ? 'Whisper: ' + tried.map(s => s.replace(/^@cf\/openai\//, '')).join('; ').slice(0, 160)
+          : 'Whisper: no words';
+  if(info.liveMs > 700) why += ' \u00b7 ' + t('pttLateMic').replace('{live}', live);
+  addMessage('system', t('pttHeardNothing')
+    .replace('{rec}', secs(info.recMs)).replace('{live}', live)
+    .replace('{peak}', info.peak.toFixed(3)).replace('{why}', why));
+  return noSound;
 }
 
 /* What to DO with a transcript, separated from how it was obtained. Both the
@@ -14658,6 +14748,7 @@ adjustLayout();
   let lastCaptureAt = Date.now();
   let dozeNoted = false;
   let pttWasHeld = false;
+  let pttHeldSince = 0;
   function paintMic(){
     const capturing = (typeof whisperActive !== 'undefined' && whisperActive) ||
                       (micBtn && micBtn.classList.contains('listening'));
@@ -14665,10 +14756,10 @@ adjustLayout();
                  (typeof isSpeaking !== 'undefined' && isSpeaking);
     if(capturing || busy) lastCaptureAt = Date.now();
     /* The key has just gone down: the few seconds the microphone gets to
-       open start now, not at the last recording, which may be an hour ago.
-       Without this every press flashed "microphone not open" in red for the
-       moment it takes to open. */
-    if(pttHeld && !pttWasHeld) lastCaptureAt = Date.now();
+       start delivering sound are counted from now. Counted from the last
+       recording instead, every press flashed "microphone not open" in red
+       for the moment it takes to open. */
+    if(pttHeld && !pttWasHeld) pttHeldSince = Date.now();
     pttWasHeld = pttHeld;
     /* Dozing is shown, not announced every time: the orb dims a little and
        the label says so, and the first time it happens the log says how to
@@ -14681,23 +14772,30 @@ adjustLayout();
     root.classList.toggle('orb-dozing', dozing);
     if(dozing && !dozeNoted){ dozeNoted = true; addMessage('system', t('dozing')); }
     if(!dozing) dozeNoted = false;
-    root.classList.toggle('mic-open', !!capturing && !busy && !orbMuted);
+    /* A key recording counts as open once sound is actually arriving —
+       before that, talking is wasted, and the orb should not say otherwise. */
+    root.classList.toggle('mic-open', !!capturing && !busy && !orbMuted && (!ptt || pttLive));
     root.classList.toggle('mic-busy', !!busy && !orbMuted);
     if(micDot){
       /* "Starting" is only honest for a moment. If capture has not begun
          after a few seconds it is not starting, it has failed — and saying
          so is the entire reason this indicator exists. */
       const deaf = !orbMuted && !!sttBrokenWhy;
-      /* Key up, a shut microphone is the point, not a fault. Key down, it
-         must open within a few seconds like any other capture. */
-      const pttIdle = ptt && !pttHeld && !capturing && !busy && !deaf && !asleepNow;
+      /* Resting until sound is actually arriving: with the key up, and with
+         it down while the microphone is still waking. Lit means "talk now".
+         Key up, a shut microphone is the point, not a fault; key down, it
+         must deliver sound within a few seconds or it is shown as stalled. */
+      const pttIdle = ptt && !pttLive && !busy && !deaf && !asleepNow;
       root.classList.toggle('ptt-idle', pttIdle);
-      const stalled = deaf || (!capturing && !busy && !orbMuted && !pttIdle &&
-                      (Date.now() - lastCaptureAt > 5000));
+      const stalled = deaf || (!busy && !orbMuted && (ptt
+                        ? (pttHeld && !pttLive && Date.now() - pttHeldSince > 5000)
+                        : (!capturing && Date.now() - lastCaptureAt > 5000)));
       micDot.title = orbMuted ? 'Standby — click to switch the microphone on'
                    : deaf      ? 'Cannot transcribe — ' + sttBrokenWhy
                    : busy      ? 'Working…'
-                   : pttIdle   ? 'Push-to-talk — hold ' + pttKeyLabel + ' and speak'
+                   : ptt && stalled ? 'Microphone is NOT delivering sound — check the input device'
+                   : pttIdle && pttHeld ? 'Opening the microphone — speak after the tone'
+                   : pttIdle   ? 'Push-to-talk — hold ' + pttKeyLabel + ', wait for the tone, speak'
                    : dozing && capturing ? 'Dozing — say "hey Jarvis", or click, to wake him'
                    : capturing ? 'Listening — click to switch off'
                    : stalled   ? 'Microphone is NOT open — click to retry'
@@ -14708,6 +14806,8 @@ adjustLayout();
         label.textContent = orbMuted ? 'standby'
                           : deaf      ? 'not hearing'
                           : busy      ? 'working'
+                          : ptt && stalled ? 'microphone not open'
+                          : pttIdle && pttHeld ? 'starting'
                           : pttIdle   ? 'hold ' + pttKeyLabel
                           : dozing && capturing ? 'dozing'
                           : capturing ? 'listening'
@@ -15035,6 +15135,7 @@ adjustLayout();
       if(pttHeld) return;
       if(orbMuted){ addMessage('system', t('pttMuted').replace('{key}', pttKeyLabel)); return; }
       pttHeld = true;
+      pttLive = false;
       pttPressedAt = Date.now();
       /* The key means "my turn": he stops talking, and a reply still being
          worked out is dropped. */

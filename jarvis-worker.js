@@ -75,7 +75,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.5.0';
+const WORKER_VERSION = '2.5.1';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -1891,11 +1891,26 @@ async function handleStt(request, env) {
 
   const tried = [];
   let firstDropped = null;
+  let ran = 0;          // attempts where a model actually ran, whatever it returned
+  let empties = 0;      // ...and found no words
   for (const attempt of attempts) {
     try {
       const out = await env.AI.run(attempt.model, attempt.input);
+      ran++;
       const text = ((out && (out.text || out.transcription || '')) || '').trim();
-      if (!text) { tried.push(attempt.model + ': empty result'); continue; }
+      /* Two models that ran and found no words have answered: there was no
+         speech. Running all six on the same audio used to follow, and every
+         one of them costs neurons — on a room's silence that was six
+         transcriptions for nothing, which is how the free daily allowance
+         ran out. The chain exists for hallucinations (a phrase where there
+         were no words, or the wrong language), which still run it all.
+         Two rather than one, so a single model that cannot read this audio
+         does not get the last word. */
+      if (!text) {
+        tried.push(attempt.model + ': empty result');
+        if (++empties >= 2) break;
+        continue;
+      }
       if (isWhisperHallucination(text, bytes.length)) {
         /* Not a transcript \u2014 the noise Whisper makes when it has nothing.
            Treated as silence so the next model gets a turn, and reported, so
@@ -1913,8 +1928,25 @@ async function handleStt(request, env) {
       tried.push(attempt.model + ': ' + String((err && err.message) || err).slice(0, 140));
     }
   }
+  /* NO MODEL RAN AT ALL, WHICH IS NOT SILENCE.
+
+     This used to answer 200 with empty text either way, so a spent daily
+     allowance, a broken binding or a model Cloudflare had withdrawn all
+     reached the page as "he said nothing": "Say that again?" to every
+     sentence with a held key, and hands-free, nothing whatsoever. Only a
+     model that ran and found no words is silence. Anything else is an
+     error, said as one, so the page can say out loud what is wrong. */
+  if (!ran) {
+    const quota = tried.find(t => /4006|daily free allocation|neurons?\b|quota|rate limit/i.test(t));
+    return json({
+      error: quota
+        ? 'the daily free Workers AI allowance (neurons) is spent — ' + quota
+        : 'every transcription model failed: ' + tried.join(' | '),
+      tried: tried
+    }, quota ? 429 : 502, env, request);
+  }
   // Silence is a legitimate outcome, not a failure — the caller just ignores it.
-  return json({ ok: true, text: '', tried: tried, dropped: firstDropped }, 200, env, request);
+  return json({ ok: true, text: '', tried: tried, dropped: firstDropped, bytes: bytes.length }, 200, env, request);
 }
 
 /* Searching, without needing Anthropic.

@@ -5187,12 +5187,39 @@ async function startWhisperCapture(){
        meant a soft-spoken sentence, or a weak built-in microphone, produced
        silence with no explanation. Send it and let the real model decide;
        an empty transcript costs one round trip and says so out loud. */
+    /* NOTHING CROSSED THE MINIMUM, SO THERE IS NOTHING TO TRANSCRIBE.
+
+       Every recording that reached its ceiling in a quiet room used to be
+       sent anyway — fifteen seconds of room, four times a minute, all day.
+       Measured against the running page: an idle minute produced four
+       transcriptions of nothing. That is the whole of the free Workers AI
+       allowance gone in an afternoon of the orb simply being open, and once
+       it is gone /stt fails and he is deaf until it resets, which from the
+       outside is "he just sits there". It was sent on purpose once, when
+       the threshold was guessed from 350ms of room and could not be
+       trusted; VAD_LEVEL is measured from his own voice now, and by his own
+       rule below it is silence. The website is left as it was: there you
+       pressed a button, and a phone microphone is not the one measured. */
+    if(IS_DESKTOP && !everSpoke){
+      if(conversationMode && !isThinking) setTimeout(startListening, 150);
+      return;
+    }
     if(blob.size < 1200){
       addMessage('system', t('micTooQuiet'));
       if(conversationMode && !isThinking) setTimeout(startListening, 400);
       return;
     }
     if(quiet) console.info('JARVIS: level meter heard nothing; transcribing anyway');
+    /* THE NEXT RECORDING OPENS NOW, NOT AFTER THIS ONE IS UNDERSTOOD.
+
+       The microphone used to stay shut for the whole transcription round
+       trip — about a second — and reopen only once the words had been
+       handled. Anything said in that second was never recorded. Measured on
+       the running page with a realistic round trip: "What is the capital of
+       France?", said a moment after the previous sentence, arrived as "is
+       the capital of France?". Opening the next recording before waiting on
+       this one closes the gap; every later restart finds it already open. */
+    if(IS_DESKTOP && conversationMode) startListening();
     await transcribeAndSend(blob, sawSpeech, speechBeganAt);
   };
   /* Chunked, so the audio recorded so far can be read without stopping the
@@ -5755,6 +5782,32 @@ const STT_NOISE = [
 ];
 /* Roughly a second and a half of opus. */
 const STT_SHORT_BYTES = 14000;
+
+/* WHEN HE CANNOT HEAR, HE SAYS SO.
+
+   A failed transcription was reported in the chat log — which is not on
+   screen in the small orb. So "the free allowance is spent" or "the worker
+   is down" looked exactly like him ignoring you: nothing, from a thing that
+   is plainly on. Now it is said out loud, once per run of failures (the
+   voice falls back to the system's own if the speech service is failing
+   too), and the orb's label shows it until a transcription succeeds. */
+let sttBrokenWhy = '';
+function quotaResetsAt(){
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1))
+    .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function noteSttFailure(why, quota){
+  sttFailures++;
+  sttBrokenWhy = why;
+  if(sttFailures !== 1 || !IS_DESKTOP) return;
+  const he = typeof langMode !== 'undefined' && langMode === 'he';
+  speak(quota
+    ? (he ? '\u05d0\u05e0\u05d9 \u05dc\u05d0 \u05e9\u05d5\u05de\u05e2 \u05d0\u05d5\u05ea\u05da \u05db\u05e8\u05d2\u05e2 \u2014 \u05d4\u05de\u05db\u05e1\u05d4 \u05d4\u05d9\u05d5\u05de\u05d9\u05ea \u05e9\u05dc \u05d4\u05ea\u05de\u05dc\u05d5\u05dc \u05e0\u05d2\u05de\u05e8\u05d4. \u05d4\u05d9\u05d0 \u05de\u05ea\u05d7\u05d3\u05e9\u05ea \u05d1-' + quotaResetsAt() + '.'
+          : 'I can\'t hear you right now \u2014 today\'s free speech allowance is used up. It comes back at ' + quotaResetsAt() + '.')
+    : (he ? '\u05d0\u05e0\u05d9 \u05dc\u05d0 \u05e9\u05d5\u05de\u05e2 \u05d0\u05d5\u05ea\u05da \u05db\u05e8\u05d2\u05e2 \u2014 \u05d4\u05ea\u05de\u05dc\u05d5\u05dc \u05e0\u05db\u05e9\u05dc. \u05d4\u05e1\u05d9\u05d1\u05d4 \u05db\u05ea\u05d5\u05d1\u05d4 \u05d1\u05d9\u05d5\u05de\u05df.'
+          : 'I can\'t hear you right now \u2014 transcription is failing. The reason is in the log.'));
+}
 let warnedOldWorker = false;   // said once a session, not once a sentence
 function sttBare(text){
   return String(text || '')
@@ -5808,6 +5861,11 @@ async function transcribeOnly(blob){
     body: blob
   });
   if(!res.ok) throw new Error('stt ' + res.status);
+  /* A transcription came back, so hearing works — whichever path it came by.
+     Most of them arrive here, through the early pass, and the orb stayed
+     marked "not hearing" after the quota had come back. */
+  sttFailures = 0;
+  sttBrokenWhy = '';
   const data = await res.json().catch(()=> ({}));
   const heard = (data.text || '').trim();
   if(data.dropped) console.info('JARVIS: worker dropped a hallucination —', data.dropped);
@@ -5879,13 +5937,14 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt){
       /* Back off rather than give up. Switching conversationMode off left the
          orb permanently deaf after three transient failures, with no obvious
          way back — which is far worse than retrying slowly. */
-      sttFailures++;
+      noteSttFailure(hint, /limit|quota|neuron/i.test(raw));
       if(sttFailures === 3) addMessage('system', t('sttGaveUp'));
       const wait = Math.min(1000 * sttFailures, 5000);
       if(conversationMode && !isThinking) setTimeout(startListening, wait);
       return;
     }
     sttFailures = 0;                       // a clean round clears the count
+    sttBrokenWhy = '';
     /* The fix for the oldest bug in this project lives in the worker, and a
        worker has to be deployed. Every new response carries a `dropped` key,
        even when it is null; the old one has no such key. So this is a exact
@@ -5905,8 +5964,10 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt){
     }
     return handleTranscript(heard, sawSpeech, spokeAt);
   }catch(err){
-    addMessage('system', t('sttFailed').replace('{why}', (err && err.message) || String(err)));
-    if(conversationMode && !isThinking) setTimeout(startListening, 600);
+    const why = (err && err.message) || String(err);
+    addMessage('system', t('sttFailed').replace('{why}', why));
+    noteSttFailure('could not reach the worker: ' + why, false);
+    if(conversationMode && !isThinking) setTimeout(startListening, Math.min(600 * sttFailures, 5000));
   }
 }
 
@@ -5983,7 +6044,12 @@ async function handleTranscript(rawText, sawSpeech, spokeAt){
     if(IS_DESKTOP && window.__orbAsleep && window.__orbAsleep()){
       const named = addressedByName(text);
       const wakePhrase = typeof isWakeUpCommand === 'function' && isWakeUpCommand(text);
-      if(named === null && !wakePhrase) return;
+      if(named === null && !wakePhrase){
+        /* Ignored — and listening again straight away. Returning without
+           this left sleep able to hear exactly one thing. */
+        if(conversationMode && !isThinking) setTimeout(startListening, 150);
+        return;
+      }
       const request = (named && !(typeof isWakeUpCommand === 'function' && isWakeUpCommand(named))) ? named : '';
       noteActivity();
       if(window.__orbWake) await window.__orbWake(!!request);
@@ -14145,7 +14211,9 @@ adjustLayout();
      fixes it. Cheap, and it cannot deadlock. */
   setInterval(()=>{
     if(orbMuted) return;              // muted means muted; do not reopen
-    if(document.visibilityState !== 'visible') return;
+    /* Hidden normally means dismissed. Asleep it means listening for his
+       name, which is exactly when a lost capture must be put back. */
+    if(document.visibilityState !== 'visible' && !(window.__orbAsleep && window.__orbAsleep())) return;
     if(!conversationMode) return;
 
     /* Deadlock breaker, and it has to come BEFORE the isThinking guard below.
@@ -14223,6 +14291,23 @@ adjustLayout();
      just very slightly later than instantly. */
   const VISIBILITY_HIDE_DEBOUNCE_MS = 700;
   let visibilityHideTimer = null;
+  /* A FULL-SCREEN CHANGE IS NOT A HIDE, HOWEVER LONG IT TAKES.
+
+     700ms covers a quick blip and nothing longer. Measured on the running
+     page with a 1.5s one: the teardown fired mid-transition, stopped "Full
+     screen." half-said, closed the microphone in the MIDDLE of the next
+     sentence, sent the half it had to the model, and dropped the rest. That
+     is "going full screen breaks him", still, after the debounce.
+
+     So setExpanded() marks the change, and while it is in progress a hidden
+     page is left alone entirely. If it is STILL hidden once the change has
+     had ample time to finish, that is a real hide and closes as before. */
+  const FS_TRANSITION_MS = 3000;
+  let fsTransitionUntil = 0;
+  const endIfStillHidden = ()=>{
+    visibilityHideTimer = null;
+    if(document.visibilityState !== 'visible') endListening();
+  };
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState === 'visible'){
       if(visibilityHideTimer){ clearTimeout(visibilityHideTimer); visibilityHideTimer = null; }
@@ -14232,8 +14317,14 @@ adjustLayout();
       else if(!(window.__orbMuted && window.__orbMuted())) setTimeout(beginListening, 250);
     } else {
       if(visibilityHideTimer) clearTimeout(visibilityHideTimer);
-      visibilityHideTimer = setTimeout(()=>{ visibilityHideTimer = null; endListening(); },
-                                       VISIBILITY_HIDE_DEBOUNCE_MS);
+      /* Asleep, the window is hidden ON PURPOSE and the microphone is meant
+         to stay open for his name. Closing it here — 700ms after __orbSleep
+         had reopened it — is what made "hey Jarvis" do nothing at all once
+         he had been put to sleep: measured on the running page, the mic went
+         to zero live tracks and stayed there. */
+      if(window.__orbAsleep && window.__orbAsleep()) return;
+      const wait = Math.max(0, fsTransitionUntil - Date.now()) + VISIBILITY_HIDE_DEBOUNCE_MS;
+      visibilityHideTimer = setTimeout(endIfStillHidden, wait);
     }
   });
   window.addEventListener('focus', ()=>{
@@ -14397,9 +14488,11 @@ adjustLayout();
       /* "Starting" is only honest for a moment. If capture has not begun
          after a few seconds it is not starting, it has failed — and saying
          so is the entire reason this indicator exists. */
-      const stalled = !capturing && !busy && !orbMuted &&
-                      (Date.now() - lastCaptureAt > 5000);
+      const deaf = !orbMuted && !!sttBrokenWhy;
+      const stalled = deaf || (!capturing && !busy && !orbMuted &&
+                      (Date.now() - lastCaptureAt > 5000));
       micDot.title = orbMuted ? 'Standby — click to switch the microphone on'
+                   : deaf      ? 'Cannot transcribe — ' + sttBrokenWhy
                    : busy      ? 'Working…'
                    : dozing && capturing ? 'Dozing — say "hey Jarvis", or click, to wake him'
                    : capturing ? 'Listening — click to switch off'
@@ -14409,6 +14502,7 @@ adjustLayout();
       const label = document.getElementById('micLabel');
       if(label){
         label.textContent = orbMuted ? 'standby'
+                          : deaf      ? 'not hearing'
                           : busy      ? 'working'
                           : dozing && capturing ? 'dozing'
                           : capturing ? 'listening'
@@ -14466,6 +14560,7 @@ adjustLayout();
     root.classList.toggle('orb-expanded', expanded);
     const w = tauriWindow();
     if(!w) return;
+    fsTransitionUntil = Date.now() + FS_TRANSITION_MS;
     try{
       await w.setFullscreen(expanded);
       if(!expanded){

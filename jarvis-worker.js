@@ -75,7 +75,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.5.1';
+const WORKER_VERSION = '2.6.0';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -124,6 +124,21 @@ export default {
       if (path === '/fallback/test')               return await handleFallbackTest(env, request);
       if (path === '/session')                     return json({ ok: true }, 200, env, request);
 
+      /* AGENTS — see the block at the end of the file. The registry is read
+         through the same auth every other authed route uses; nothing here
+         is more sensitive than the tool calls it merely describes. */
+      if (path === '/agents')                      return await handleAgentsList(request, env);
+      if (path === '/agents/brand')                return await handleBrandProfile(request, env);
+      if (path === '/approvals/request')            return await handleApprovalRequest(request, env);
+      if (path === '/approvals/pending')            return await handleApprovalList(request, env, url);
+      if (path === '/approvals/decide')             return await handleApprovalDecide(request, env);
+      if (path === '/events/recent')                return await handleEventsRecent(request, env, url);
+      if (path === '/memory' && request.method === 'GET')  return await handleMemoryRead(request, env, url);
+      if (path === '/memory')                       return await handleMemoryWrite(request, env);
+      if (path === '/agent/pause')                  return await handleAgentPause(request, env);
+      if (path === '/agents/config')                return await handleAgentConfig(request, env, url);
+      if (path === '/qa/check')                     return await handleQaCheck(request, env);
+
       return json({ error: 'not found: ' + path }, 404, env, request);
     } catch (err) {
       return json({ error: String((err && err.message) || err) }, 500, env, request);
@@ -135,6 +150,12 @@ export default {
      minute and it sends whatever has come due. */
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runOutbox(env).catch(err => console.error('outbox', err)));
+    /* The scheduled agents (competitor, news) and the daily summary, on the
+       same timer. A tick that only sends WhatsApp is now also the tick that
+       asks "is anything else due" — one Cron Trigger, not two, because
+       Cloudflare bills and limits them per worker regardless of how many
+       different things they end up doing. */
+    ctx.waitUntil(runDueAgents(env).catch(err => console.error('agents', err)));
   }
 };
 
@@ -358,6 +379,15 @@ async function handleMessages(request, env) {
     }
   }
 
+  return runEngineChain(chain, body, env, request, describedBy);
+}
+
+/* THE ACTUAL CALL, DOWN THE CHAIN — pulled out of handleMessages so the
+   agent runner below can put its own system prompt and tools through the
+   exact same fallback machinery rather than reimplementing it. Nothing
+   about handleMessages' behaviour changes: this is its own loop, moved
+   here verbatim, with the two callers now sharing it. */
+async function runEngineChain(chain, body, env, request, describedBy) {
   const skipped = [];
   let lastError = null;
 
@@ -1016,7 +1046,28 @@ export const __test = {
   runOutbox(env) { return runOutbox(env); },
   readCallReply(status, body) { return readCallReply(status, body); },
   callTarget(env) { return callTarget(env); },
-  resetSchema() { schemaReady = null; }
+  resetSchema() { schemaReady = null; agentSchemaReady = null; },
+  // AGENTS — the registry and the pieces built on it, exposed for testing.
+  get AGENT_REGISTRY() { return AGENT_REGISTRY; },
+  agentHasPermission(agentId, cap) { return agentHasPermission(agentId, cap); },
+  checkToolPermission(agentId, tool, input) { return checkToolPermission(agentId, tool, input); },
+  requiresApproval(cap) { return requiresApproval(cap); },
+  logEvent(env, e) { return logEvent(env, e); },
+  searchCore(q) { return searchCore(q); },
+  fetchPageCore(u) { return fetchPageCore(u); },
+  shopifyGraphQL(target, q, v) { return shopifyGraphQL(target, q, v); },
+  getBrandProfile(env) { return getBrandProfile(env); },
+  agentIsPaused(env, id) { return agentIsPaused(env, id); },
+  dueAgents(env, now) { return dueAgents(env, now); },
+  runScheduledAgent(env, id) { return runScheduledAgent(env, id); },
+  runAgentInWorker(env, agentId, text) { return runAgentInWorker(env, agentId, text); },
+  runDueAgents(env) { return runDueAgents(env); },
+  maybeSendDailySummary(env, now) { return maybeSendDailySummary(env, now); },
+  pickChainForAgent(env, id) { return pickChainForAgent(env, id); },
+  getAgentConfig(env, id) { return getAgentConfig(env, id); },
+  setAgentConfig(env, id, patch) { return setAgentConfig(env, id, patch); },
+  dailyIsDue(schedule, lastRunAt, now) { return dailyIsDue(schedule, lastRunAt, now); },
+  qaCheckPage(u) { return qaCheckPage(u); }
 };
 
 function shouldFailover(status, bodyText) {
@@ -1992,7 +2043,16 @@ async function handleSearch(request, env) {
   const body = await request.json().catch(() => ({}));
   const query = String((body && body.query) || '').trim().slice(0, 400);
   if (!query) return json({ error: 'no query' }, 400, env, request);
+  const result = await searchCore(query);
+  return json(result.body, result.status, env, request);
+}
 
+/* The actual DuckDuckGo call and parse, pulled out of handleSearch so an
+   agent running from the Cron Trigger — competitor and news intelligence,
+   which have no page to call /search through — can make the identical call
+   in-process. Returns {status, body} rather than a Response, since only
+   handleSearch has a Request/env pair to build CORS headers from. */
+async function searchCore(query) {
   const stop = new AbortController();
   const timer = setTimeout(() => stop.abort(), SEARCH_TIMEOUT_MS);
   let html = '';
@@ -2008,14 +2068,13 @@ async function handleSearch(request, env) {
     });
     clearTimeout(timer);
     if (!upstream.ok) {
-      return json({ error: 'search is unavailable right now (' + upstream.status + ')' }, 502, env, request);
+      return { status: 502, body: { error: 'search is unavailable right now (' + upstream.status + ')' } };
     }
     html = await upstream.text();
   } catch (err) {
     clearTimeout(timer);
     const aborted = String((err && err.name) || '') === 'AbortError';
-    return json({ error: aborted ? 'the search timed out' : 'could not reach the search service' },
-                502, env, request);
+    return { status: 502, body: { error: aborted ? 'the search timed out' : 'could not reach the search service' } };
   }
 
   const results = [];
@@ -2037,11 +2096,10 @@ async function handleSearch(request, env) {
   if (!results.length) {
     /* Said plainly. An empty list would be reported to him as "nothing exists
        about that", which is a different and false claim. */
-    return json({ ok: false, query: query, results: [],
-                  error: 'the search returned nothing this worker could read — treat it as search being unavailable, not as the topic having no results' },
-                200, env, request);
+    return { status: 200, body: { ok: false, query: query, results: [],
+      error: 'the search returned nothing this worker could read — treat it as search being unavailable, not as the topic having no results' } };
   }
-  return json({ ok: true, query: query, count: results.length, results: results }, 200, env, request);
+  return { status: 200, body: { ok: true, query: query, count: results.length, results: results } };
 }
 
 /* Reading one page, as opposed to searching. web_search answers "what is out
@@ -2113,9 +2171,18 @@ function htmlToText(html) {
 
 async function handleFetch(request, env) {
   const body = await request.json().catch(() => ({}));
-  const target = safeUrl(body && body.url);
+  const result = await fetchPageCore(body && body.url);
+  return json(result.body, result.status, env, request);
+}
+
+/* The actual fetch-and-extract, pulled out of handleFetch for the same
+   reason as searchCore above: an agent running from the Cron Trigger needs
+   read_page's exact behaviour — the SSRF guard in safeUrl included — without
+   a Request of its own to hand handleFetch. */
+async function fetchPageCore(rawUrl) {
+  const target = safeUrl(rawUrl);
   if (!target) {
-    return json({ error: 'give a full http or https address to a public page' }, 400, env, request);
+    return { status: 400, body: { error: 'give a full http or https address to a public page' } };
   }
 
   const stop = new AbortController();
@@ -2137,48 +2204,55 @@ async function handleFetch(request, env) {
   } catch (err) {
     clearTimeout(timer);
     const aborted = String((err && err.name) || '') === 'AbortError';
-    return json({ error: aborted ? 'the page took too long to answer' : 'could not reach that page' },
-                502, env, request);
+    return { status: 502, body: { error: aborted ? 'the page took too long to answer' : 'could not reach that page' } };
   }
   clearTimeout(timer);
 
   // Redirects have already been followed, so this is where the body came from.
   const landed = safeUrl(upstream.url || target.toString());
-  if (!landed) return json({ error: 'that address redirected somewhere not allowed' }, 400, env, request);
+  if (!landed) return { status: 400, body: { error: 'that address redirected somewhere not allowed' } };
 
   if (!upstream.ok) {
-    return json({ error: 'the site answered ' + upstream.status, status: upstream.status,
-                  url: landed.toString() }, 502, env, request);
+    return { status: 502, body: { error: 'the site answered ' + upstream.status, status: upstream.status,
+                                   url: landed.toString() } };
   }
 
   const type = (upstream.headers.get('Content-Type') || '').toLowerCase();
   if (!/text\/html|text\/plain|application\/(xhtml|json|xml)|text\/xml/.test(type)) {
-    return json({ error: 'that link is ' + (type.split(';')[0] || 'a file') + ', not a readable page',
-                  url: landed.toString() }, 415, env, request);
+    return { status: 415, body: { error: 'that link is ' + (type.split(';')[0] || 'a file') + ', not a readable page',
+                                   url: landed.toString() } };
   }
 
   const declared = Number(upstream.headers.get('Content-Length') || 0);
   if (declared && declared > FETCH_MAX_BYTES) {
-    return json({ error: 'that page is too large to read', url: landed.toString() }, 413, env, request);
+    return { status: 413, body: { error: 'that page is too large to read', url: landed.toString() } };
   }
 
   const raw = await upstream.text().catch(() => '');
   if (raw.length > FETCH_MAX_BYTES) {
-    return json({ error: 'that page is too large to read', url: landed.toString() }, 413, env, request);
+    return { status: 413, body: { error: 'that page is too large to read', url: landed.toString() } };
   }
 
   const titleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(raw);
   const text = /json|xml/.test(type) ? raw.trim() : htmlToText(raw);
   const clipped = text.length > FETCH_MAX_CHARS;
 
-  return json({
-    ok: true,
-    url: landed.toString(),
-    title: titleMatch ? htmlToText(titleMatch[1]).slice(0, 300) : '',
-    text: clipped ? text.slice(0, FETCH_MAX_CHARS) : text,
-    truncated: clipped,
-    chars: text.length
-  }, 200, env, request);
+  return {
+    status: 200,
+    /* rawHtml rides along outside `body` (what read_page actually returns to
+       a caller) so qa_check_page below can look for broken links/images and
+       an add-to-cart control without a second fetch of the same page. */
+    rawHtml: /json|xml/.test(type) ? '' : raw,
+    contentType: type,
+    body: {
+      ok: true,
+      url: landed.toString(),
+      title: titleMatch ? htmlToText(titleMatch[1]).slice(0, 300) : '',
+      text: clipped ? text.slice(0, FETCH_MAX_CHARS) : text,
+      truncated: clipped,
+      chars: text.length
+    }
+  };
 }
 
 /* The read-only guard, and it has to be exact: this endpoint holds an Admin
@@ -2240,17 +2314,27 @@ async function handleShopify(request, env) {
     }, 400, env, request);
   }
 
+  const result = await shopifyGraphQL(target, query, (body && body.variables) || {});
+  return json(result.data, result.ok ? 200 : 502, env, request);
+}
+
+/* The actual call to Shopify's Admin API, pulled out of handleShopify so a
+   caller with no incoming Request — a scheduled agent, running from the Cron
+   Trigger with nobody asking — can make the same call the same way. Nothing
+   about handleShopify's own behaviour changes: it still builds `target` and
+   checks `allow_writes` exactly as before, then hands off here. */
+async function shopifyGraphQL(target, query, variables) {
   const storeSubdomain = target.store.replace(/\.myshopify\.com$/, '');
   const upstream = await fetch(
     `https://${storeSubdomain}.myshopify.com/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': target.token },
-      body: JSON.stringify({ query, variables: (body && body.variables) || {} })
+      body: JSON.stringify({ query, variables: variables || {} })
     }
   );
   const data = await upstream.json().catch(() => ({ error: 'bad shopify response' }));
-  return json(data, upstream.ok ? 200 : 502, env, request);
+  return { ok: upstream.ok, data };
 }
 
 async function googleAccessToken(env) {
@@ -2794,4 +2878,1035 @@ async function runOutbox(env) {
     }
   }
   return report;
+}
+
+/* =====================================================================
+   AGENTS — JARVIS as supervisor, not sole worker
+
+   Everything above this line is what JARVIS already was: one assistant,
+   one system prompt, one big toolbelt, executed turn by turn wherever the
+   turn happened to start (the page's tool loop, or a standing task).
+   That did not change and does not go away — it is still exactly how a
+   normal conversation runs.
+
+   What this section adds is a REGISTRY of narrower personas on top of the
+   same machinery: each one is a system prompt plus a permitted subset of
+   the tools that already exist, given a name, a risk level and an explicit
+   permission list. A "Research Agent" is not a new kind of thing running
+   somewhere else — it is one more scoped call through runEngineChain,
+   the same function handleMessages already uses, with search_web and
+   read_page in its tool list and nothing else.
+
+   Two places actually RUN an agent:
+     - the page (jarvis-desktop/dist/index.html), for anything that needs a
+       browser-native or OS-native tool (camera, screenshots, window
+       management, the new workspace/system tools) or that is answering
+       him directly in conversation, and
+     - this worker's Cron Trigger, for agents whose whole job is reading
+       the public web and the store on a schedule with nobody watching —
+       Competitor Intelligence and News/Intelligence — the same pattern
+       the WhatsApp outbox above already established: Cloudflare wakes the
+       worker on a timer regardless of whether his computer is on.
+
+   Nothing here can do what the underlying tool could not already do.
+   Giving an agent shopify.write does not create a new way to write to
+   Shopify — it grants use of the shopify_admin_query tool that already
+   existed, gated exactly as it always was (see handleShopify above: a
+   write needs allow_writes: true and is logged, not approved — a choice
+   already made and shipped, not something this reopens). What IS new is
+   filesystem/git access for the Coding Agent, which has no precedent
+   here and is capability-gated and approval-gated from a standing start.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   BRAND_PROFILE — configurable, not hardcoded.
+
+   Three layers, later wins: sensible defaults inferred from what is
+   already configured (the Shopify store name, if there is exactly one) →
+   the BRAND_PROFILE_JSON secret, for values set once at deploy time → a
+   row in jarvis_meta, for values changed from the app without a redeploy.
+   Every agent that writes brand-voiced copy reads this rather than having
+   a voice baked into its own prompt, so changing the brand once changes
+   every agent that speaks for it.
+--------------------------------------------------------------------- */
+const BRAND_PROFILE_DEFAULTS = {
+  name: '', voice: '', audience: '', visual_identity: '', colors: [],
+  typography: '', style: '', positioning: '', products: '',
+  pricing_philosophy: '', words_to_use: [], words_to_avoid: []
+};
+
+function defaultBrandName(env) {
+  const stores = shopifyStores(env);
+  return stores.length === 1 ? stores[0].name : '';
+}
+
+async function getBrandProfile(env) {
+  const base = Object.assign({}, BRAND_PROFILE_DEFAULTS, { name: defaultBrandName(env) });
+  let fromSecret = {};
+  if (env.BRAND_PROFILE_JSON) {
+    try { fromSecret = JSON.parse(env.BRAND_PROFILE_JSON); } catch (e) { /* ignored: bad JSON, defaults stand */ }
+  }
+  let fromDb = {};
+  if (env.JARVIS_DB) {
+    try {
+      await ensureAgentSchema(env);
+      const row = await env.JARVIS_DB.prepare("SELECT value FROM jarvis_meta WHERE key = 'brand_profile'").first();
+      if (row && row.value) fromDb = JSON.parse(row.value);
+    } catch (e) { /* ignored: no DB, or nothing saved yet */ }
+  }
+  return Object.assign({}, base, fromSecret, fromDb);
+}
+
+async function setBrandProfile(env, patch) {
+  await ensureAgentSchema(env);
+  const current = await getBrandProfile(env);
+  const next = Object.assign({}, current, patch || {});
+  await env.JARVIS_DB.prepare(
+    "INSERT INTO jarvis_meta (key, value) VALUES ('brand_profile', ?) " +
+    'ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+  ).bind(JSON.stringify(next)).run();
+  return next;
+}
+
+/* ---------------------------------------------------------------------
+   PERMISSIONS — capability strings, default deny.
+
+   Every string an agent might be checked against is listed here, once,
+   whether or not anything actually grants it — that list IS the
+   documentation of what this system is capable of at all. Three of them
+   (shell.execute, payments.read, payments.write) are listed and granted
+   to nobody, on purpose: agentHasPermission refuses them outright, before
+   it even looks at the registry, so a registry entry cannot hand them out
+   by a future editing mistake. That is the literal meaning of "never
+   allow this agent to independently perform destructive actions" and
+   "never transfer money" — not a policy to remember, a branch that
+   returns false no matter what the registry says.
+--------------------------------------------------------------------- */
+const PERMISSION_CAPABILITIES = [
+  'internet.read', 'filesystem.read', 'filesystem.write',
+  'git.read', 'git.write', 'shell.execute',
+  'shopify.read', 'shopify.write',
+  'calendar.read', 'calendar.write',
+  'whatsapp.send', 'phone.call',
+  'memory.read', 'memory.write',
+  'system.read', 'agent.pause',
+  'payments.read', 'payments.write', 'production.deploy'
+];
+
+/* Capabilities nothing may ever hold, whatever a registry entry says.
+   shell.execute: no agent gets a raw shell — the Coding Agent gets scoped
+   file and git operations instead, which covers everything the brief
+   actually asks for ("read code, write code, work with git") without
+   opening arbitrary command execution on his machine.
+   payments.*, production.deploy: no integration for either exists, and
+   none should be added under this project without a much more deliberate
+   conversation than a registry edit. */
+const NEVER_GRANTED = new Set(['shell.execute', 'payments.read', 'payments.write', 'production.deploy']);
+
+/* Capabilities that need his sign-off before the action they gate runs,
+   over and above the agent holding the permission at all. Deliberately
+   NOT shopify.write, whatsapp.send or phone.call — those already shipped
+   as log-gated rather than approval-gated (see the comment on handleShopify
+   and the OUTBOX section above), and retrofitting an approval step onto a
+   choice already made and already in use would change working behaviour
+   under his feet. What is new here is filesystem.write and git.write: no
+   prior version of this project could touch a file or a repository at
+   all, so there is no existing behaviour to preserve, and giving an LLM
+   that power without a checkpoint is not a corner to cut quietly. */
+const APPROVAL_REQUIRED = new Set(['filesystem.write', 'git.write', 'agent.pause']);
+
+function requiresApproval(capability) {
+  return APPROVAL_REQUIRED.has(capability);
+}
+
+/* Whether AGENT may use CAPABILITY at all. Checked before every tool
+   dispatch that maps to a permission-bearing tool (see the page's
+   agentPermissionGuard, which calls this same table by fetching the
+   registry — one source of truth, read in two runtimes). */
+function agentHasPermission(agentId, capability) {
+  if (NEVER_GRANTED.has(capability)) return false;
+  const agent = AGENT_REGISTRY.find(a => a.id === agentId);
+  if (!agent) return false;
+  return !!(agent.permissions && agent.permissions[capability]);
+}
+
+/* ---------------------------------------------------------------------
+   AGENT_REGISTRY — the nineteen personas, and JARVIS itself is not one of
+   them: JARVIS is the supervisor that decides whether a request needs one
+   of these at all, same as it always answered everything directly before
+   this file existed. A registry entry is data, not code — description is
+   the actual system-prompt text an agent runs with (prefixed with the
+   brand profile where relevant), tools names the subset of the existing
+   tool schemas it is handed, and permissions is checked before any tool
+   whose name appears in TOOL_CAPABILITY below is allowed to run.
+
+   riskLevel follows the brief's four bands (low/medium/high/critical);
+   only 'coding' reaches high, because only it holds a capability
+   (filesystem.write / git.write) this project has never granted before.
+   Nothing here is critical, because nothing here is production.deploy,
+   payments.*, or a delete of the store — none of those exist as tools
+   at all yet, so no registry entry can reach for them. */
+const AGENT_REGISTRY = [
+  {
+    id: 'research', name: 'Research Agent',
+    description: 'General research and information gathering. Compare sources, track where each claim came from, and say plainly when the evidence is thin rather than presenting a guess as a fact. Structure the answer as findings, sources, a confidence level, the conclusions that actually follow, and what is still an open question.',
+    capabilities: ['web search', 'source comparison', 'summarization'],
+    tools: ['search_web', 'read_page'],
+    permissions: { 'internet.read': true, 'memory.write': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'PROJECT_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'competitor', name: 'Competitor Intelligence Agent',
+    description: 'Monitor named ecommerce competitors: products, prices, discounts, promotions, new listings, positioning, and anything a storefront page says about shipping. Build a short profile per competitor and report only what actually changed since the last pass — a re-statement of everything unchanged is noise, not intelligence. Cannot see reviews or social activity that are not on the page itself.',
+    capabilities: ['competitor tracking', 'change detection'],
+    tools: ['search_web', 'read_page'],
+    permissions: { 'internet.read': true, 'memory.write': true, 'memory.read': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'BUSINESS_MEMORY',
+    triggers: ['on_demand', 'schedule'], schedule: { every: 'hours', hours: 24 }
+  },
+  {
+    id: 'product', name: 'Product Development Agent',
+    description: 'Help develop products and collections: ideas, specifications, variants, materials, naming, SKU suggestions, packaging concepts, and how a new product differs from what is already in the store. Ground every suggestion in the store’s actual catalog and in research already gathered — never propose a product as if the catalog were empty.',
+    capabilities: ['product ideation', 'specification', 'differentiation analysis'],
+    tools: ['search_web', 'read_page', 'shopify_admin_query'],
+    permissions: { 'internet.read': true, 'shopify.read': true, 'memory.read': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'BUSINESS_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'creative', name: 'Creative Director Agent',
+    description: 'Own the creative direction of the brand: campaign concepts, visual concepts described in words, product-photography concepts, creative briefs, social concepts, and collection themes. Every idea must fit BRAND_PROFILE — its voice, its visual identity, its words to use and to avoid — rather than a generic ecommerce aesthetic.',
+    capabilities: ['campaign concepts', 'visual direction', 'brand consistency'],
+    tools: [],
+    permissions: { 'memory.read': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'BRAND_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'copywriter', name: 'Copywriter Agent',
+    description: 'Write all brand copy: product descriptions, headlines, landing pages, ads, emails, SMS, WhatsApp messages, Instagram captions, TikTok scripts, campaign copy. Follow BRAND_PROFILE’s voice and word lists exactly. Produces text only — it does not send anything itself; sending is the Personal Assistant’s or JARVIS’s own tool, kept separate so a copy draft can never become an outgoing message without somebody choosing to send it.',
+    capabilities: ['product copy', 'ad copy', 'email/SMS copy', 'social captions'],
+    tools: [],
+    permissions: { 'memory.read': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'BRAND_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'store', name: 'Store Manager Agent',
+    description: 'Inspect and manage the Shopify store: products, inventory, orders, pricing, discounts, collections, product status. Reads by default. A write is still possible through shopify_admin_query exactly as it always was — the caller states allow_writes: true and it is logged, not held for approval, which is the existing design this project already shipped and this agent does not change.',
+    capabilities: ['product management', 'order inspection', 'store health'],
+    tools: ['shopify_admin_query'],
+    permissions: { 'shopify.read': true, 'shopify.write': true, 'memory.write': true },
+    riskLevel: 'medium', model: 'default', memoryNamespace: 'BUSINESS_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'inventory', name: 'Inventory Agent',
+    description: 'Monitor inventory and demand from the store’s own data: current stock, sales velocity, low stock, out of stock, slow-moving products, seasonal patterns. Cannot see supplier lead times or reorder rules that are not recorded in Shopify — say so rather than inventing a number.',
+    capabilities: ['stock monitoring', 'demand tracking', 'anomaly flags'],
+    tools: ['shopify_admin_query'],
+    permissions: { 'shopify.read': true, 'memory.write': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'BUSINESS_MEMORY',
+    triggers: ['on_demand', 'schedule'], schedule: { every: 'hours', hours: 24 }
+  },
+  {
+    id: 'analytics', name: 'Analytics Agent',
+    description: 'Analyze ecommerce performance from Shopify order and product data: revenue, order count, average order value, product performance, returns. Actively flag a meaningful change against the recent baseline rather than only reporting a number. No ad-platform or web-analytics integration exists, so conversion rate, traffic, cart abandonment and CAC/ROAS are out of reach until one is connected — say that plainly instead of estimating them.',
+    capabilities: ['revenue analysis', 'anomaly detection', 'product performance'],
+    tools: ['shopify_admin_query', 'search_web'],
+    permissions: { 'shopify.read': true, 'internet.read': true, 'memory.write': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'BUSINESS_MEMORY',
+    triggers: ['on_demand', 'schedule'], schedule: { every: 'hours', hours: 24 }
+  },
+  {
+    id: 'marketing', name: 'Marketing Agent',
+    description: 'Plan marketing strategy: campaign ideas, audience segmentation, a marketing calendar (using the same Google Calendar the Personal Assistant uses), creative briefs, experiment proposals, and after-the-fact performance analysis from whatever Analytics has. May recommend a budget change. Must never spend money or launch a paid campaign itself — there is no tool that could do either, by design.',
+    capabilities: ['campaign planning', 'audience segmentation', 'marketing calendar'],
+    tools: ['search_web', 'get_calendar_events', 'create_calendar_event'],
+    permissions: { 'internet.read': true, 'calendar.read': true, 'calendar.write': true, 'memory.read': true },
+    riskLevel: 'medium', model: 'default', memoryNamespace: 'BUSINESS_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'social', name: 'Social Media Agent',
+    description: 'Plan social content: a content calendar, post ideas, reel/TikTok concepts, stories, captions, hashtags where they genuinely fit. Works from what the Creative Director and Copywriter produce rather than writing final copy itself. Does not post anything — no platform-posting tool exists.',
+    capabilities: ['content calendar', 'post concepts', 'campaign coordination'],
+    tools: ['get_calendar_events', 'create_calendar_event'],
+    permissions: { 'calendar.read': true, 'calendar.write': true, 'memory.read': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'BRAND_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'finance', name: 'Finance Agent',
+    description: 'Analyze the business financially from Shopify data alone: revenue, product-level margin where cost is recorded, returns, contribution by product. Strictly READ ONLY — there is no payments tool, no way to move money, and none should be built for this agent; it explains numbers, it never changes them.',
+    capabilities: ['revenue analysis', 'margin analysis', 'profitability by product'],
+    tools: ['shopify_admin_query'],
+    permissions: { 'shopify.read': true, 'memory.read': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'BUSINESS_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'support', name: 'Customer Support Agent',
+    description: 'Handle order, shipping, return and product questions using Shopify order lookup and whatever is on the store’s own pages. If it cannot resolve something confidently, it says so and hands the conversation back to JARVIS/him rather than guessing at a policy. No refund, credit or cancellation tool exists for it to misuse — those stay human decisions.',
+    capabilities: ['order lookup', 'FAQ', 'escalation'],
+    tools: ['shopify_admin_query', 'read_page'],
+    permissions: { 'shopify.read': true, 'internet.read': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'AGENT_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'coding', name: 'Coding Agent',
+    description: 'Read, analyze and write code inside a workspace folder set aside for it, and work with git there — status, diff, log, add, commit. It has no shell and cannot run arbitrary commands; workspace_git and workspace_write_file are the whole of what it can do to a filesystem, and both are confined to that one folder. A write never reaches production on its own: implement, then it says what it changed and why, then he approves.',
+    capabilities: ['read code', 'write code', 'git status/diff/log/commit', 'propose changes'],
+    tools: ['workspace_read_file', 'workspace_write_file', 'workspace_list_dir', 'workspace_git', 'run_code'],
+    permissions: { 'filesystem.read': true, 'filesystem.write': true, 'git.read': true, 'git.write': true },
+    riskLevel: 'high', model: 'default', memoryNamespace: 'PROJECT_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'system', name: 'System Monitor Agent',
+    description: 'Monitor the computer JARVIS is running on: CPU, RAM, disk. Reports a threshold breach (CPU_HIGH, MEMORY_HIGH, DISK_LOW) as an event rather than a running dashboard nobody is watching. Cannot see GPU load, Docker, or anything outside this one process’s view of the machine — those need OS access this app does not have.',
+    capabilities: ['CPU/RAM/disk monitoring', 'threshold events'],
+    tools: ['system_metrics'],
+    permissions: { 'system.read': true, 'memory.write': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'EVENT_MEMORY',
+    triggers: ['schedule'], schedule: { every: 'minutes', minutes: 15 }
+  },
+  {
+    id: 'security', name: 'Security Agent',
+    description: 'Watch for an agent acting outside the permission it was given — read AGENT_MEMORY/the action log for a denied-permission attempt — and for an unfamiliar process in the list system_metrics/list_processes can see. May raise an alert and may pause another agent (flip its own registry entry’s paused flag, which every agent checks before it runs) but cannot stop a process, delete a file, or touch the network. It has no capability that could do any of those things.',
+    capabilities: ['permission-violation detection', 'process anomaly flags', 'agent pause'],
+    tools: ['list_processes'],
+    permissions: { 'system.read': true, 'agent.pause': true, 'memory.read': true },
+    riskLevel: 'medium', model: 'default', memoryNamespace: 'EVENT_MEMORY',
+    triggers: ['on_demand', 'schedule'], schedule: { every: 'minutes', minutes: 30 }
+  },
+  {
+    id: 'qa', name: 'QA / Website Testing Agent',
+    description: 'Test the storefront the way read_page and qa_check_page allow: fetch a page, report its status code, look for broken internal links and images, and check that a product page’s markup contains an add-to-cart control. This is NOT browser automation — it cannot click, fill a form, add anything to a real cart, or run a checkout, and it says so rather than reporting a pass on a step it never performed. Real end-to-end checkout testing needs a browser-automation integration this project does not have.',
+    capabilities: ['broken-link/image scan', 'page reachability', 'markup-level checks'],
+    tools: ['read_page', 'qa_check_page'],
+    permissions: { 'internet.read': true, 'memory.write': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'PROJECT_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'personal', name: 'Personal Assistant Agent',
+    description: 'Handle his personal productivity: standing tasks, calendar, reminders, project tracking. Reads and writes only PERSONAL_MEMORY and PROJECT_MEMORY by default — it does not read BUSINESS_MEMORY or BRAND_MEMORY unless a request explicitly asks it to cross into one of them.',
+    capabilities: ['tasks', 'reminders', 'calendar', 'project tracking'],
+    tools: ['get_calendar_events', 'create_calendar_event', 'remember_to_do', 'list_standing_tasks', 'cancel_standing_task', 'remember'],
+    permissions: { 'calendar.read': true, 'calendar.write': true, 'memory.read': true, 'memory.write': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'PERSONAL_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  },
+  {
+    id: 'news', name: 'News / Intelligence Agent',
+    description: 'Watch topics relevant to him and the business — ecommerce, AI, the categories this store sells in, competitors, tools — and produce ONE short digest, not a stream of articles. Silence is the correct output on a day nothing worth his attention happened.',
+    capabilities: ['topic monitoring', 'digest synthesis'],
+    tools: ['search_web'],
+    permissions: { 'internet.read': true, 'memory.write': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'EVENT_MEMORY',
+    triggers: ['schedule'], schedule: { every: 'daily', time: '07:00' }
+  },
+  {
+    id: 'memory', name: 'Memory Agent',
+    description: 'Long-term structured memory for every other agent and for JARVIS itself. Not a conversation partner — it is the retrieval and relevance layer behind USER_MEMORY, BUSINESS_MEMORY, BRAND_MEMORY, PROJECT_MEMORY, AGENT_MEMORY, DECISION_MEMORY and EVENT_MEMORY. Retrieves only what a request is actually relevant to rather than dumping everything stored, and never writes to BRAND_MEMORY or DECISION_MEMORY on another agent’s behalf — those two are written only by an agent whose own registry entry names that namespace, or by him directly.',
+    capabilities: ['structured storage', 'relevance-scoped retrieval'],
+    tools: [],
+    permissions: { 'memory.read': true, 'memory.write': true },
+    riskLevel: 'low', model: 'default', memoryNamespace: 'AGENT_MEMORY',
+    triggers: ['on_demand'], schedule: null
+  }
+];
+
+/* The memory namespaces named above, listed once so a caller can validate
+   against something rather than a namespace string nobody enumerated. */
+const MEMORY_NAMESPACES = [
+  'USER_MEMORY', 'BUSINESS_MEMORY', 'BRAND_MEMORY', 'PROJECT_MEMORY',
+  'AGENT_MEMORY', 'DECISION_MEMORY', 'EVENT_MEMORY', 'PERSONAL_MEMORY'
+];
+
+/* Which capability a given tool name actually exercises. Used by the page
+   before it dispatches a tool call on an agent's behalf, and mirrored here
+   so a worker-run agent (competitor, news, and anything the scheduler
+   fires) is checked the identical way — one table, read from both runtimes,
+   rather than a rule restated twice and eventually disagreeing. */
+const TOOL_CAPABILITY = {
+  search_web: 'internet.read', read_page: 'internet.read', qa_check_page: 'internet.read',
+  shopify_admin_query: 'shopify.read',   // upgraded to shopify.write below when the call is a mutation
+  get_calendar_events: 'calendar.read', create_calendar_event: 'calendar.write',
+  send_whatsapp: 'whatsapp.send', call_me: 'phone.call',
+  workspace_read_file: 'filesystem.read', workspace_write_file: 'filesystem.write',
+  workspace_list_dir: 'filesystem.read',
+  workspace_git: 'git.read',             // upgraded to git.write below for a mutating git action
+  system_metrics: 'system.read', list_processes: 'system.read',
+  remember: 'memory.write', remember_to_do: 'memory.write',
+  list_standing_tasks: 'memory.read', cancel_standing_task: 'memory.write'
+};
+const GIT_WRITE_ACTIONS = new Set(['add', 'commit']);
+
+/* The one place that decides whether AGENT may make THIS call. Returns
+   {allowed, capability, needsApproval} rather than a bare boolean, because
+   the caller has three different things to do with those three facts:
+   refuse it, run it, or hold it for handleApprovalRequest. */
+function checkToolPermission(agentId, toolName, input) {
+  let capability = TOOL_CAPABILITY[toolName];
+  if (!capability) return { allowed: true, capability: null, needsApproval: false }; // an unlisted tool carries no capability gate (e.g. run_code, already its own sandbox)
+  if (toolName === 'shopify_admin_query' && containsMutation(String((input && input.query) || ''))) {
+    capability = 'shopify.write';
+  }
+  if (toolName === 'workspace_git' && GIT_WRITE_ACTIONS.has(String((input && input.action) || ''))) {
+    capability = 'git.write';
+  }
+  const allowed = agentHasPermission(agentId, capability);
+  return { allowed, capability, needsApproval: allowed && requiresApproval(capability) };
+}
+
+/* ---------------------------------------------------------------------
+   D1 SCHEMA — approvals, events, memory, agent schedule state. A second
+   ensureSchema rather than folding into the outbox's, so a worker running
+   only the WhatsApp features (JARVIS_DB set, none of this touched) never
+   pays for tables it does not use, and so a mistake here cannot block the
+   outbox's own migration, which is load-bearing for a feature already in
+   his hands. */
+let agentSchemaReady = null;
+function ensureAgentSchema(env) {
+  if (!env.JARVIS_DB) return Promise.reject(new Error('no JARVIS_DB binding'));
+  if (!agentSchemaReady) {
+    agentSchemaReady = (async () => {
+      const db = env.JARVIS_DB;
+      await db.prepare(
+        'CREATE TABLE IF NOT EXISTS approvals (' +
+        ' id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, action TEXT NOT NULL,' +
+        ' capability TEXT NOT NULL, risk_level TEXT NOT NULL, payload TEXT,' +
+        " status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL," +
+        ' decided_at INTEGER, decided_by TEXT, note TEXT)'
+      ).run();
+      await db.prepare(
+        'CREATE TABLE IF NOT EXISTS events (' +
+        ' id TEXT PRIMARY KEY, type TEXT NOT NULL, source_agent TEXT,' +
+        " priority TEXT NOT NULL DEFAULT 'low', data TEXT, created_at INTEGER NOT NULL," +
+        ' handled INTEGER NOT NULL DEFAULT 0)'
+      ).run();
+      await db.prepare(
+        'CREATE TABLE IF NOT EXISTS agent_memory (' +
+        ' id TEXT PRIMARY KEY, namespace TEXT NOT NULL, agent_id TEXT,' +
+        ' text TEXT NOT NULL, created_at INTEGER NOT NULL)'
+      ).run();
+      await db.prepare(
+        'CREATE TABLE IF NOT EXISTS agent_runs (' +
+        ' agent_id TEXT PRIMARY KEY, last_run_at INTEGER, last_ok INTEGER,' +
+        ' last_summary TEXT, paused INTEGER NOT NULL DEFAULT 0)'
+      ).run();
+    })().catch(err => { agentSchemaReady = null; throw err; });
+  }
+  return agentSchemaReady;
+}
+
+function newId(prefix) {
+  return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+/* ---------------------------------------------------------------------
+   EVENT BUS — durable, because nobody may be looking when an event fires
+   (AGENT_STARTED/COMPLETED/FAILED, LOW_STOCK, PRICE_CHANGE, SECURITY_ALERT,
+   and the rest of the vocabulary in the brief). Polled through GET
+   /agent/events rather than pushed — the same shape the outbox already
+   uses for "at 4pm" — because a Worker has nothing resembling a standing
+   connection to the page to push through.
+--------------------------------------------------------------------- */
+async function logEvent(env, { type, source, priority, data }) {
+  if (!env.JARVIS_DB) return null; // events are a convenience, not a dependency — never block an agent on this
+  try {
+    await ensureAgentSchema(env);
+    const id = newId('e');
+    await env.JARVIS_DB.prepare(
+      'INSERT INTO events (id, type, source_agent, priority, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(id, type, source || null, priority || 'low', JSON.stringify(data || {}), Date.now()).run();
+    return id;
+  } catch (e) { return null; }
+}
+
+async function handleEventsRecent(request, env, url) {
+  if (!env.JARVIS_DB) return json({ events: [] }, 200, env, request);
+  await ensureAgentSchema(env);
+  const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10) || 50));
+  const since = parseInt(url.searchParams.get('since') || '0', 10) || 0;
+  const rows = await env.JARVIS_DB.prepare(
+    'SELECT * FROM events WHERE created_at > ? ORDER BY created_at DESC LIMIT ?'
+  ).bind(since, limit).all();
+  const events = ((rows && rows.results) || []).map(r => ({
+    id: r.id, type: r.type, source: r.source_agent, priority: r.priority,
+    data: JSON.parse(r.data || '{}'), at: new Date(r.created_at).toISOString()
+  }));
+  return json({ events }, 200, env, request);
+}
+
+/* ---------------------------------------------------------------------
+   APPROVALS — the queue a HIGH-risk action is held in until he decides.
+   Only reached for a capability requiresApproval() names; everything else
+   an agent is permitted to do simply runs, exactly as every existing tool
+   already did before this file existed.
+--------------------------------------------------------------------- */
+async function handleApprovalRequest(request, env) {
+  await ensureAgentSchema(env);
+  const body = await request.json().catch(() => ({}));
+  const agentId = String((body && body.agent_id) || '');
+  const action = String((body && body.action) || '');
+  if (!agentId || !action) return json({ error: 'agent_id and action are required' }, 400, env, request);
+  const capability = String((body && body.capability) || '');
+  const check = agentHasPermission(agentId, capability);
+  if (!check) {
+    return json({ error: 'agent "' + agentId + '" does not hold "' + capability + '" — nothing was queued' }, 403, env, request);
+  }
+  const id = newId('ap');
+  await env.JARVIS_DB.prepare(
+    'INSERT INTO approvals (id, agent_id, action, capability, risk_level, payload, status, created_at) ' +
+    "VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)"
+  ).bind(id, agentId, action, capability, String((body && body.risk_level) || 'high'),
+         JSON.stringify((body && body.payload) || {}), Date.now()).run();
+  await logEvent(env, { type: 'APPROVAL_REQUIRED', source: agentId, priority: 'high', data: { id, action, capability } });
+  return json({ ok: true, id, status: 'pending' }, 200, env, request);
+}
+
+async function handleApprovalList(request, env, url) {
+  await ensureAgentSchema(env);
+  const status = url.searchParams.get('status') || 'pending';
+  const rows = await env.JARVIS_DB.prepare(
+    status === 'all'
+      ? 'SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100'
+      : 'SELECT * FROM approvals WHERE status = ? ORDER BY created_at DESC LIMIT 100'
+  ).bind(...(status === 'all' ? [] : [status])).all();
+  const approvals = ((rows && rows.results) || []).map(r => ({
+    id: r.id, agent_id: r.agent_id, action: r.action, capability: r.capability,
+    risk_level: r.risk_level, payload: JSON.parse(r.payload || '{}'), status: r.status,
+    created_at: new Date(r.created_at).toISOString(),
+    decided_at: r.decided_at ? new Date(r.decided_at).toISOString() : null
+  }));
+  return json({ approvals }, 200, env, request);
+}
+
+async function handleApprovalDecide(request, env) {
+  await ensureAgentSchema(env);
+  const body = await request.json().catch(() => ({}));
+  const id = String((body && body.id) || '');
+  const approve = !!(body && body.approve);
+  if (!id) return json({ error: 'id is required' }, 400, env, request);
+  const row = await env.JARVIS_DB.prepare('SELECT * FROM approvals WHERE id = ?').bind(id).first();
+  if (!row) return json({ error: 'no such approval' }, 404, env, request);
+  if (row.status !== 'pending') return json({ error: 'already ' + row.status }, 400, env, request);
+  const status = approve ? 'approved' : 'rejected';
+  await env.JARVIS_DB.prepare(
+    'UPDATE approvals SET status = ?, decided_at = ?, decided_by = ? WHERE id = ?'
+  ).bind(status, Date.now(), 'user', id).run();
+  await logEvent(env, { type: approve ? 'APPROVAL_GRANTED' : 'APPROVAL_REJECTED', source: row.agent_id, priority: 'low', data: { id } });
+  return json({ ok: true, id, status }, 200, env, request);
+}
+
+/* ---------------------------------------------------------------------
+   MEMORY — one store behind two entry points. The page's existing
+   `remember` tool already persists to localStorage under five categories
+   (pinned/about/preferences/projects/open_loops); this does not replace
+   that — a worker-run agent (competitor, news) has no localStorage to
+   write to at all, so it needs a server-side home for the same idea, and
+   the page mirrors every remember call here too so BUSINESS_MEMORY written
+   from the desktop and BUSINESS_MEMORY written by a 3am competitor scan
+   land in the one place either can read back from.
+--------------------------------------------------------------------- */
+async function handleMemoryWrite(request, env) {
+  await ensureAgentSchema(env);
+  const body = await request.json().catch(() => ({}));
+  const namespace = String((body && body.namespace) || '');
+  const text = String((body && body.text) || '').trim();
+  if (!MEMORY_NAMESPACES.includes(namespace)) {
+    return json({ error: 'unknown namespace. one of: ' + MEMORY_NAMESPACES.join(', ') }, 400, env, request);
+  }
+  if (!text) return json({ error: 'no text' }, 400, env, request);
+  const id = newId('m');
+  await env.JARVIS_DB.prepare(
+    'INSERT INTO agent_memory (id, namespace, agent_id, text, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(id, namespace, (body && body.agent_id) || null, text.slice(0, 2000), Date.now()).run();
+  return json({ ok: true, id }, 200, env, request);
+}
+
+async function handleMemoryRead(request, env, url) {
+  await ensureAgentSchema(env);
+  const namespace = url.searchParams.get('namespace') || '';
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '20', 10) || 20));
+  if (namespace && !MEMORY_NAMESPACES.includes(namespace)) {
+    return json({ error: 'unknown namespace. one of: ' + MEMORY_NAMESPACES.join(', ') }, 400, env, request);
+  }
+  const rows = namespace
+    ? await env.JARVIS_DB.prepare('SELECT * FROM agent_memory WHERE namespace = ? ORDER BY created_at DESC LIMIT ?').bind(namespace, limit).all()
+    : await env.JARVIS_DB.prepare('SELECT * FROM agent_memory ORDER BY created_at DESC LIMIT ?').bind(limit).all();
+  const memories = ((rows && rows.results) || []).map(r => ({
+    id: r.id, namespace: r.namespace, agent_id: r.agent_id, text: r.text,
+    at: new Date(r.created_at).toISOString()
+  }));
+  return json({ memories }, 200, env, request);
+}
+
+/* ---------------------------------------------------------------------
+   THE REGISTRY, SERVED — one source of truth (this array) reflected to
+   the page, plus each agent's live status folded in from agent_runs so
+   "what's happening right now" (the brief's own phrase) has an answer:
+   whether it is paused, when it last ran, whether that run was clean.
+--------------------------------------------------------------------- */
+async function handleAgentsList(request, env) {
+  let runs = {};
+  if (env.JARVIS_DB) {
+    try {
+      await ensureAgentSchema(env);
+      const rows = await env.JARVIS_DB.prepare('SELECT * FROM agent_runs').all();
+      for (const r of ((rows && rows.results) || [])) runs[r.agent_id] = r;
+    } catch (e) { /* status is a courtesy; the registry itself never depends on it */ }
+  }
+  const brand = await getBrandProfile(env);
+  const agents = AGENT_REGISTRY.map(a => {
+    const run = runs[a.id];
+    return Object.assign({}, a, {
+      paused: !!(run && run.paused),
+      lastRunAt: run && run.last_run_at ? new Date(run.last_run_at).toISOString() : null,
+      lastOk: run ? !!run.last_ok : null,
+      lastSummary: (run && run.last_summary) || null
+    });
+  });
+  return json({ agents, brand, never_granted: [...NEVER_GRANTED], capabilities: PERMISSION_CAPABILITIES }, 200, env, request);
+}
+
+async function handleBrandProfile(request, env) {
+  if (request.method === 'GET') return json({ brand: await getBrandProfile(env) }, 200, env, request);
+  const body = await request.json().catch(() => ({}));
+  const next = await setBrandProfile(env, body || {});
+  return json({ ok: true, brand: next }, 200, env, request);
+}
+
+async function recordAgentRun(env, agentId, ok, summary) {
+  if (!env.JARVIS_DB) return;
+  try {
+    await ensureAgentSchema(env);
+    await env.JARVIS_DB.prepare(
+      'INSERT INTO agent_runs (agent_id, last_run_at, last_ok, last_summary, paused) VALUES (?, ?, ?, ?, 0) ' +
+      'ON CONFLICT(agent_id) DO UPDATE SET last_run_at = excluded.last_run_at, last_ok = excluded.last_ok, last_summary = excluded.last_summary'
+    ).bind(agentId, Date.now(), ok ? 1 : 0, String(summary || '').slice(0, 500)).run();
+  } catch (e) { /* status is a courtesy */ }
+}
+
+async function handleAgentPause(request, env) {
+  await ensureAgentSchema(env);
+  const body = await request.json().catch(() => ({}));
+  const agentId = String((body && body.agent_id) || '');
+  const requestedBy = String((body && body.requested_by) || 'user');
+  if (!AGENT_REGISTRY.find(a => a.id === agentId)) return json({ error: 'no such agent' }, 404, env, request);
+  /* The Security Agent is the one caller that is not him: it holds
+     agent.pause and nothing above already grants that to anyone else, so
+     this is the one place agentHasPermission is actually consulted for a
+     capability being SPENT rather than a tool being run. */
+  if (requestedBy !== 'user' && !agentHasPermission(requestedBy, 'agent.pause')) {
+    return json({ error: '"' + requestedBy + '" does not hold agent.pause' }, 403, env, request);
+  }
+  const paused = !!(body && body.paused);
+  await env.JARVIS_DB.prepare(
+    'INSERT INTO agent_runs (agent_id, paused) VALUES (?, ?) ' +
+    'ON CONFLICT(agent_id) DO UPDATE SET paused = excluded.paused'
+  ).bind(agentId, paused ? 1 : 0).run();
+  await logEvent(env, { type: paused ? 'AGENT_PAUSED' : 'AGENT_RESUMED', source: requestedBy, priority: 'medium', data: { agent_id: agentId } });
+  return json({ ok: true, agent_id: agentId, paused }, 200, env, request);
+}
+
+async function agentIsPaused(env, agentId) {
+  if (!env.JARVIS_DB) return false;
+  try {
+    await ensureAgentSchema(env);
+    const row = await env.JARVIS_DB.prepare('SELECT paused FROM agent_runs WHERE agent_id = ?').bind(agentId).first();
+    return !!(row && row.paused);
+  } catch (e) { return false; }
+}
+
+/* ---------------------------------------------------------------------
+   MODEL ROUTER — a thin layer over the engine chain that already exists.
+   Nothing here replaces engineChain's own fallback/cooldown logic; it only
+   picks which configured engine tries FIRST for a given agent, when an
+   opinion has actually been configured. With nothing set, routing is a
+   no-op and every agent sees the exact chain handleMessages always used.
+
+   AGENT_MODEL_PREFERENCE is an optional secret: a JSON object mapping an
+   agent id to a substring of the engine label it should prefer, e.g.
+   {"coding":"anthropic","copywriter":"workers-ai"}. This project has no
+   real cost/latency numbers to route on — inventing them would be exactly
+   the kind of fabrication the brief warns against — so the router exposes
+   the hook and lets him fill in an opinion instead of manufacturing one. */
+function pickChainForAgent(env, agentId) {
+  const chain = engineChain(env);
+  let prefs = {};
+  if (env.AGENT_MODEL_PREFERENCE) {
+    try { prefs = JSON.parse(env.AGENT_MODEL_PREFERENCE); } catch (e) { /* bad JSON: no preference */ }
+  }
+  const want = prefs[agentId];
+  if (!want) return chain;
+  const preferred = chain.filter(e => e.label.includes(want) || e.vendor === want);
+  if (!preferred.length) return chain;
+  return preferred.concat(chain.filter(e => preferred.indexOf(e) < 0));
+}
+
+/* ---------------------------------------------------------------------
+   THE WORKER'S OWN TINY TOOL LOOP — for the two agents that must run with
+   nobody watching (competitor, news) and anything else fired from the Cron
+   Trigger. This is deliberately much smaller than the page's askJarvis
+   loop: three tools, because a scheduled agent has no camera, no Shopify
+   write path offered to it here (store/inventory/analytics running
+   ON-DEMAND go through the page instead, which already has the real
+   shopify_admin_query tool and its whole dispatch table — duplicating that
+   here for a case that already works would be exactly the "second system"
+   the brief says not to build).
+--------------------------------------------------------------------- */
+const WORKER_AGENT_TOOLS = {
+  search_web: {
+    name: 'search_web',
+    description: 'Search the web for current information. Returns up to eight results: title, url, snippet.',
+    input_schema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }
+  },
+  read_page: {
+    name: 'read_page',
+    description: 'Fetch one public web page and return its readable text and title.',
+    input_schema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] }
+  },
+  remember: {
+    name: 'remember',
+    description: 'Save one short, self-contained fact worth keeping, in your own memory namespace.',
+    input_schema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] }
+  }
+};
+
+const BRAND_AWARE_AGENTS = new Set(['creative', 'copywriter', 'social', 'marketing', 'product']);
+
+/* The persona's system prompt: its own registry description, with
+   BRAND_PROFILE folded in for the agents whose job is speaking for the
+   brand. Every other agent gets its description alone — a Finance Agent
+   does not need to know the brand's preferred adjectives. */
+function buildAgentSystemPrompt(agent, brand) {
+  let prompt = 'You are the ' + agent.name + ', one specialist persona inside J.A.R.V.I.S. ' +
+    'Stay inside the role and the tools described below; nothing else has been offered to you, ' +
+    'and asking for something outside them will simply fail.\n\n' + agent.description;
+  if (BRAND_AWARE_AGENTS.has(agent.id) && brand) {
+    const lines = Object.entries(brand)
+      .filter(([, v]) => v && (!Array.isArray(v) || v.length))
+      .map(([k, v]) => '- ' + k + ': ' + (Array.isArray(v) ? v.join(', ') : v));
+    if (lines.length) prompt += '\n\nBRAND_PROFILE (speak consistently with this):\n' + lines.join('\n');
+  }
+  return prompt;
+}
+
+async function dispatchWorkerTool(env, agent, name, input) {
+  const check = checkToolPermission(agent.id, name, input);
+  if (!check.allowed) return { error: agent.id + ' does not hold the "' + (check.capability || name) + '" permission needed for ' + name };
+  if (name === 'search_web') return (await searchCore(String((input && input.query) || ''))).body;
+  if (name === 'read_page') return (await fetchPageCore(input && input.url)).body;
+  if (name === 'remember') {
+    await ensureAgentSchema(env);
+    const id = newId('m');
+    await env.JARVIS_DB.prepare(
+      'INSERT INTO agent_memory (id, namespace, agent_id, text, created_at) VALUES (?, ?, ?, ?, ?)'
+    ).bind(id, agent.memoryNamespace, agent.id, String((input && input.text) || '').slice(0, 2000), Date.now()).run();
+    return { ok: true, id };
+  }
+  return { error: 'unknown tool: ' + name };
+}
+
+const AGENT_MAX_TOOL_ROUNDS = 6;
+
+/* One full turn for AGENTID, run entirely inside the worker: no page, no
+   camera, no OS. Reuses runEngineChain — the exact fallback/cooldown logic
+   handleMessages already relies on — so a scheduled agent gets the same
+   resilience an ordinary chat message gets, not a thinner copy of it. */
+async function runAgentInWorker(env, agentId, userText) {
+  const agent = AGENT_REGISTRY.find(a => a.id === agentId);
+  if (!agent) throw new Error('no such agent: ' + agentId);
+  if (await agentIsPaused(env, agentId)) return { text: '(paused — the Security Agent or he paused this one; skipped)', rounds: 0, paused: true };
+
+  const brand = await getBrandProfile(env);
+  const system = buildAgentSystemPrompt(agent, brand);
+  const tools = (agent.tools || []).filter(name => WORKER_AGENT_TOOLS[name]).map(name => WORKER_AGENT_TOOLS[name]);
+  if (agentHasPermission(agentId, 'memory.write') && !tools.some(tl => tl.name === 'remember')) {
+    tools.push(WORKER_AGENT_TOOLS.remember);
+  }
+
+  const chain = pickChainForAgent(env, agentId);
+  const internalRequest = new Request('https://internal.jarvis.worker/agent-run');
+  let messages = [{ role: 'user', content: userText }];
+  let lastText = '';
+  for (let round = 0; round < AGENT_MAX_TOOL_ROUNDS; round++) {
+    const body = { model: 'claude', max_tokens: 1200, system: system, messages: messages };
+    if (tools.length) body.tools = tools;
+    const res = await runEngineChain(chain, body, env, internalRequest, null);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error((errData && errData.error) || ('agent run failed: ' + res.status));
+    }
+    const data = await res.json();
+    const textBlocks = (data.content || []).filter(b => b.type === 'text').map(b => b.text);
+    if (textBlocks.length) lastText = textBlocks.join('\n');
+    if (data.stop_reason !== 'tool_use') return { text: lastText, rounds: round + 1 };
+
+    const toolUse = (data.content || []).filter(b => b.type === 'tool_use');
+    messages = messages.concat([{ role: 'assistant', content: data.content }]);
+    const results = [];
+    for (const tu of toolUse) {
+      const payload = await dispatchWorkerTool(env, agent, tu.name, tu.input);
+      results.push({ type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(payload) });
+    }
+    messages = messages.concat([{ role: 'user', content: results }]);
+  }
+  return { text: lastText, rounds: AGENT_MAX_TOOL_ROUNDS, truncated: true };
+}
+
+/* ---------------------------------------------------------------------
+   PER-AGENT CONFIG — "monitor these 15 competitors every 24 hours" needs
+   somewhere to put the fifteen URLs. jarvis_meta again, keyed per agent,
+   so it survives a redeploy without becoming a secret (it is not one) and
+   without a schema change every time a new agent needs its own settings.
+--------------------------------------------------------------------- */
+async function getAgentConfig(env, agentId) {
+  if (!env.JARVIS_DB) return {};
+  try {
+    await ensureAgentSchema(env);
+    const row = await env.JARVIS_DB.prepare('SELECT value FROM jarvis_meta WHERE key = ?').bind('agent_config_' + agentId).first();
+    return row && row.value ? JSON.parse(row.value) : {};
+  } catch (e) { return {}; }
+}
+async function setAgentConfig(env, agentId, patch) {
+  await ensureAgentSchema(env);
+  const current = await getAgentConfig(env, agentId);
+  const next = Object.assign({}, current, patch || {});
+  await env.JARVIS_DB.prepare(
+    'INSERT INTO jarvis_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+  ).bind('agent_config_' + agentId, JSON.stringify(next)).run();
+  return next;
+}
+async function handleAgentConfig(request, env, url) {
+  let agentId = url.searchParams.get('agent_id') || '';
+  let body = null;
+  if (request.method !== 'GET') {
+    body = await request.json().catch(() => ({}));
+    agentId = agentId || String((body && body.agent_id) || '');
+  }
+  if (!agentId || !AGENT_REGISTRY.find(a => a.id === agentId)) return json({ error: 'unknown agent_id' }, 400, env, request);
+  if (request.method === 'GET') return json({ agent_id: agentId, config: await getAgentConfig(env, agentId) }, 200, env, request);
+  const next = await setAgentConfig(env, agentId, (body && body.config) || {});
+  return json({ ok: true, agent_id: agentId, config: next }, 200, env, request);
+}
+
+/* ---------------------------------------------------------------------
+   SCHEDULER — the same idea as the outbox's Cron Trigger, generalised: a
+   registry entry names its OWN schedule (§10: "do not hardcode schedules
+   into agent logic" — dueAgents reads agent.schedule generically, it never
+   special-cases an agent id to decide timing), an optional override in
+   jarvis_meta lets it change without a redeploy, and agent_runs records
+   when each one last fired so the next tick knows whether it is due.
+--------------------------------------------------------------------- */
+function scheduleWindowMs(schedule) {
+  if (!schedule) return null;
+  if (schedule.every === 'hours') return (schedule.hours || 1) * 3600000;
+  if (schedule.every === 'minutes') return (schedule.minutes || 15) * 60000;
+  return null; // 'daily' is handled by dailyIsDue below, on a wall-clock boundary rather than an interval
+}
+
+function dailyIsDue(schedule, lastRunAt, now) {
+  const parts = String((schedule && schedule.time) || '00:00').split(':');
+  const hh = parseInt(parts[0], 10) || 0, mm = parseInt(parts[1], 10) || 0;
+  const boundary = new Date(now);
+  boundary.setUTCHours(hh, mm, 0, 0);
+  let dueBoundary = boundary.getTime();
+  if (dueBoundary > now) dueBoundary -= 24 * 3600000; // today's slot has not arrived — yesterday's already has
+  return !lastRunAt || lastRunAt < dueBoundary;
+}
+
+async function getScheduleOverrides(env) {
+  if (!env.JARVIS_DB) return {};
+  try {
+    await ensureAgentSchema(env);
+    const row = await env.JARVIS_DB.prepare("SELECT value FROM jarvis_meta WHERE key = 'agent_schedule_overrides'").first();
+    return row && row.value ? JSON.parse(row.value) : {};
+  } catch (e) { return {}; }
+}
+
+async function dueAgents(env, now) {
+  now = now || Date.now();
+  const scheduled = AGENT_REGISTRY.filter(a => (a.triggers || []).includes('schedule') && a.schedule);
+  if (!scheduled.length || !env.JARVIS_DB) return [];
+  await ensureAgentSchema(env);
+  const overrides = await getScheduleOverrides(env);
+  const rows = await env.JARVIS_DB.prepare('SELECT * FROM agent_runs').all();
+  const runs = {};
+  for (const r of ((rows && rows.results) || [])) runs[r.agent_id] = r;
+  const due = [];
+  for (const agent of scheduled) {
+    const run = runs[agent.id];
+    if (run && run.paused) continue;
+    const schedule = (overrides && overrides[agent.id]) || agent.schedule;
+    const lastRunAt = run ? run.last_run_at : null;
+    const windowMs = scheduleWindowMs(schedule);
+    const isDue = windowMs !== null
+      ? (!lastRunAt || now - lastRunAt >= windowMs)
+      : (schedule.every === 'daily' && dailyIsDue(schedule, lastRunAt, now));
+    if (isDue) due.push(agent);
+  }
+  return due;
+}
+
+/* Only competitor and news are wired to run server-side today — the two
+   agents whose whole job is the public web, which the worker can already
+   reach without a page. Analytics/Inventory declare a schedule too (they
+   may usefully run daily) but their tool is shopify_admin_query with
+   shopify.write reachable through the same call, and giving the WORKER a
+   parallel path to that — rather than the page's existing one, already
+   wired to the action log — is exactly the duplicate system this project
+   was asked not to build. They stay on-demand from the page for now;
+   scheduling them server-side is future work, noted rather than faked. */
+const SERVER_RUNNABLE_SCHEDULED_AGENTS = new Set(['competitor', 'news']);
+
+async function runScheduledAgent(env, agentId) {
+  if (!SERVER_RUNNABLE_SCHEDULED_AGENTS.has(agentId)) {
+    return { ok: false, agentId, error: 'this agent has no worker-side runner yet — it runs on demand from the app instead' };
+  }
+  const config = await getAgentConfig(env, agentId);
+  let prompt;
+  if (agentId === 'competitor') {
+    const urls = Array.isArray(config.urls) ? config.urls.filter(Boolean) : [];
+    if (!urls.length) {
+      return { ok: false, agentId, error: 'no competitors configured — POST /agents/config?agent_id=competitor with {"config":{"urls":["https://..."]}}' };
+    }
+    prompt = 'Check each of these competitor pages and report ONLY what changed since your last note in your ' +
+             'own memory (call remember to check nothing — you cannot read memory back yet, so rely on what ' +
+             'the page says now and note anything worth tracking for next time): ' + urls.join(', ');
+  } else { // 'news'
+    const topics = Array.isArray(config.topics) && config.topics.length ? config.topics : ['ecommerce', 'AI'];
+    prompt = 'Produce one short digest for these topics, today only: ' + topics.join(', ') +
+             '. If nothing meets the bar today, say so in one line rather than padding it out.';
+  }
+  try {
+    const result = await runAgentInWorker(env, agentId, prompt);
+    await recordAgentRun(env, agentId, true, result.text);
+    await logEvent(env, { type: 'AGENT_COMPLETED', source: agentId, priority: 'low', data: { summary: (result.text || '').slice(0, 300) } });
+    return { ok: true, agentId, summary: result.text };
+  } catch (err) {
+    const why = String((err && err.message) || err);
+    await recordAgentRun(env, agentId, false, why);
+    await logEvent(env, { type: 'AGENT_FAILED', source: agentId, priority: 'high', data: { error: why } });
+    return { ok: false, agentId, error: why };
+  }
+}
+
+/* ---------------------------------------------------------------------
+   THE DAILY SUMMARY (§11) — built from what actually happened (events,
+   pending approvals), sent through the outbox exactly like any other
+   WhatsApp message, once a day, only once, and only if WhatsApp is
+   configured at all. "Nothing needed your attention" is a real, honest
+   answer on a quiet day — it is not padded into content for its own sake.
+--------------------------------------------------------------------- */
+async function maybeSendDailySummary(env, now) {
+  if (!env.JARVIS_DB) return;
+  const ch = CHANNELS.whatsapp;
+  if (!ch.configured(env)) return; // nowhere to send it — nothing to build
+  await ensureAgentSchema(env);
+  const dayKey = new Date(now).toISOString().slice(0, 10);
+  const sentRow = await env.JARVIS_DB.prepare("SELECT value FROM jarvis_meta WHERE key = 'daily_summary_date'").first();
+  if (sentRow && sentRow.value === dayKey) return; // already sent today
+
+  const timeRow = await env.JARVIS_DB.prepare("SELECT value FROM jarvis_meta WHERE key = 'daily_summary_time'").first();
+  const parts = String((timeRow && timeRow.value) || '07:00').split(':');
+  const boundary = new Date(now);
+  boundary.setUTCHours(parseInt(parts[0], 10) || 7, parseInt(parts[1], 10) || 0, 0, 0);
+  if (now < boundary.getTime()) return; // not time yet today
+
+  const since = now - 24 * 3600000;
+  const evRows = await env.JARVIS_DB.prepare(
+    'SELECT * FROM events WHERE created_at > ? ORDER BY created_at DESC LIMIT 100'
+  ).bind(since).all();
+  const events = ((evRows && evRows.results) || []).map(r => ({
+    type: r.type, source: r.source_agent, priority: r.priority
+  }));
+  const notable = events.filter(e => e.priority === 'high' || e.priority === 'medium');
+  const pendingRows = await env.JARVIS_DB.prepare("SELECT id FROM approvals WHERE status = 'pending'").all();
+  const pendingCount = ((pendingRows && pendingRows.results) || []).length;
+
+  const lines = [];
+  if (!notable.length && !pendingCount) {
+    lines.push('Good morning. Nothing needed your attention in the last day.');
+  } else {
+    lines.push('Good morning. Since yesterday:');
+    for (const e of notable.slice(0, 8)) {
+      lines.push('- ' + e.type.replace(/_/g, ' ').toLowerCase() + (e.source ? ' (' + e.source + ')' : ''));
+    }
+    if (pendingCount) lines.push('- ' + pendingCount + ' action' + (pendingCount === 1 ? '' : 's') + ' waiting on your approval.');
+  }
+  const text = lines.join('\n').slice(0, ch.maxText);
+
+  await env.JARVIS_DB.prepare(
+    'INSERT INTO outbox (id, channel, text, send_at, created, status, tries) VALUES (?, ?, ?, ?, ?, ?, 0)'
+  ).bind(newId('wa'), 'whatsapp', text, now, now, 'pending').run();
+  await env.JARVIS_DB.prepare(
+    "INSERT INTO jarvis_meta (key, value) VALUES ('daily_summary_date', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  ).bind(dayKey).run();
+}
+
+/* ---------------------------------------------------------------------
+   QA / WEBSITE TESTING — markup-level checks only, built on the exact same
+   fetchPageCore read_page already uses. Deliberately NOT browser
+   automation: nothing here clicks anything, fills a form, or touches a
+   real cart. "Broken" means missing or empty in the HTML itself, which is
+   what can honestly be checked without a browser to drive — a link whose
+   TARGET happens to 404 would need one more fetch per link, which for a
+   normal product page is dozens of requests for a feature nobody asked to
+   be that heavy, so it is left undone rather than faked. */
+async function qaCheckPage(rawUrl) {
+  const result = await fetchPageCore(rawUrl);
+  if (!result.body || !result.body.ok) return result; // forward the fetch failure as-is
+
+  const html = result.rawHtml || '';
+  const imgTags = [...html.matchAll(/<img\b[^>]*>/gi)];
+  const brokenImages = imgTags.filter(m => !/\bsrc\s*=\s*["'][^"']+["']/i.test(m[0])).length;
+  const linkTags = [...html.matchAll(/<a\b[^>]*>/gi)];
+  const brokenLinks = linkTags.filter(m => {
+    const href = /\bhref\s*=\s*["']([^"']*)["']/i.exec(m[0]);
+    return !href || !href[1].trim() || href[1].trim() === '#';
+  }).length;
+  const hasAddToCart = /add[\s_-]?to[\s_-]?cart/i.test(html) || /name=["']add["']/i.test(html);
+
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      url: result.body.url,
+      title: result.body.title,
+      images_found: imgTags.length, broken_images: brokenImages,
+      links_found: linkTags.length, broken_links: brokenLinks,
+      has_add_to_cart_control: hasAddToCart,
+      note: 'Markup-level check only: nothing was clicked, no form was submitted, no cart was used. ' +
+            '"broken" means missing or empty in the HTML, not confirmed unreachable.'
+    }
+  };
+}
+
+async function handleQaCheck(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const result = await qaCheckPage(body && body.url);
+  return json(result.body, result.status, env, request);
+}
+
+/* Called from the Cron Trigger, right beside runOutbox. Capped at three
+   agent runs per tick: each one is a full model call (and possibly several
+   rounds of one), and a Cron Trigger's CPU budget is not unlimited — three
+   is generous for the two agents that exist today and safe headroom for
+   more without one slow tick starving the outbox it runs alongside. */
+async function runDueAgents(env) {
+  if (!env.JARVIS_DB) return { ran: [] };
+  const due = await dueAgents(env, Date.now());
+  const ran = [];
+  for (const agent of due.slice(0, 3)) {
+    ran.push(await runScheduledAgent(env, agent.id));
+  }
+  await maybeSendDailySummary(env, Date.now());
+  return { ran };
 }

@@ -53,6 +53,32 @@ single file `dist/index.html`.
   FAILED** (allowance spent, binding broken) — indistinguishable from silence,
   so he said "Say that again?" or nothing. The page now tells them apart by
   the `tried` list; keep that working for workers that are not redeployed.
+- **The multi-agent Supervisor (2.8.0 / worker 2.6.0).** AGENT_REGISTRY
+  (19 personas) lives ONLY in jarvis-worker.js — GET /agents is the one
+  source of truth; the page fetches it and builds each persona's system
+  prompt + tool list from it (agentToolDefs() in index.html). Never hand-copy
+  an agent's tool list into the page without it also being in the worker's
+  registry, and vice versa — `supervisor.e2e.mjs` in the test set checks this
+  cross-file consistency and has already caught one real miss
+  (workspace_list_dir defined but never added to agentToolDefs()).
+  Approval is required ONLY for filesystem.write and git.write (the Coding
+  Agent) — shopify.write/whatsapp.send/phone.call stay exactly as already
+  shipped (log-gated, no approval step; see handleShopify's own comment).
+  Don't "fix" that inconsistency; it's a deliberate, already-made choice.
+  shell.execute, payments.read/write and production.deploy are granted to
+  NOBODY and enforced in agentHasPermission() regardless of what a registry
+  entry says — never wire a real capability to any of those three.
+  Two agents (competitor, news) run server-side from the Cron Trigger via
+  runAgentInWorker's own tiny tool loop (search_web/read_page/remember
+  only); everything else runs client-side via runAgentPersona, reusing
+  JARVIS's own tool implementations (callSearchWebTool etc.) rather than
+  reimplementing them. The Coding Agent's filesystem/git tools are confined
+  to one folder (dirs_next::data_dir()/jarvis-workspace) by
+  resolve_in_workspace in main.rs — canonicalize-and-starts_with, which is
+  what actually catches a symlink escape; a plain string check on the
+  unresolved path does not. There is deliberately no shell.execute tool at
+  all — workspace_git only runs a fixed allowlist of git subcommands via
+  Command::arg, never a shell string.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.

@@ -597,6 +597,47 @@
   }
   #orbMenu button:hover{ background:rgba(0,229,255,0.16); }
 
+  /* The approvals badge: a small red count, hidden entirely (display:none,
+     not just opacity:0 — nothing here should be clickable-but-invisible)
+     until an agent has actually queued something. Positioned in the
+     expanded view only, same reasoning as #micDot: at 180px it would be
+     pure noise, and the expanded view is where he goes to check on things. */
+  #approvalsBadge{ display:none; }
+  html.tauri.orb-expanded #approvalsBadge.show{
+    display:flex; align-items:center; justify-content:center;
+    position:fixed; right:20px; bottom:20px; z-index:96;
+    width:22px; height:22px; border-radius:50%;
+    background:#ff5a5a; color:#0a0a0a; font:700 11px/1 'Courier New', monospace;
+    cursor:pointer; box-shadow:0 0 10px rgba(255,90,90,0.7);
+  }
+  #approvalsPanel{
+    position:fixed; z-index:97; display:none;
+    right:20px; bottom:50px; width:min(340px, calc(100vw - 40px));
+    max-height:60vh; overflow-y:auto;
+    background:rgba(0,10,20,0.96);
+    border:1px solid rgba(255,90,90,0.5);
+    border-radius:6px; padding:10px;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    box-shadow:0 6px 24px rgba(0,0,0,0.6);
+    font-family:'Courier New', Consolas, monospace; font-size:12px; color:#dfeff2;
+  }
+  #approvalsPanel.open{ display:block; }
+  #approvalsPanel .apRow{
+    border-bottom:1px solid rgba(255,255,255,0.08); padding:8px 2px;
+  }
+  #approvalsPanel .apRow:last-child{ border-bottom:none; }
+  #approvalsPanel .apAgent{ color:#ff9d9d; letter-spacing:1px; text-transform:uppercase; font-size:10px; }
+  #approvalsPanel .apAction{ margin:4px 0; word-break:break-word; }
+  #approvalsPanel .apBtns{ display:flex; gap:8px; margin-top:4px; }
+  #approvalsPanel button{
+    flex:1; padding:6px 8px; border-radius:3px; border:1px solid rgba(255,255,255,0.2);
+    background:rgba(255,255,255,0.05); color:inherit; cursor:pointer; font:inherit;
+  }
+  #approvalsPanel button.approve{ border-color:rgba(0,229,255,0.5); color:#00e5ff; }
+  #approvalsPanel button.reject{ border-color:rgba(255,90,90,0.5); color:#ff9d9d; }
+  #approvalsPanel button:hover{ background:rgba(255,255,255,0.12); }
+  #approvalsPanel .apEmpty{ opacity:0.6; padding:6px 2px; }
+
   /* A thin ring that reports state at a glance, since there is no text here:
      dim when idle, brighter and pulsing while listening, steady while he
      speaks. It sits outside the canvas so the hologram is never obscured. */
@@ -1432,6 +1473,12 @@
 <div id="orbDrag" data-tauri-drag-region></div>
 <div id="orbHit"></div>
 <div id="orbMenu"></div>
+<!-- Only shown when a specialist agent (the Coding Agent, so far) has
+     something queued that needs him to say yes or no before it happens.
+     Empty and invisible the rest of the time — nothing here is a standing
+     dashboard nobody asked for. -->
+<div id="approvalsBadge" title="Pending approvals"></div>
+<div id="approvalsPanel"></div>
 <!-- The full-screen environment's frame. Present always, painted only in
      .orb-expanded, and pointer-events:none throughout — it is something to
      read, never something to click, so it cannot swallow a click meant for
@@ -2347,7 +2394,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.7.1';
+const APP_VERSION = '2.8.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -6760,6 +6807,9 @@ async function runBackendProbe(){
     if(!res.ok) throw new Error('no /health');
     const data = await res.json();
     backendCapabilities = data;
+    // Fire-and-forget: the agent registry rarely changes, so it is warmed
+    // here once rather than awaited on the hot path of every first message.
+    if(typeof loadAgentRegistry === 'function') loadAgentRegistry().catch(()=>{});
     // 2.1.0 is the first worker that allows Authorization through its preflight.
     sendAuthHeader = versionAtLeast(data.version, '2.1.0');
     backendSupportsStreaming = true;
@@ -11995,6 +12045,479 @@ async function callTaskCancelTool(input){
   return { ok: true, cancelled: id };
 }
 
+
+/* =====================================================================
+   AGENTS — nineteen narrower personas on top of the same backend, and
+   JARVIS is not one of them. Everything above this line (askJarvis,
+   callClaude, the full tool loop) is exactly what JARVIS already was
+   before this section existed, untouched: his own toolbelt, his own
+   system prompt, one assistant answering everything by default. A
+   persona run here NEVER widens what plain JARVIS can do, and JARVIS's
+   own tool list never gains one of these tools by accident — they are
+   two separate loops that happen to share a backend.
+
+   The registry itself lives in jarvis-worker.js (GET /agents) so there is
+   one source of truth for who exists, what they may touch, and what risk
+   band they sit in; this section is the CLIENT half of that — running a
+   persona's own tool loop, since most of what a persona actually does
+   (the camera, the workspace, system readouts, Shopify, calendar) is
+   client- or OS-native and has nowhere else to run from. The worker also
+   runs two of these personas itself, server-side, on a schedule, for
+   exactly the two whose whole job is the public web (see runScheduledAgent
+   there) — this file has nothing to do with that half.
+   ===================================================================== */
+let agentRegistryCache = null;
+async function loadAgentRegistry(force){
+  if(agentRegistryCache && !force) return agentRegistryCache;
+  if(!backendUrl) return null;
+  try{
+    const res = await fetch(backendUrl + '/agents', { headers: jarvisHeaders() });
+    if(!res.ok) return null;
+    agentRegistryCache = await res.json();
+    return agentRegistryCache;
+  }catch(err){ return null; }
+}
+function findAgent(registry, id){
+  return registry && Array.isArray(registry.agents) ? registry.agents.find(a => a.id === id) : null;
+}
+
+/* ---- the tools new to this section (the rest already exist above) ---- */
+const WORKSPACE_READ_TOOL = {
+  name: 'workspace_read_file',
+  description: "Read a file from the Coding Agent's own workspace folder. Nowhere else on disk is reachable through this — give a path relative to that folder.",
+  input_schema: { type:'object', properties:{ path:{ type:'string' } }, required:['path'] }
+};
+const WORKSPACE_WRITE_TOOL = {
+  name: 'workspace_write_file',
+  description: "Write a file inside the Coding Agent's workspace folder. This needs his approval before it actually happens: calling it queues the write and comes back with pending_approval rather than doing it immediately. Tell him plainly what you are proposing to write and that you are waiting on him — never say it is done until a later message confirms it went through.",
+  input_schema: { type:'object', properties:{ path:{ type:'string' }, content:{ type:'string' } }, required:['path','content'] }
+};
+const WORKSPACE_LIST_TOOL = {
+  name: 'workspace_list_dir',
+  description: "List a folder inside the Coding Agent's workspace (or the workspace root, with no path). Read-only — no approval needed.",
+  input_schema: { type:'object', properties:{ path:{ type:'string' } }, required:[] }
+};
+const WORKSPACE_GIT_TOOL = {
+  name: 'workspace_git',
+  description: "Run git inside the workspace folder. action is one of status, diff, log, add, commit, init. status/diff/log/init run immediately; add and commit change the repository and need his approval first, exactly like workspace_write_file.",
+  input_schema: {
+    type:'object',
+    properties: {
+      action: { type:'string', enum:['status','diff','log','add','commit','init'] },
+      args: { type:'array', items:{ type:'string' }, description:'Extra arguments, e.g. ["-m","a commit message"] for commit, or ["."] for add.' }
+    },
+    required: ['action']
+  }
+};
+const SYSTEM_METRICS_TOOL = {
+  name: 'system_metrics',
+  description: "Read this computer's current CPU, RAM and disk usage. Read-only.",
+  input_schema: { type:'object', properties:{}, required:[] }
+};
+const LIST_PROCESSES_TOOL = {
+  name: 'list_processes',
+  description: 'List processes currently running on this computer, heaviest CPU first. Read-only — nothing can be stopped, changed or inspected in detail through this.',
+  input_schema: { type:'object', properties:{ limit:{ type:'number' } }, required:[] }
+};
+const QA_CHECK_PAGE_TOOL = {
+  name: 'qa_check_page',
+  description: "Check one storefront page's markup for broken/missing links and images, and whether an add-to-cart control is present in the HTML. This is NOT browser automation: nothing is clicked, no form is submitted, no cart is actually used, and a link is called \"broken\" only if its href is missing or empty in the markup — not because its target was confirmed unreachable. Say that plainly if asked whether checkout was really tested.",
+  input_schema: { type:'object', properties:{ url:{ type:'string' } }, required:['url'] }
+};
+
+async function callQaCheckPageTool(input){
+  const targetUrl = String((input && input.url) || '');
+  if(!targetUrl) return { error: 'a url is required' };
+  try{
+    const res = await fetch(backendUrl + '/qa/check', {
+      method:'POST', headers: Object.assign(jarvisHeaders(), { 'Content-Type':'application/json' }),
+      body: JSON.stringify({ url: targetUrl })
+    });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) return { error: data.error || ('qa check failed: ' + res.status) };
+    return data;
+  }catch(err){ return { error: String((err && err.message) || err) }; }
+}
+
+/* Every tool a persona might be offered, by name. Wherever JARVIS already
+   has the identical tool (search, read_page, Shopify, calendar, memory,
+   standing tasks, sandboxed code) this reuses that exact object rather
+   than redefining it — a persona's search_web is not a second
+   implementation of search_web. Only the tools with no precedent
+   (workspace/system/qa) are new to this file. */
+function agentToolDefs(){
+  return {
+    search_web: SEARCH_WEB_TOOL, read_page: READ_PAGE_TOOL,
+    shopify_admin_query: buildShopifyTool(),
+    get_calendar_events: CALENDAR_TOOL, create_calendar_event: CALENDAR_CREATE_TOOL,
+    remember: REMEMBER_TOOL, remember_to_do: TASK_TOOL,
+    list_standing_tasks: TASK_LIST_TOOL, cancel_standing_task: TASK_CANCEL_TOOL,
+    run_code: RUN_CODE_TOOL,
+    workspace_read_file: WORKSPACE_READ_TOOL, workspace_write_file: WORKSPACE_WRITE_TOOL,
+    workspace_list_dir: WORKSPACE_LIST_TOOL, workspace_git: WORKSPACE_GIT_TOOL,
+    system_metrics: SYSTEM_METRICS_TOOL, list_processes: LIST_PROCESSES_TOOL,
+    qa_check_page: QA_CHECK_PAGE_TOOL
+  };
+}
+
+const BRAND_AWARE_AGENT_IDS = ['creative', 'copywriter', 'social', 'marketing', 'product'];
+/* The persona's system prompt — a client-side twin of buildAgentSystemPrompt
+   in jarvis-worker.js. Kept as a short, literal duplicate rather than
+   fetched, because the page has no other way to run a model call at all
+   (askJarvis bakes its own system prompt in) and there is no shared module
+   system between a Cloudflare Worker and a bundler-free HTML file to put
+   one copy of this in — see CLAUDE.md. If the wording ever needs to
+   change, it changes in both places; the AGENT_REGISTRY data itself (the
+   part that actually matters — who exists, what they may touch) still
+   has exactly one home, the worker. */
+function buildPersonaSystemPrompt(agent, brand){
+  let prompt = 'You are the ' + agent.name + ', one specialist persona inside J.A.R.V.I.S. ' +
+    'Stay inside the role and the tools described below; nothing else has been offered to you.\n\n' + agent.description;
+  if(BRAND_AWARE_AGENT_IDS.indexOf(agent.id) >= 0 && brand){
+    const lines = Object.entries(brand)
+      .filter(([, v]) => v && (!Array.isArray(v) || v.length))
+      .map(([k, v]) => '- ' + k + ': ' + (Array.isArray(v) ? v.join(', ') : v));
+    if(lines.length) prompt += '\n\nBRAND_PROFILE (speak consistently with this):\n' + lines.join('\n');
+  }
+  return prompt;
+}
+
+/* ---------------------------------------------------------------------
+   APPROVALS — the two capabilities that have no precedent in this project
+   (filesystem.write, git.write) are held here rather than run immediately.
+   Mirrors requiresApproval() in jarvis-worker.js; deliberately NOT
+   shopify.write / whatsapp.send / phone.call, which already shipped as
+   log-gated rather than approval-gated (see CLAUDE.md and the worker's own
+   comment on handleShopify) — this does not reopen that choice.
+--------------------------------------------------------------------- */
+const AGENT_APPROVAL_CAPS = { 'filesystem.write': true, 'git.write': true };
+const AGENT_GIT_WRITE_ACTIONS = { add: true, commit: true };
+
+async function requestAgentApproval(agentId, action, capability, payload){
+  try{
+    const res = await fetch(backendUrl + '/approvals/request', {
+      method:'POST', headers: Object.assign(jarvisHeaders(), { 'Content-Type':'application/json' }),
+      body: JSON.stringify({ agent_id: agentId, action, capability, payload, risk_level: 'high' })
+    });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) return { ok:false, error: data.error || 'could not queue the approval' };
+    refreshApprovalsSoon();
+    return { ok:true, id: data.id };
+  }catch(err){ return { ok:false, error: String((err && err.message) || err) }; }
+}
+
+/* One dispatcher for every persona, gating the two approval capabilities
+   before anything else, and otherwise reusing JARVIS's own tool
+   implementations wherever one already exists — callShopifyTool,
+   callSearchWebTool and the rest are the exact functions his own loop
+   calls, not copies of them. */
+async function dispatchAgentTool(agent, name, input){
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  let capability = null;
+  if(name === 'workspace_write_file') capability = 'filesystem.write';
+  else if(name === 'workspace_git') capability = AGENT_GIT_WRITE_ACTIONS[String((input && input.action) || '')] ? 'git.write' : null;
+
+  if(capability && AGENT_APPROVAL_CAPS[capability]){
+    const summary = name + '(' + JSON.stringify(input || {}).slice(0, 200) + ')';
+    const q = await requestAgentApproval(agent.id, summary, capability, input || {});
+    if(!q.ok) return { error: q.error };
+    return {
+      ok: true, pending_approval: q.id,
+      note: 'Queued for his approval (id ' + q.id + '). This has NOT happened yet — tell him what you are ' +
+            'proposing and that you are waiting on him, not that it is done.'
+    };
+  }
+
+  const logEntry = logActionStart(name, input, 'agent:' + agent.id);
+  let payload;
+  try{
+    if(name === 'search_web') payload = await callSearchWebTool(input);
+    else if(name === 'read_page') payload = await callReadPageTool(input);
+    else if(name === 'shopify_admin_query') payload = await callShopifyTool(input, logEntry);
+    else if(name === 'get_calendar_events') payload = await callCalendarTool(input);
+    else if(name === 'create_calendar_event') payload = await callCalendarCreateTool(input);
+    else if(name === 'remember') payload = await callRememberTool(input);
+    else if(name === 'remember_to_do') payload = await callTaskTool(input);
+    else if(name === 'list_standing_tasks') payload = await callTaskListTool();
+    else if(name === 'cancel_standing_task') payload = await callTaskCancelTool(input);
+    else if(name === 'run_code') payload = await callRunCodeTool(input);
+    else if(name === 'qa_check_page') payload = await callQaCheckPageTool(input);
+    else if(name === 'workspace_read_file'){
+      payload = !invoke ? { error: 'the workspace needs the desktop app' }
+              : { ok:true, path: input && input.path, content: await invoke('workspace_read_file', { path: String((input && input.path) || '') }) };
+    } else if(name === 'workspace_list_dir'){
+      payload = !invoke ? { error: 'the workspace needs the desktop app' }
+              : JSON.parse(await invoke('workspace_list_dir', { path: (input && input.path) || null }));
+    } else if(name === 'workspace_git'){
+      // Reaches here only for the read-only actions (status/diff/log/init) —
+      // add/commit were already diverted to the approval branch above.
+      payload = !invoke ? { error: 'the workspace needs the desktop app' }
+              : { ok:true, output: await invoke('workspace_git', { action: (input && input.action) || 'status', args: (input && input.args) || [] }) };
+    } else if(name === 'system_metrics'){
+      payload = !invoke ? { error: 'needs the desktop app' } : JSON.parse(await invoke('system_metrics'));
+    } else if(name === 'list_processes'){
+      payload = !invoke ? { error: 'needs the desktop app' } : JSON.parse(await invoke('list_processes', { limit: (input && input.limit) || null }));
+    } else {
+      payload = { error: 'unknown or unpermitted tool for this agent: ' + name };
+    }
+  }catch(err){ payload = { error: String((err && err.message) || err) }; }
+  logActionEnd(logEntry, payload);
+  return payload;
+}
+
+const AGENT_MAX_TOOL_ROUNDS_CLIENT = 6;
+
+/* One full turn for one persona. Deliberately non-streaming and answering
+   in a single fetch per round — these are background/analytical calls,
+   not live speech JARVIS has to start speaking mid-sentence, so there is
+   nothing streaming would buy here that plain round trips do not. Engine
+   fallback (Anthropic down, try the configured alternative) is entirely
+   the worker's job already, via the same POST / that callClaude uses —
+   this needs no fallback logic of its own. */
+async function runAgentPersona(agentId, userText){
+  const registry = await loadAgentRegistry();
+  const agent = findAgent(registry, agentId);
+  if(!agent) return { ok:false, error: 'no such agent: ' + agentId };
+  if(agent.paused) return { ok:false, error: agent.name + ' is paused', paused:true };
+
+  const defs = agentToolDefs();
+  const tools = (agent.tools || []).map(n => defs[n]).filter(Boolean);
+  const system = buildPersonaSystemPrompt(agent, registry.brand);
+  let messages = [{ role:'user', content: userText }];
+  const events = [];
+
+  for(let round = 0; round < AGENT_MAX_TOOL_ROUNDS_CLIENT; round++){
+    const body = { model:'claude', max_tokens: 1200, system: system, messages: messages };
+    if(tools.length) body.tools = tools;
+    let res;
+    try{
+      res = await fetch(backendUrl + '/', {
+        method:'POST', headers: Object.assign(jarvisHeaders(), { 'Content-Type':'application/json' }),
+        body: JSON.stringify(body)
+      });
+    }catch(err){ return { ok:false, agentId, error: 'could not reach the worker: ' + String((err && err.message) || err), events }; }
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) return { ok:false, agentId, error: data.error || ('the worker answered ' + res.status), events };
+
+    const textBlocks = (data.content || []).filter(b => b.type === 'text').map(b => b.text);
+    const text = textBlocks.join('\n');
+    if(data.stop_reason !== 'tool_use') return { ok:true, agentId, text, rounds: round + 1, events };
+
+    const toolUse = (data.content || []).filter(b => b.type === 'tool_use');
+    messages = messages.concat([{ role:'assistant', content: data.content }]);
+    const results = [];
+    for(const tu of toolUse){
+      const payload = await dispatchAgentTool(agent, tu.name, tu.input);
+      events.push({ tool: tu.name, input: tu.input, payload });
+      results.push({ type:'tool_result', tool_use_id: tu.id, content: JSON.stringify(payload) });
+    }
+    messages = messages.concat([{ role:'user', content: results }]);
+  }
+  return { ok:true, agentId, text:'', rounds: AGENT_MAX_TOOL_ROUNDS_CLIENT, truncated:true, events };
+}
+
+/* THE SUPERVISOR PROPER — several independent agents, run concurrently,
+   then folded into one answer. This is the brief's own example almost
+   word for word: "analyze whether I should launch this product" fans out
+   to research/competitor/product/finance and comes back as one synthesis,
+   not four separate replies. Genuine concurrency, not a queue: each
+   persona is its own fetch, and Promise.all runs them at once. */
+async function runSupervisor(agentIds, userText){
+  const unique = [...new Set(agentIds)];
+  const results = await Promise.all(unique.map(id => runAgentPersona(id, userText)));
+  return unique.map((id, i) => Object.assign({ agentId: id }, results[i]));
+}
+
+/* A small, explicit map from the kind of request to the agents worth
+   consulting — not a model call to decide it, because deciding "which
+   specialists apply" from a fixed list of nineteen is exactly the kind of
+   thing a lookup does more reliably and for free. Multiple phrasings map
+   to the same set on purpose. JARVIS's own multi_agent_analysis tool
+   below is the one thing that actually reaches this. */
+const SUPERVISOR_PRESETS = {
+  launch_decision: ['research', 'competitor', 'product', 'finance'],
+  business_review: ['analytics', 'inventory', 'finance', 'competitor'],
+  marketing_push: ['marketing', 'creative', 'copywriter', 'social'],
+  site_health: ['qa', 'system', 'security']
+};
+
+const MULTI_AGENT_TOOL = {
+  name: 'multi_agent_analysis',
+  description: "Run several specialist agents IN PARALLEL on the same question and combine what they find. Use this for a genuinely cross-cutting request — \"should I launch this product\", \"how is the business doing\", \"plan a push for the new collection\", \"is the site healthy\" — rather than calling one narrow tool yourself and guessing at the rest. preset picks a sensible bundle of agents; agents lets you name them directly instead.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      question: { type:'string', description:'The question or task to hand to every agent, verbatim.' },
+      preset: { type:'string', enum: Object.keys(SUPERVISOR_PRESETS) },
+      agents: { type:'array', items:{ type:'string' }, description:'Agent ids to run instead of a preset, e.g. ["research","finance"].' }
+    },
+    required: ['question']
+  }
+};
+
+async function callMultiAgentTool(input){
+  const question = String((input && input.question) || '').trim();
+  if(!question) return { error: 'a question is required' };
+  const ids = (input && Array.isArray(input.agents) && input.agents.length) ? input.agents
+            : SUPERVISOR_PRESETS[(input && input.preset) || ''] || SUPERVISOR_PRESETS.launch_decision;
+  const registry = await loadAgentRegistry();
+  const known = ids.filter(id => findAgent(registry, id));
+  if(!known.length) return { error: 'none of the requested agents exist: ' + ids.join(', ') };
+  const runs = await runSupervisor(known, question);
+  return {
+    ok: true,
+    ran: known,
+    findings: runs.map(r => ({
+      agent: r.agentId,
+      ok: !!r.ok,
+      answer: r.ok ? r.text : null,
+      error: r.ok ? null : r.error,
+      pending_approvals: (r.events || []).filter(e => e.payload && e.payload.pending_approval).length
+    })),
+    note: 'Each finding came from its own specialist, independently — read them for agreement and disagreement rather than treating one as the whole answer, and say so if two disagree.'
+  };
+}
+
+/* ---------------------------------------------------------------------
+   APPROVALS UI — a small badge, shown only when something is actually
+   waiting; the panel behind it lists each one with what it is and who
+   asked, and Approve performs the queued action right then, using the
+   payload the approval itself carried.
+--------------------------------------------------------------------- */
+let pendingApprovals = [];
+let approvalsPollTimer = null;
+let approvalsRefreshQueued = false;
+
+function paintApprovalsBadge(){
+  const badge = document.getElementById('approvalsBadge');
+  if(!badge) return;
+  const n = pendingApprovals.length;
+  badge.classList.toggle('show', n > 0);
+  badge.textContent = n > 9 ? '9+' : String(n || '');
+}
+
+function renderApprovalsPanel(){
+  const panel = document.getElementById('approvalsPanel');
+  if(!panel) return;
+  if(!pendingApprovals.length){
+    panel.innerHTML = '<div class="apEmpty">Nothing waiting on you.</div>';
+    return;
+  }
+  panel.innerHTML = '';
+  for(const a of pendingApprovals){
+    const row = document.createElement('div');
+    row.className = 'apRow';
+    const agentLine = document.createElement('div');
+    agentLine.className = 'apAgent';
+    agentLine.textContent = a.agent_id + ' · ' + a.capability;
+    const actionLine = document.createElement('div');
+    actionLine.className = 'apAction';
+    actionLine.textContent = a.action;
+    const btns = document.createElement('div');
+    btns.className = 'apBtns';
+    const approveBtn = document.createElement('button');
+    approveBtn.className = 'approve'; approveBtn.textContent = 'Approve';
+    approveBtn.addEventListener('click', () => decideApproval(a, true));
+    const rejectBtn = document.createElement('button');
+    rejectBtn.className = 'reject'; rejectBtn.textContent = 'Reject';
+    rejectBtn.addEventListener('click', () => decideApproval(a, false));
+    btns.appendChild(approveBtn); btns.appendChild(rejectBtn);
+    row.appendChild(agentLine); row.appendChild(actionLine); row.appendChild(btns);
+    panel.appendChild(row);
+  }
+}
+
+async function refreshApprovals(){
+  if(!backendUrl) return;
+  try{
+    const res = await fetch(backendUrl + '/approvals/pending', { headers: jarvisHeaders() });
+    if(!res.ok) return;
+    const data = await res.json();
+    pendingApprovals = Array.isArray(data.approvals) ? data.approvals : [];
+  }catch(err){ /* a failed poll leaves the last known list showing, rather than blanking it */ }
+  paintApprovalsBadge();
+  renderApprovalsPanel();
+}
+/* Debounced: several tool calls in one turn can each queue an approval in
+   quick succession, and there is no reason to poll the worker once per
+   call when one refresh a moment later shows all of them. */
+function refreshApprovalsSoon(){
+  if(approvalsRefreshQueued) return;
+  approvalsRefreshQueued = true;
+  setTimeout(() => { approvalsRefreshQueued = false; refreshApprovals(); }, 400);
+}
+
+/* Approve performs the actual action — the model that proposed it may be
+   long finished by the time a human gets to this button, so execution
+   cannot wait on that turn; it happens here, now, using the payload the
+   approval record carried since the moment it was queued. */
+async function decideApproval(approval, approve){
+  try{
+    const res = await fetch(backendUrl + '/approvals/decide', {
+      method:'POST', headers: Object.assign(jarvisHeaders(), { 'Content-Type':'application/json' }),
+      body: JSON.stringify({ id: approval.id, approve: !!approve })
+    });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok){ addMessage('system', 'Could not record that decision: ' + (data.error || res.status)); return; }
+  }catch(err){ addMessage('system', 'Could not reach the worker: ' + String((err && err.message) || err)); return; }
+
+  if(!approve){
+    addMessage('system', 'Rejected: ' + approval.action);
+    await refreshApprovals();
+    return;
+  }
+
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  const logEntry = logActionStart(approval.action.split('(')[0] || 'approved_action', approval.payload, 'agent:' + approval.agent_id + ' (approved)');
+  let result;
+  try{
+    if(!invoke) result = { error: 'the desktop app is needed to actually perform this' };
+    else if(approval.capability === 'filesystem.write'){
+      result = { ok:true, detail: await invoke('workspace_write_file', {
+        path: (approval.payload && approval.payload.path) || '', content: (approval.payload && approval.payload.content) || '' }) };
+    } else if(approval.capability === 'git.write'){
+      result = { ok:true, detail: await invoke('workspace_git', {
+        action: (approval.payload && approval.payload.action) || 'status', args: (approval.payload && approval.payload.args) || [] }) };
+    } else {
+      result = { error: 'no executor for capability ' + approval.capability };
+    }
+  }catch(err){ result = { error: String((err && err.message) || err) }; }
+  logActionEnd(logEntry, result);
+  addMessage('system', (result.ok ? 'Approved and done — ' : 'Approved, but it failed — ') + approval.action + (result.error ? ': ' + result.error : ''));
+  await refreshApprovals();
+}
+
+(function wireApprovalsUi(){
+  const badge = document.getElementById('approvalsBadge');
+  const panel = document.getElementById('approvalsPanel');
+  if(!badge || !panel) return;
+  badge.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+    if(panel.classList.contains('open')) renderApprovalsPanel();
+  });
+  document.addEventListener('click', (e) => {
+    if(panel.classList.contains('open') && !panel.contains(e.target) && e.target !== badge) panel.classList.remove('open');
+  });
+  approvalsPollTimer = setInterval(refreshApprovals, 30000);
+  setTimeout(refreshApprovals, 4000);
+})();
+
+/* A single named hook, same convention as window.__orbWake and the rest:
+   everything in this file lives inside one closing IIFE with nothing on
+   window by default, so a test driving the real page has no other way to
+   reach runAgentPersona/dispatchAgentTool/the approvals flow than through
+   the UI surfaces that call them. Exposing one object here, rather than
+   scattering several new window.__ names, keeps that "a handful of hooks"
+   promise honest while still making the new code reachable from outside
+   its own closure. */
+window.__agentsTest = {
+  loadAgentRegistry, runAgentPersona, runSupervisor, callMultiAgentTool,
+  dispatchAgentTool, findAgent,
+  refreshApprovals, decideApproval,
+  getPendingApprovals: () => pendingApprovals.slice()
+};
+
 const CAMERA_TOOL = {
   name: 'open_camera',
   description: "Turn on the webcam. A small panel opens on his screen showing the live feed — he sees himself, and from that moment you are watching continuously: a fresh frame reaches YOU with every message he sends, AND when something new comes into view you are asked about it unprompted, so you can react to whatever he holds up without him having to ask. It is a live view, not a single photo.\n\nUse it for any phrasing in either language: \"open my camera\", \"turn on the camera\", \"can you see me\", \"look at this\", \"watch this\", \"תפתח את המצלמה\", \"תדליק מצלמה\", \"אתה רואה אותי\", \"תסתכל על זה\", \"תראה מה יש לי\". Do not ask permission — he asked.\n\nOnce it is on, do NOT call this again to look again: you already receive every frame. Just answer. Call it with close:true when he asks to turn the camera off.\n\nDescribe what is actually in the picture. If the frame is dark or empty, say so rather than inventing something."
@@ -12444,6 +12967,12 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     if(caps.whatsapp) everydayTools.push(WHATSAPP_TOOL);
     if(caps.call) everydayTools.push(CALL_TOOL);
     if(caps.whatsapp_later && (caps.whatsapp || caps.call)) everydayTools.push(SCHEDULE_MANAGE_TOOL);
+    /* The supervisor tool, offered once the registry has actually been
+       fetched (see runBackendProbe) rather than gambled on — a tool that
+       can only answer "no such agent" the first time it is tried is exactly
+       the invitation-to-fail pattern every other conditional tool here
+       already avoids. */
+    if(agentRegistryCache) everydayTools.push(MULTI_AGENT_TOOL);
     const advancedTools = [BUILD3D_TOOL, MODEL3D_TOOL, PHOTO3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
     if(IS_DESKTOP) advancedTools.push(MODEL_WINDOW_TOOL);
     requestBody.tools = fullCapability()
@@ -12891,6 +13420,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callOpenUrlTool(tu.input);
           } else if(tu.name === 'make_zip'){
             payload = await callMakeZipTool(tu.input);
+          } else if(tu.name === 'multi_agent_analysis'){
+            payload = await callMultiAgentTool(tu.input);
           } else {
             payload = { error: 'Unknown tool: ' + tu.name };
           }

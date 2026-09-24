@@ -713,6 +713,210 @@ fn push_to_talk_key() -> Option<String> {
     }
 }
 
+
+/* =====================================================================
+   THE CODING AGENT'S WORKSPACE
+
+   One folder, chosen once, at the OS's own per-user data location — never
+   anywhere the model names. read_file, write_file, list_dir and a handful
+   of git subcommands are the WHOLE of what this agent can do to a
+   filesystem. There is no shell here and there is meant never to be one:
+   the brief asks for "read code, write code, work with git", and all
+   three are covered without opening a way to run an arbitrary command.
+   The permission and approval decisions (filesystem.write, git.write,
+   both approval-gated) are made in the worker's registry, in
+   jarvis-worker.js — these commands trust that a call reaching them has
+   already passed that gate, the same way close_camera_window trusts the
+   page already decided the camera should close.
+   ===================================================================== */
+fn workspace_root() -> Result<std::path::PathBuf, String> {
+    let base = dirs_next::data_dir().ok_or("could not find a per-user data directory")?;
+    let root = base.join("jarvis-workspace");
+    std::fs::create_dir_all(&root).map_err(|e| format!("could not create the workspace folder: {e}"))?;
+    root.canonicalize().map_err(|e| format!("could not resolve the workspace folder: {e}"))
+}
+
+/* Every workspace path goes through this. A path arrives from a model's
+   tool call, which makes it adversarial input: a leading slash, a `..`, or
+   a symlink planted by an earlier write could otherwise walk it outside
+   the one folder this feature exists to confine it to. Joining onto the
+   root and then canonicalising is what actually catches a symlink escape
+   — a plain string check on the unresolved path cannot, because the
+   escape only happens once the filesystem follows the link.
+
+   A path that does not exist yet (the common case for a write) cannot be
+   canonicalised at all, so the check walks up to the nearest existing
+   ancestor and confirms THAT stayed inside the root. Anything appended
+   below an ancestor already inside the root cannot itself have escaped,
+   since nothing further down a path that does not exist yet can be a
+   symlink pointing elsewhere. */
+fn resolve_in_workspace(root: &std::path::Path, rel: &str) -> Result<std::path::PathBuf, String> {
+    if rel.trim().is_empty() {
+        return Err("no path given".into());
+    }
+    let candidate = root.join(rel.trim_start_matches(['/', '\\']));
+    let mut check = candidate.clone();
+    while !check.exists() {
+        match check.parent() {
+            Some(p) if p != check => check = p.to_path_buf(),
+            _ => break,
+        }
+    }
+    let resolved = check
+        .canonicalize()
+        .map_err(|e| format!("could not resolve \"{rel}\": {e}"))?;
+    if !resolved.starts_with(root) {
+        return Err(format!("\"{rel}\" is outside the workspace folder — refused"));
+    }
+    Ok(candidate)
+}
+
+#[tauri::command]
+fn workspace_read_file(path: String) -> Result<String, String> {
+    let root = workspace_root()?;
+    let full = resolve_in_workspace(&root, &path)?;
+    std::fs::read_to_string(&full).map_err(|e| format!("could not read \"{path}\": {e}"))
+}
+
+#[tauri::command]
+fn workspace_write_file(path: String, content: String) -> Result<String, String> {
+    let root = workspace_root()?;
+    let full = resolve_in_workspace(&root, &path)?;
+    if let Some(parent) = full.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("could not create the folder for \"{path}\": {e}"))?;
+    }
+    std::fs::write(&full, content.as_bytes()).map_err(|e| format!("could not write \"{path}\": {e}"))?;
+    Ok(format!("wrote {} bytes to {}", content.len(), path))
+}
+
+#[tauri::command]
+fn workspace_list_dir(path: Option<String>) -> Result<String, String> {
+    let root = workspace_root()?;
+    let rel = path.clone().unwrap_or_default();
+    let full = if rel.is_empty() { root.clone() } else { resolve_in_workspace(&root, &rel)? };
+    let mut entries = Vec::new();
+    for entry in std::fs::read_dir(&full).map_err(|e| format!("could not list \"{rel}\": {e}"))? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        entries.push(serde_json::json!({ "name": name, "dir": is_dir }));
+    }
+    Ok(serde_json::json!({ "path": rel, "entries": entries }).to_string())
+}
+
+/* git, and only these actions — status/diff/log read, add/commit/init
+   write. No shell: every argument becomes its own argv entry passed
+   straight to Command, never assembled into a string a shell would
+   reinterpret, so nothing in a commit message can inject a second
+   command. `init` is allowed so the folder can become a repo the first
+   time it is used; run again on a folder git already knows about, it is
+   a harmless no-op. */
+#[tauri::command]
+fn workspace_git(action: String, args: Vec<String>) -> Result<String, String> {
+    let root = workspace_root()?;
+    const ALLOWED: [&str; 6] = ["status", "diff", "log", "add", "commit", "init"];
+    if !ALLOWED.contains(&action.as_str()) {
+        return Err(format!(
+            "git action \"{action}\" is not permitted here — only {}",
+            ALLOWED.join(", ")
+        ));
+    }
+    let mut cmd = std::process::Command::new("git");
+    cmd.current_dir(&root).arg(&action);
+    for a in &args {
+        cmd.arg(a);
+    }
+    let output = cmd
+        .output()
+        .map_err(|e| format!("could not run git: {e} — is it installed and on PATH?"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    if !output.status.success() {
+        let detail = if stderr.trim().is_empty() { stdout.trim() } else { stderr.trim() };
+        return Err(format!("git {action} failed: {detail}"));
+    }
+    Ok(stdout)
+}
+
+/* =====================================================================
+   SYSTEM MONITOR / SECURITY — read-only, and there is no path from either
+   agent's permissions to anything else. sysinfo only ever reads counters
+   the OS already tracks; nothing here can end a process, change a
+   setting, or see network traffic.
+   ===================================================================== */
+#[tauri::command]
+fn system_metrics() -> Result<String, String> {
+    use sysinfo::{Disks, System};
+    let mut sys = System::new_all();
+    /* A single sample reads 0% on every platform sysinfo supports — CPU
+       usage is defined between two points in time, not at one instant.
+       The short sleep is the whole cost of a real number instead of a
+       constant zero. */
+    sys.refresh_cpu_usage();
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    sys.refresh_cpu_usage();
+    sys.refresh_memory();
+    let cpu = sys.global_cpu_usage();
+    let mem_used = sys.used_memory();
+    let mem_total = sys.total_memory();
+    let disks = Disks::new_with_refreshed_list();
+    let disk_json: Vec<_> = disks
+        .list()
+        .iter()
+        .map(|d| {
+            serde_json::json!({
+                "mount": d.mount_point().to_string_lossy(),
+                "total_bytes": d.total_space(),
+                "available_bytes": d.available_space()
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "cpu_percent": (cpu * 10.0).round() / 10.0,
+        "memory_used_bytes": mem_used,
+        "memory_total_bytes": mem_total,
+        "memory_percent": if mem_total > 0 {
+            ((mem_used as f64 / mem_total as f64) * 1000.0).round() / 10.0
+        } else { 0.0 },
+        "disks": disk_json
+    })
+    .to_string())
+}
+
+#[tauri::command]
+fn list_processes(limit: Option<u32>) -> Result<String, String> {
+    use sysinfo::{ProcessesToUpdate, System};
+    let mut sys = System::new_all();
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+    let mut procs: Vec<_> = sys
+        .processes()
+        .values()
+        .map(|p| {
+            (
+                p.name().to_string_lossy().into_owned(),
+                p.pid().as_u32(),
+                p.cpu_usage(),
+                p.memory(),
+            )
+        })
+        .collect();
+    procs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+    let n = (limit.unwrap_or(25).min(200)) as usize;
+    let list: Vec<_> = procs
+        .into_iter()
+        .take(n)
+        .map(|(name, pid, cpu, mem)| {
+            serde_json::json!({
+                "name": name, "pid": pid,
+                "cpu_percent": (cpu * 10.0).round() / 10.0,
+                "memory_bytes": mem
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({ "processes": list }).to_string())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -729,7 +933,13 @@ fn main() {
             open_camera_window,
             close_camera_window,
             camera_window_open,
-            push_to_talk_key
+            push_to_talk_key,
+            workspace_read_file,
+            workspace_write_file,
+            workspace_list_dir,
+            workspace_git,
+            system_metrics,
+            list_processes
         ])
         .setup(|app| {
             let window = app

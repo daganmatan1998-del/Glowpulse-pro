@@ -518,3 +518,39 @@ into a write path by a prompt that talked its way into the query field. What
 replaces the gate is the record — and for a write, the previous state is read
 first, while it is still the previous state, so the log says what a price WAS.
 That is the difference between "undo this" and "work out what it used to be".
+
+## JARVIS as supervisor, not sole worker
+
+He does not have to do everything himself any more. Nineteen narrower
+personas — Research, Competitor Intelligence, Product Development, Creative
+Director, Copywriter, Store Manager, Inventory, Analytics, Marketing, Social
+Media, Finance, Customer Support, Coding, System Monitor, Security, QA/Website
+Testing, Personal Assistant, News/Intelligence, Memory — sit on top of the
+same backend, each with its own system prompt and its own permitted slice of
+the tools that already existed. Nothing about plain JARVIS changed: he is
+still the whole assistant with his whole toolbelt by default, and a persona
+never gains a tool JARVIS does not already have a precedent for.
+
+**The registry has one home.** `AGENT_REGISTRY` lives in `jarvis-worker.js`
+and nowhere else — `GET /agents` is how the page finds out who exists, what
+each one may touch, and what risk band it sits in. Ask "how is the business
+doing" and JARVIS can fan the question out to several of these at once — real
+concurrency, not a queue — and fold their independent findings into one
+answer that says where they agreed and where they didn't, rather than
+pretending one specialist's view was the whole picture.
+
+**Permission is default-deny**, and three capabilities — running an arbitrary
+shell command, touching a payment, deploying to production — are granted to
+*nobody*, enforced in code rather than left as a rule to remember. The one
+genuinely new power here is the Coding Agent's: it can read and write files
+and use git, but only inside one folder set aside for it, and only a write
+needs his sign-off first. Everything he had already decided about Shopify and
+WhatsApp writes — no approval step, the action log is the record — stayed
+exactly as it was; this did not reopen that choice.
+
+**Two of the nineteen run with nobody watching.** Competitor Intelligence and
+News/Intelligence fire from the same Cron Trigger that already sends "at 4pm"
+messages with the computer off, read the public web, and write a note to
+memory rather than a stream of chat messages nobody is there to read. A daily
+summary — built from what actually happened, sent once, silent on a quiet day
+— goes out the same way, through the WhatsApp outbox already documented above.

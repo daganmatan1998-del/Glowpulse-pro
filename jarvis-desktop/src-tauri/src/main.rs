@@ -16,6 +16,8 @@ use tauri::{
    names it directly. */
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 /* The hotkey. A bare Ctrl cannot be registered on its own — every OS treats a
    lone modifier as part of another combination, never as a shortcut in itself,
    so nothing would ever fire. This is the nearest thing that actually works
@@ -38,6 +40,26 @@ const HOTKEY_LABEL: &str = "Ctrl+Shift+Space";
 const HUSH_MODS: Modifiers = Modifiers::CONTROL.union(Modifiers::SHIFT);
 const HUSH_CODE: Code = Code::KeyX;
 const HUSH_LABEL: &str = "Ctrl+Shift+X";
+
+/* PUSH TO TALK: hold the key and he listens, let go and he is deaf.
+
+   Fn was the key asked for, and it cannot be done: on nearly every laptop Fn
+   is handled inside the keyboard itself and never reaches Windows at all —
+   there is no key code for it to register. Caps Lock is the nearest key that
+   Windows does see: one key, no combination, easy to find without looking.
+
+   Both edges are needed, which is why this cannot be a key listener in the
+   page: the page only hears keys while it has focus, and the point is to
+   talk to him from whatever you are working in. The plugin reports the
+   release as well as the press, and registers with MOD_NOREPEAT, so holding
+   the key sends one press and one release rather than a stream of repeats.
+   Change the key here if you would rather hold something else. */
+const PTT_CODE: Code = Code::CapsLock;
+const PTT_LABEL: &str = "Caps Lock";
+/* Whether the key was actually won. Another program can already own it, and
+   the page must not switch to push-to-talk on a key that will never arrive —
+   that would be a JARVIS who cannot hear anything and no way to find out. */
+static PTT_REGISTERED: AtomicBool = AtomicBool::new(false);
 
 /* Park the panel against the right-hand edge, vertically centred — the corner
    of the screen you are least likely to be working in. Done in code rather
@@ -678,6 +700,19 @@ fn camera_window_open(app: tauri::AppHandle) -> bool {
     app.get_webview_window("camera").is_some()
 }
 
+/* The push-to-talk key's name, or nothing if it could not be registered.
+   The page asks at start-up; an older build without this command fails the
+   call, and the page treats that the same as no key: it keeps listening
+   hands-free rather than waiting on a key that does not exist. */
+#[tauri::command]
+fn push_to_talk_key() -> Option<String> {
+    if PTT_REGISTERED.load(Ordering::SeqCst) {
+        Some(PTT_LABEL.to_string())
+    } else {
+        None
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -693,7 +728,8 @@ fn main() {
             close_workspace,
             open_camera_window,
             close_camera_window,
-            camera_window_open
+            camera_window_open,
+            push_to_talk_key
         ])
         .setup(|app| {
             let window = app
@@ -710,10 +746,20 @@ fn main() {
                to summon it from whatever you were doing instead. */
             let shortcut = Shortcut::new(Some(HOTKEY_MODS), HOTKEY_CODE);
             let hush = Shortcut::new(Some(HUSH_MODS), HUSH_CODE);
+            let ptt = Shortcut::new(None, PTT_CODE);
             let hotkey_window = window.clone();
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(move |_app, fired, event| {
+                        /* Push to talk takes both edges, so it is handled
+                           before the press-only filter below: true while the
+                           key is down, false the moment it comes up. Like
+                           the stop key, it never shows or focuses the window. */
+                        if fired.matches(Modifiers::empty(), PTT_CODE) {
+                            let held = event.state() == ShortcutState::Pressed;
+                            let _ = hotkey_window.emit("jarvis://ptt", held);
+                            return;
+                        }
                         // Pressed only: without this it toggles twice per press.
                         if event.state() != ShortcutState::Pressed {
                             return;
@@ -744,6 +790,13 @@ fn main() {
                     HUSH_LABEL, err
                 );
             }
+            match app.global_shortcut().register(ptt) {
+                Ok(()) => PTT_REGISTERED.store(true, Ordering::SeqCst),
+                Err(err) => eprintln!(
+                    "JARVIS: could not register {} for push-to-talk — another app may already use it ({})",
+                    PTT_LABEL, err
+                ),
+            }
 
             /* A tray icon, because the window has no title bar and is hidden
                half the time: without it there is no way to get the app back if
@@ -758,8 +811,8 @@ fn main() {
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip(&format!(
-                    "JARVIS — {} to summon, {} to stop talking",
-                    HOTKEY_LABEL, HUSH_LABEL
+                    "JARVIS — hold {} to talk, {} to summon, {} to stop talking",
+                    PTT_LABEL, HOTKEY_LABEL, HUSH_LABEL
                 ))
                 .menu(&menu)
                 .show_menu_on_left_click(false)

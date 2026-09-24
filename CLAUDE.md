@@ -44,6 +44,14 @@ single file `dist/index.html`.
 - **Check the page against the worker.** Every endpoint the page fetches must
   exist in `jarvis-worker.js`, and every `invoke()` name must match
   `generate_handler!` in `src-tauri/src/main.rs`.
+- **Push-to-talk (Caps Lock, 2.7.0) gates `startListening()`.** While
+  `pttMode` is on, nothing opens the microphone unless `pttHeld` — every
+  automatic restart ends there. Whether a recording is a key recording is fixed
+  when it starts (`myPtt`); endpointing, speculation and the echo guard are
+  skipped for it. A build whose Rust lacks `push_to_talk_key` stays hands-free.
+- **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
+  live signal, however faint, reads one step of the scale; "room 0.0056" in
+  mic-test is that floor, not the room.
 - **`mic-test.html` deliberately duplicates the detector's maths.** If the VAD
   constants or the RMS calculation change in `dist/index.html`, change them
   there too or the tool starts lying.
@@ -52,7 +60,15 @@ single file `dist/index.html`.
 
 Rust: `rustfmt --edition 2021 --check src-tauri/src/main.rs` (exit 0 or 1 means
 it parses; 101 is a real syntax error). The full Tauri build needs Windows or
-macOS and is not runnable here.
+macOS and is not runnable here — but main.rs CAN be really type-checked for
+Windows: `rustup target add x86_64-pc-windows-msvc`, copy `src-tauri/` and
+`dist/` into the scratchpad, and run `cargo check --target
+x86_64-pc-windows-msvc` there with `CARGO_TARGET_DIR` in the scratchpad too
+(about 2 minutes cold, seconds warm). It resolves the real Tauri, plugin and
+windows-sys APIs, and a broken file fails it, so run it after every Rust
+change. It also puts the resolved crates' source under `~/.cargo/registry/src`
+to read — check that version, not a guessed one (global-hotkey 0.8 is not
+0.7).
 
 The worker runs under plain Node — import it as an ES module, stub
 `globalThis.fetch`, and drive it through `worker.fetch(new Request(...), env)`.

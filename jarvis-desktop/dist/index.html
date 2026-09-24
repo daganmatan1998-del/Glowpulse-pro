@@ -346,6 +346,10 @@
   html.tauri.orb-asleep #scene-canvas{ opacity:0.14; filter:saturate(0.12); }
   /* Dozing: still there, still listening for his name, visibly resting. */
   html.tauri.orb-dozing #scene-canvas{ opacity:0.55; filter:saturate(0.55); }
+  /* Push to talk, key up: resting, the microphone shut. Holding the key
+     lights him up — in the small orb that brightening is the only sign the
+     press arrived, since the dot is shown only when expanded. */
+  html.tauri.ptt-idle #scene-canvas{ opacity:0.55; filter:saturate(0.55); }
   html.tauri #scene-canvas{ transition:opacity .4s ease, filter .4s ease; }
 
   /* The dot lives in the expanded view only: at 180px it is visual noise on
@@ -555,6 +559,11 @@
     background:transparent; border-color:var(--cyan); box-shadow:none; animation:none;
   }
   html.tauri.orb-dozing #micLabel{ color:rgba(0,229,255,0.55); }
+  /* Push to talk, key up: hollow and still. */
+  html.tauri.ptt-idle #micDot{
+    background:transparent; border-color:var(--cyan); box-shadow:none; animation:none;
+  }
+  html.tauri.ptt-idle #micLabel{ color:rgba(0,229,255,0.55); }
   /* Hollow red: standby, or a capture that said it was starting and never did. */
   html.tauri.mic-stalled #micDot,
   html.tauri.orb-muted   #micDot{
@@ -1918,6 +1927,12 @@ const I18N = {
     orbBack: 'Back',
     orbListenOn: 'Resume listening',
     orbListenOff: 'Stop listening',
+    orbPushToTalk: 'Switch to push-to-talk ({key})',
+    orbHandsFree: 'Switch to hands-free',
+    pttOn: '\u25B8 push-to-talk: hold {key} and speak \u2014 let go and he answers. The microphone is off the rest of the time. Right-click the orb for hands-free.',
+    pttOff: '\u25B8 hands-free: he is listening all the time again.',
+    pttMuted: '\u25B8 standby \u2014 {key} does nothing until you right-click \u2192 Resume listening.',
+    pttNearSilent: 'The microphone gave almost nothing while you held the key (peak {peak}). Windows may be recording from a different microphone: Settings \u2192 System \u2192 Sound \u2192 Input.',
     orbResetPlace: 'Reset position',
     orbHide: 'Hide',
     hushed: '\u25B8 stopped — Ctrl+Shift+X anytime',
@@ -2145,6 +2160,12 @@ const I18N = {
     orbBack: 'חזרה',
     orbListenOn: 'תחזור להקשיב',
     orbListenOff: 'תפסיק להקשיב',
+    orbPushToTalk: 'עבור ללחיצה לדיבור ({key})',
+    orbHandsFree: 'עבור להאזנה רציפה',
+    pttOn: '\u25B8 לחיצה לדיבור: תחזיק את {key} ותדבר \u2014 כשתשחרר הוא עונה. בשאר הזמן המיקרופון כבוי. קליק ימני על הכדור להאזנה רציפה.',
+    pttOff: '\u25B8 האזנה רציפה: הוא שוב מקשיב כל הזמן.',
+    pttMuted: '\u25B8 מצב המתנה \u2014 {key} לא עושה כלום עד שתעשה קליק ימני \u2190 תחזור להקשיב.',
+    pttNearSilent: 'המיקרופון כמעט לא קלט כלום בזמן שהחזקת את המקש (שיא {peak}). ייתכן שווינדוז מקליט ממיקרופון אחר: הגדרות \u2190 מערכת \u2190 קול \u2190 קלט.',
     orbResetPlace: 'אפס מיקום',
     orbHide: 'הסתר',
     hushed: '\u25B8 נעצר — Ctrl+Shift+X בכל רגע',
@@ -2318,7 +2339,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.7.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -4326,6 +4347,15 @@ function getSystemPrompt(calendarAvailable){
 let isThinking = false;
 let isSpeaking = false;
 let conversationMode = false;
+/* PUSH TO TALK (desktop). While it is on, the key is the only thing that
+   opens the microphone: held, he records; let go, what was said is sent and
+   answered; the rest of the time nothing is captured at all. No level meter
+   decides when a turn starts or ends, no wake word, no dozing. It exists
+   because hands-free hearing kept failing in ways that could not be seen
+   from here, and a held key cannot be misheard. */
+let pttMode = false;      // the key, not the room, decides when he listens
+let pttHeld = false;      // the key is down right now
+let pttKeyLabel = '';     // "Caps Lock"; empty when this build has no key
 let silentMode = false; // mic in, text-only replies, no TTS — for offices/nights/meetings
 let researchMode = false; // sub-question, cross-check, cite — instead of one quick search
 let currentAbortController = null; // in-flight Claude request, if any
@@ -5083,6 +5113,18 @@ let bargeActive = false;         // someone is talking over him; hurry the trans
    re-measure with mic-test.html, which works out this same middle. */
 const VAD_LEVEL        = 0.020;
 const VAD_METER_MS     = 50;     // how often the level is sampled
+/* A held key has no silence rule, so it needs its own ceiling: a key stuck
+   down (or a cat on the keyboard) must not record forever. Long enough for
+   any real request. */
+const PTT_MAX_MS       = 45000;
+/* Below this, the microphone delivered nothing while the key was held. Not
+   VAD_LEVEL/4 or any fraction of it: the meter reads 8-bit samples, and
+   the conversion truncates rather than rounds (measured: a signal at 0.0004
+   reads 0.0058), so ANY live signal, however faint, reads about 0.0055 —
+   one step of the 8-bit scale. (That is also
+   what his "room" of 0.0056 in mic-test is: the floor of the scale, not the
+   room.) 0.010 is "never rose above that floor"; his voice reads 0.07. */
+const PTT_NEAR_SILENT  = 0.010;
 
 let whisperStream = null, whisperRec = null, whisperCtx = null;
 let whisperActive = false;
@@ -5110,6 +5152,7 @@ let speculativePromise = null;   // ...or one still on its way
    forever. Half the guard had simply never run. */
 let lastSpokeEndedAt = 0;   // when he last stopped talking, for the echo window
 let whisperHeardNothing = false;   // the last recording never rose above the noise floor
+let whisperDiscardNext = false;    // the recording now stopping is thrown away, not transcribed
 
 function whisperAvailable(){
   return !!(backendUrl && backendCapabilities && backendCapabilities.stt &&
@@ -5121,6 +5164,16 @@ async function startWhisperCapture(){
   whisperActive = true;
   const myCaptureGen = ++whisperCaptureGen;
   captureStartedAt = Date.now();
+  /* Decided once, at the start: a recording opened by the key stays a
+     key recording until it stops, even through the short tail after the
+     key comes up. */
+  const myPtt = pttMode && pttHeld;
+  if(myPtt){
+    /* A guess left over from hands-free listening must never stand in for
+       what is about to be said. */
+    speculativePromise = null;
+    pendingSpeculative = null;
+  }
   /* Only suspect if he is ACTUALLY talking, or stopped a breath ago.
 
      This was 1500ms, and conversation mode reopens the microphone 400ms
@@ -5132,7 +5185,9 @@ async function startWhisperCapture(){
      the speaker and nothing more. enqueueSpeech sets this to true on its own
      if he starts talking while the capture is open, which is the case this
      flag is really for. */
-  captureSawSpeech = isSpeaking || (Date.now() - lastSpokeEndedAt < 250);
+  /* Held key: he was cut off by the press itself, so nothing in this
+     recording can be his own voice coming back. */
+  captureSawSpeech = !myPtt && (isSpeaking || (Date.now() - lastSpokeEndedAt < 250));
   micBtn.classList.add('listening');
   let chunks = [];
   try{
@@ -5190,6 +5245,21 @@ async function startWhisperCapture(){
     captureSawSpeech = false;
     const quiet = whisperHeardNothing;
     whisperHeardNothing = false;
+    /* Thrown away: a tap too short to be speech, or a hands-free recording
+       still open when push-to-talk was switched on. */
+    const discard = whisperDiscardNext || (pttMode && !myPtt);
+    whisperDiscardNext = false;
+    if(discard){
+      console.info('JARVIS: recording discarded' + (myPtt ? ' (a tap, not speech)' : ' (push-to-talk is on)'));
+      return;
+    }
+    /* What the microphone actually delivered while the key was held. If he
+       is still not hearing, this line says whether the sound ever arrived. */
+    if(myPtt){
+      console.info('JARVIS: push-to-talk, ' + Math.round(Date.now() - started) + 'ms, ' + blob.size +
+                   ' bytes, peak level ' + peakRms.toFixed(4));
+      if(peakRms < PTT_NEAR_SILENT) addMessage('system', t('pttNearSilent').replace('{peak}', peakRms.toFixed(3)));
+    }
 
     /* Nothing here is thrown away on the strength of my own level meter any
        more. It measures loudness with a crude RMS and cannot tell a quiet
@@ -5211,7 +5281,9 @@ async function startWhisperCapture(){
        trusted; VAD_LEVEL is measured from his own voice now, and by his own
        rule below it is silence. The website is left as it was: there you
        pressed a button, and a phone microphone is not the one measured. */
-    if(IS_DESKTOP && !everSpoke){
+    /* Not for a held key: you pressed it to be heard, so what was recorded
+       is sent whatever the meter made of it. */
+    if(IS_DESKTOP && !everSpoke && !myPtt){
       if(conversationMode && !isThinking) setTimeout(startListening, 150);
       return;
     }
@@ -5231,7 +5303,7 @@ async function startWhisperCapture(){
        the capital of France?". Opening the next recording before waiting on
        this one closes the gap; every later restart finds it already open. */
     if(IS_DESKTOP && conversationMode) startListening();
-    await transcribeAndSend(blob, sawSpeech, speechBeganAt);
+    await transcribeAndSend(blob, sawSpeech, myPtt ? started : speechBeganAt, myPtt);
   };
   /* Chunked, so the audio recorded so far can be read without stopping the
      recorder. That is what makes the speculative pass below possible. */
@@ -5248,6 +5320,7 @@ async function startWhisperCapture(){
   const buf = new Uint8Array(an.fftSize);
   const started = Date.now();
   let lastLoud = 0, everSpoke = false, loudSince = 0, bargeSince = 0, speechBeganAt = 0;
+  let peakRms = 0;
   let speculated = false, speculativeAt = 0;
   let hushProbeAt = 0, hushProbes = 0, hushProbeBusy = false;
 
@@ -5266,6 +5339,29 @@ async function startWhisperCapture(){
     for(let i = 0; i < buf.length; i++){ const v = (buf[i] - 128) / 128; sum += v * v; }
     const rms = Math.sqrt(sum / buf.length);
     const now = Date.now();
+    if(rms > peakRms) peakRms = rms;
+
+    /* Held key: the key ends the turn, not the level. None of what follows
+       applies — no early transcript, no barge-in probe, no one-second rule.
+       The recording runs until the key comes up, or the ceiling. */
+    if(myPtt){
+      if(rms > VAD_LEVEL){
+        lastLoud = now;
+        micVoiceAt = now;
+        if(!everSpoke){ everSpoke = true; speechBeganAt = now; }
+      }
+      if(now - started > PTT_MAX_MS){
+        clearInterval(meterTimer);
+        /* Held this long, the key is stuck rather than being spoken
+           through. What was recorded is sent, and the key counts as let
+           go: nothing reopens until it is released and pressed again, or a
+           stuck key would record the room, and spend the allowance, in
+           45-second pieces for as long as it stayed down. */
+        pttHeld = false;
+        try{ whisperRec.stop(); }catch(e){}
+      }
+      return;
+    }
 
     /* Noticing someone talking over him uses the same minimum. It only ever
        hurries the transcript so his name is seen sooner; it never stops him
@@ -5915,7 +6011,7 @@ async function transcribeOnly(blob){
   return heard;
 }
 
-async function transcribeAndSend(blob, sawSpeech, spokeAt){
+async function transcribeAndSend(blob, sawSpeech, spokeAt, ptt){
   /* If the speculative pass already came back, the whole round trip happened
      during the silence wait and there is nothing left to wait for. */
   /* If a speculative request is already in flight, WAIT for it. Starting a
@@ -5925,7 +6021,7 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt){
      instead of overlapping. That is where five seconds came from. The whole
      point is that the work is already happening; the only correct thing to
      do is let it finish. */
-  if(speculativePromise){
+  if(!ptt && speculativePromise){
     try{
       /* Raced against a timeout. Awaiting it bare meant a request that never
          came back froze the whole pipeline permanently — he stops answering
@@ -5943,7 +6039,7 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt){
       speculativePromise = null;   // it failed; fall through and try once
     }
   }
-  if(pendingSpeculative){
+  if(!ptt && pendingSpeculative){
     const text = pendingSpeculative;
     pendingSpeculative = null;
     return handleTranscript(text, sawSpeech, spokeAt);
@@ -5998,10 +6094,13 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt){
     if(data.dropped) console.info('JARVIS: worker dropped a hallucination —', data.dropped);
     if(sttIsNoise(heard, blob && blob.size ? blob.size : 0)){
       console.info('JARVIS: ignored Whisper noise —', heard);
+      /* You held the key and nothing usable came back: say so, rather than
+         leave you waiting for an answer. */
+      if(ptt) return handleTranscript('', sawSpeech, spokeAt, ptt);
       if(conversationMode && !isThinking) setTimeout(startListening, 250);
       return;
     }
-    return handleTranscript(heard, sawSpeech, spokeAt);
+    return handleTranscript(heard, sawSpeech, spokeAt, ptt);
   }catch(err){
     const why = (err && err.message) || String(err);
     addMessage('system', t('sttFailed').replace('{why}', why));
@@ -6015,7 +6114,7 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt){
    echo guard and the language commands are applied identically either way —
    which matters, because a shortcut that skips half the checks is how the
    fast path quietly becomes the buggy path. */
-async function handleTranscript(rawText, sawSpeech, spokeAt){
+async function handleTranscript(rawText, sawSpeech, spokeAt, ptt){
   try{
     let text = (rawText || '').trim();
 
@@ -6070,7 +6169,7 @@ async function handleTranscript(rawText, sawSpeech, spokeAt){
     const echoPossible = sawSpeech === true ||
                          (typeof isSpeaking !== 'undefined' && isSpeaking) ||
                          (Date.now() - lastSpokeEndedAt < 1500);
-    if(echoPossible && text && typeof looksLikeEcho === 'function' && looksLikeEcho(text)){
+    if(!ptt && echoPossible && text && typeof looksLikeEcho === 'function' && looksLikeEcho(text)){
       console.info('JARVIS: ignored own voice —', text.slice(0, 60));
       if(conversationMode && !isThinking) setTimeout(startListening, 250);
       return;
@@ -6080,7 +6179,16 @@ async function handleTranscript(rawText, sawSpeech, spokeAt){
        whatever he asked for in the same breath is then done, so "hey Jarvis,
        open the camera" does not have to be said twice. Anything else is
        discarded and nothing reaches the model. */
-    if(IS_DESKTOP && window.__orbAsleep && window.__orbAsleep()){
+    if(IS_DESKTOP && ptt){
+      /* Held key: it was for him, whatever was said and however long it has
+         been — the press is the address. His name alone, out of habit, is
+         answered the way an awake orb answers it. */
+      noteActivity();
+      if(text && addressedByName(text) === ''){
+        speak(langMode === 'en' ? 'Yes, sir?' : 'כן?');
+        return;
+      }
+    } else if(IS_DESKTOP && window.__orbAsleep && window.__orbAsleep()){
       const named = addressedByName(text);
       const wakePhrase = typeof isWakeUpCommand === 'function' && isWakeUpCommand(text);
       if(named === null && !wakePhrase){
@@ -6172,7 +6280,12 @@ function startListening(){
      something worth interrupting. Neither barge-in path could fire, because
      nothing was capturing: not the level meter, not his name in the
      transcript. From the outside, "he does not stop when I talk over him". */
-  if(isThinking && !isSpeaking) return;
+  /* Push to talk: only the key opens the microphone. Every automatic
+     restart in this file — after a reply, after an empty transcript, the
+     watchdog, waking, focus — lands here and stops here. */
+  if(pttMode && !pttHeld) return;
+  /* A held key has already stopped whatever he was doing. */
+  if(isThinking && !isSpeaking && !pttHeld) return;
   stopAmbient(); // nothing else may hold the microphone
   /* Prefer the worker's transcription when it is available; the browser's own
      recogniser stays as the fallback for an older worker or a missing AI
@@ -14486,6 +14599,11 @@ adjustLayout();
       : [
           { label: orbMuted ? t('orbListenOn') : t('orbListenOff'),
             run: ()=> setOrbMuted(!orbMuted) },
+          /* Only offered when this build actually has the key. */
+          ...(pttKeyLabel ? [{
+            label: pttMode ? t('orbHandsFree') : t('orbPushToTalk').replace('{key}', pttKeyLabel),
+            run: ()=> setPttMode(!pttMode)
+          }] : []),
           { label: t('orbLanguage') + ' \u203a', page:'lang' },
           { label: t('orbResetPlace'), run: resetOrbPlace },
           { label: t('orbHide'), run: hideOrb }
@@ -14539,17 +14657,27 @@ adjustLayout();
   const micDot = document.getElementById('micDot');
   let lastCaptureAt = Date.now();
   let dozeNoted = false;
+  let pttWasHeld = false;
   function paintMic(){
     const capturing = (typeof whisperActive !== 'undefined' && whisperActive) ||
                       (micBtn && micBtn.classList.contains('listening'));
     const busy = (typeof isThinking !== 'undefined' && isThinking) ||
                  (typeof isSpeaking !== 'undefined' && isSpeaking);
     if(capturing || busy) lastCaptureAt = Date.now();
+    /* The key has just gone down: the few seconds the microphone gets to
+       open start now, not at the last recording, which may be an hour ago.
+       Without this every press flashed "microphone not open" in red for the
+       moment it takes to open. */
+    if(pttHeld && !pttWasHeld) lastCaptureAt = Date.now();
+    pttWasHeld = pttHeld;
     /* Dozing is shown, not announced every time: the orb dims a little and
        the label says so, and the first time it happens the log says how to
        wake him. Without that, a dozing orb ignoring the room would look
        exactly like the deafness this replaced. */
-    const dozing = !orbMuted && !busy && !(window.__orbAsleep && window.__orbAsleep()) && !isAwake();
+    const asleepNow = !!(window.__orbAsleep && window.__orbAsleep());
+    /* Push to talk has no dozing: nothing is heard without the key anyway. */
+    const ptt = pttMode && !orbMuted;
+    const dozing = !ptt && !orbMuted && !busy && !asleepNow && !isAwake();
     root.classList.toggle('orb-dozing', dozing);
     if(dozing && !dozeNoted){ dozeNoted = true; addMessage('system', t('dozing')); }
     if(!dozing) dozeNoted = false;
@@ -14560,11 +14688,16 @@ adjustLayout();
          after a few seconds it is not starting, it has failed — and saying
          so is the entire reason this indicator exists. */
       const deaf = !orbMuted && !!sttBrokenWhy;
-      const stalled = deaf || (!capturing && !busy && !orbMuted &&
+      /* Key up, a shut microphone is the point, not a fault. Key down, it
+         must open within a few seconds like any other capture. */
+      const pttIdle = ptt && !pttHeld && !capturing && !busy && !deaf && !asleepNow;
+      root.classList.toggle('ptt-idle', pttIdle);
+      const stalled = deaf || (!capturing && !busy && !orbMuted && !pttIdle &&
                       (Date.now() - lastCaptureAt > 5000));
       micDot.title = orbMuted ? 'Standby — click to switch the microphone on'
                    : deaf      ? 'Cannot transcribe — ' + sttBrokenWhy
                    : busy      ? 'Working…'
+                   : pttIdle   ? 'Push-to-talk — hold ' + pttKeyLabel + ' and speak'
                    : dozing && capturing ? 'Dozing — say "hey Jarvis", or click, to wake him'
                    : capturing ? 'Listening — click to switch off'
                    : stalled   ? 'Microphone is NOT open — click to retry'
@@ -14575,6 +14708,7 @@ adjustLayout();
         label.textContent = orbMuted ? 'standby'
                           : deaf      ? 'not hearing'
                           : busy      ? 'working'
+                          : pttIdle   ? 'hold ' + pttKeyLabel
                           : dozing && capturing ? 'dozing'
                           : capturing ? 'listening'
                           : stalled   ? 'microphone not open'
@@ -14836,6 +14970,109 @@ adjustLayout();
       try{ if(typeof closeConversation === 'function') closeConversation(); }catch(err){}
       try{ addMessage('system', t('hushed')); }catch(err){}
     }).catch(()=>{});
+  })();
+
+  /* ------------------------------------------------------------------
+     PUSH TO TALK
+
+     The key arrives from Rust as jarvis://ptt — true when it goes down,
+     false when it comes up — whether or not this window has focus. Down:
+     whatever he is saying or thinking stops, and recording begins. Up:
+     recording carries on for a short tail, so the last syllable is not
+     clipped by a quick release, then stops and is transcribed and
+     answered. A tap too short to be speech is thrown away.
+
+     On by default whenever the build has the key; the orb's right-click
+     menu switches between this and hands-free, and the choice is kept. A
+     build without the key (an older one, or the key taken by another
+     program) stays hands-free, because push-to-talk on a key that never
+     arrives would be a JARVIS who hears nothing at all.
+  ------------------------------------------------------------------ */
+  const PTT_PREF_KEY = 'jarvis:ptt';
+  const PTT_TAIL_MS  = 300;   // recording kept open after the key comes up
+  const PTT_TAP_MS   = 250;   // held for less than this: a tap, not speech
+  let pttReleaseTimer = null;
+  let pttPressedAt = 0;
+
+  function endPttCapture(discard){
+    const recording = typeof whisperRec !== 'undefined' && whisperRec && whisperRec.state === 'recording';
+    if(recording && discard) whisperDiscardNext = true;
+    /* Stopping the recorder is what sends it: its stop handler transcribes.
+       Still opening (key released before the microphone was ready): this
+       cancels it instead. */
+    try{ stopWhisperCapture(); }catch(err){}
+  }
+
+  function setPttMode(on, quiet){
+    on = !!on && !!pttKeyLabel;
+    if(pttReleaseTimer){ clearTimeout(pttReleaseTimer); pttReleaseTimer = null; }
+    pttHeld = false;
+    pttMode = on;
+    Store.set(PTT_PREF_KEY, on ? '1' : '0').catch(()=>{});
+    if(on){
+      /* Whatever hands-free listening had open is closed now, and thrown
+         away rather than transcribed (the stop handler sees it was not a
+         key recording). */
+      try{ if(typeof whisperActive !== 'undefined' && whisperActive) stopWhisperCapture(); }catch(err){}
+      if(!quiet) addMessage('system', t('pttOn').replace('{key}', pttKeyLabel));
+    } else {
+      lastCaptureAt = Date.now();   // not "stalled" for the moment it takes to open
+      if(!quiet) addMessage('system', t('pttOff'));
+      beginListening();
+    }
+  }
+
+  function pttEdge(down){
+    if(!pttMode) return;
+    if(down){
+      if(pttReleaseTimer){
+        /* Down again inside the tail: the same sentence, carried on. */
+        clearTimeout(pttReleaseTimer);
+        pttReleaseTimer = null;
+        pttHeld = true;
+        return;
+      }
+      if(pttHeld) return;
+      if(orbMuted){ addMessage('system', t('pttMuted').replace('{key}', pttKeyLabel)); return; }
+      pttHeld = true;
+      pttPressedAt = Date.now();
+      /* The key means "my turn": he stops talking, and a reply still being
+         worked out is dropped. */
+      if((typeof isSpeaking !== 'undefined' && isSpeaking) ||
+         (typeof isThinking !== 'undefined' && isThinking)){
+        try{ stopJarvis(); }catch(err){}
+      }
+      noteActivity();
+      /* Asleep, the key wakes him and the window comes back; what you say
+         while holding it is the request, so no "Online." over it. */
+      if(window.__orbAsleep && window.__orbAsleep()) window.__orbWake(true);
+      beginListening();
+    } else {
+      if(!pttHeld) return;
+      pttHeld = false;
+      const tap = Date.now() - pttPressedAt < PTT_TAP_MS;
+      pttReleaseTimer = setTimeout(()=>{
+        pttReleaseTimer = null;
+        endPttCapture(tap);
+      }, tap ? 0 : PTT_TAIL_MS);
+    }
+  }
+
+  (async function wirePushToTalk(){
+    const ev = window.__TAURI__ && window.__TAURI__.event;
+    const core = window.__TAURI__ && window.__TAURI__.core;
+    let key = null;
+    try{ key = (core && core.invoke) ? await core.invoke('push_to_talk_key') : null; }catch(err){ key = null; }
+    if(!key || !ev || !ev.listen){
+      console.info('JARVIS: no push-to-talk key in this build — listening hands-free');
+      return;
+    }
+    try{ await ev.listen('jarvis://ptt', (e)=> pttEdge(!!(e && e.payload))); }
+    catch(err){ console.warn('JARVIS: push-to-talk key not wired', err); return; }
+    pttKeyLabel = String(key);
+    let pref = null;
+    try{ const r = await Store.get(PTT_PREF_KEY); pref = r && r.value; }catch(err){}
+    setPttMode(pref !== '0', pref === '0');
   })();
 
   window.__orbExpand = setExpanded;

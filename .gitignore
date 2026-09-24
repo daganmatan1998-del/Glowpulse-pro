@@ -1,0 +1,3 @@
+# The delivery zip, rebuilt from jarvis-desktop/ on every change and sent
+# to the user directly (see CLAUDE.md). Not source.
+/jarvis-desktop.zip

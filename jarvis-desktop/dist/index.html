@@ -2318,7 +2318,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.6.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -2430,8 +2430,17 @@ async function renewSession(){
 }
 
 // Called when the worker rejects our token (expired / secret rotated).
+/* In the orb the PIN screen appeared inside a 180-pixel window — there, and
+   unusable. So on the desktop it is opened full screen, and said. */
+function showPinOnDesktop(){
+  if(!IS_DESKTOP) return;
+  try{ if(window.__orbExpand) window.__orbExpand(true); }catch(e){}
+  sayWhyDeaf('session', 'the session expired — enter the PIN');
+}
+
 async function forceReauth(){
   sessionToken = '';
+  setTimeout(showPinOnDesktop, 0);
   pinForSession = '';                      // it did not work; stop reusing it
   try{ sessionStorage.removeItem(PIN_SESSION_KEY); }catch(err){}
   try{ await Store.delete(TOKEN_KEY); }catch(err){}
@@ -2531,6 +2540,7 @@ async function validateStoredSession(){
   authDecoy.style.display = 'none';
   authGate.style.display = 'flex';
   authStatus.textContent = 'Session no longer valid — enter your PIN.';
+  showPinOnDesktop();
 }
 
 /* ---------------------------------------------------------------------
@@ -5146,6 +5156,7 @@ async function startWhisperCapture(){
     captureStartedAt = 0;
     micBtn.classList.remove('listening');
     addMessage('system', t('micDenied'));
+    sayWhyDeaf('mic', 'microphone: ' + ((err && (err.name || err.message)) || err));
     /* Do not leave the loop dead on one refusal — the microphone may simply
        have been busy for a moment. */
     if(conversationMode && !isThinking) setTimeout(startListening, 2000);
@@ -5792,6 +5803,34 @@ const STT_SHORT_BYTES = 14000;
    voice falls back to the system's own if the speech service is failing
    too), and the orb's label shows it until a transcription succeeds. */
 let sttBrokenWhy = '';
+
+/* The other ways to be deaf, each said out loud once until it is fixed:
+   no answer from the worker, a worker without /stt, no microphone, and an
+   expired session. Every one of these used to leave a line in a log the
+   small orb does not show, and nothing else — "just sits there". */
+const deafSaid = {};
+function sayWhyDeaf(kind, detail){
+  sttBrokenWhy = detail || kind;
+  if(!IS_DESKTOP || deafSaid[kind]) return;
+  deafSaid[kind] = true;
+  const he = typeof langMode !== 'undefined' && langMode === 'he';
+  const lines = {
+    worker:  he ? '\u05d0\u05e0\u05d9 \u05dc\u05d0 \u05de\u05e6\u05dc\u05d9\u05d7 \u05dc\u05d4\u05d2\u05d9\u05e2 \u05dc\u05e9\u05e8\u05ea \u05e9\u05dc\u05d9, \u05d0\u05d6 \u05d0\u05e0\u05d9 \u05dc\u05d0 \u05e9\u05d5\u05de\u05e2 \u05d0\u05d5\u05ea\u05da. \u05d0\u05e0\u05d9 \u05de\u05de\u05e9\u05d9\u05da \u05dc\u05e0\u05e1\u05d5\u05ea.'
+                : 'I can\'t reach my server, so I can\'t hear you. I\'ll keep trying.',
+    nostt:   he ? '\u05d4\u05e9\u05e8\u05ea \u05e9\u05dc\u05d9 \u05dc\u05d0 \u05de\u05e6\u05d9\u05e2 \u05ea\u05de\u05dc\u05d5\u05dc, \u05d0\u05d6 \u05d0\u05e0\u05d9 \u05dc\u05d0 \u05e9\u05d5\u05de\u05e2 \u05d0\u05d5\u05ea\u05da.'
+                : 'My server has no speech recognition, so I can\'t hear you.',
+    mic:     he ? '\u05d0\u05d9\u05df \u05dc\u05d9 \u05d2\u05d9\u05e9\u05d4 \u05dc\u05de\u05d9\u05e7\u05e8\u05d5\u05e4\u05d5\u05df. \u05ea\u05d1\u05d3\u05d5\u05e7 \u05e9\u05d0\u05e3 \u05ea\u05d5\u05db\u05e0\u05d4 \u05d0\u05d7\u05e8\u05ea \u05dc\u05d0 \u05ea\u05d5\u05e4\u05e1\u05ea \u05d0\u05d5\u05ea\u05d5.'
+                : 'I can\'t get the microphone. Check that nothing else is holding it.',
+    session: he ? '\u05e4\u05d2 \u05ea\u05d5\u05e7\u05e3 \u05d4\u05d7\u05d9\u05d1\u05d5\u05e8 \u05e9\u05dc\u05d9 \u2014 \u05d0\u05e0\u05d9 \u05e6\u05e8\u05d9\u05da \u05d0\u05ea \u05d4\u05e7\u05d5\u05d3 \u05e9\u05dc\u05da.'
+                : 'My session has expired \u2014 I need your PIN.'
+  };
+  if(lines[kind]) speak(lines[kind]);
+}
+function hearingRecovered(){
+  sttBrokenWhy = '';
+  for(const k of Object.keys(deafSaid)) delete deafSaid[k];
+}
+
 function quotaResetsAt(){
   const d = new Date();
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1))
@@ -5865,7 +5904,7 @@ async function transcribeOnly(blob){
      Most of them arrive here, through the early pass, and the orb stayed
      marked "not hearing" after the quota had come back. */
   sttFailures = 0;
-  sttBrokenWhy = '';
+  hearingRecovered();
   const data = await res.json().catch(()=> ({}));
   const heard = (data.text || '').trim();
   if(data.dropped) console.info('JARVIS: worker dropped a hallucination —', data.dropped);
@@ -5944,7 +5983,7 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt){
       return;
     }
     sttFailures = 0;                       // a clean round clears the count
-    sttBrokenWhy = '';
+    hearingRecovered();
     /* The fix for the oldest bug in this project lives in the worker, and a
        worker has to be deployed. Every new response carries a `dropped` key,
        even when it is null; the old one has no such key. So this is a exact
@@ -6164,15 +6203,19 @@ function startListening(){
      Say it plainly, once, and name the actual fix: transcription has to come
      from the worker, which means deploying the version with /stt. */
   if(IS_DESKTOP){
+    const why = !backendUrl ? 'no backend address is set'
+              : !backendCapabilities ? 'the worker has not answered /health yet'
+              : !backendCapabilities.stt ? 'this worker has no /stt — deploy the updated jarvis-worker.js'
+              : !window.MediaRecorder ? 'this webview cannot record audio'
+              : 'the microphone is unavailable';
     if(!warnedNoVoice){
       warnedNoVoice = true;
-      const why = !backendUrl ? 'no backend address is set'
-                : !backendCapabilities ? 'the worker has not answered /health yet'
-                : !backendCapabilities.stt ? 'this worker has no /stt — deploy the updated jarvis-worker.js'
-                : !window.MediaRecorder ? 'this webview cannot record audio'
-                : 'the microphone is unavailable';
       addMessage('system', t('noVoiceDesktop').replace('{why}', why));
     }
+    /* Not answering /health yet is waited out — the retry is already
+       running and will start listening when it succeeds. The rest are said. */
+    if(backendCapabilities && !backendCapabilities.stt) sayWhyDeaf('nostt', why);
+    else if(backendCapabilities) sayWhyDeaf('mic', why);
     return;
   }
 
@@ -6494,10 +6537,21 @@ function probeBackend(){
   return backendProbe;
 }
 
+/* ONE /health AT STARTUP WAS THE ONLY CHANCE.
+
+   Voice needs backendCapabilities.stt, which only this sets. If the one
+   request made at launch failed — Windows still connecting to the network,
+   a slow first response — voice was off for the entire run: startListening
+   returned before opening anything, every time the watchdog asked, and the
+   only trace was a line in the log. Now a failed check is repeated, backing
+   off to half a minute, and the moment it answers he starts listening. */
+let probeRetryTimer = null;
+let probeFailures = 0;
 async function runBackendProbe(){
   backendSupportsStreaming = null;
   backendCapabilities = null;
   if(!backendUrl) return;
+  clearTimeout(probeRetryTimer);
   try{
     const res = await fetch(backendUrl + '/health');
     if(!res.ok) throw new Error('no /health');
@@ -6507,9 +6561,19 @@ async function runBackendProbe(){
     sendAuthHeader = versionAtLeast(data.version, '2.1.0');
     backendSupportsStreaming = true;
     workerVoiceAvailable = data.voice !== false;
+    if(probeFailures && IS_DESKTOP){
+      hearingRecovered();
+      if(conversationMode) setTimeout(startListening, 200);
+    }
+    probeFailures = 0;
   }catch(err){
     backendSupportsStreaming = false;
     workerVoiceAvailable = false;
+    probeFailures++;
+    if(IS_DESKTOP){
+      sayWhyDeaf('worker', 'the worker did not answer /health (' + ((err && err.message) || err) + ')');
+      probeRetryTimer = setTimeout(probeBackend, Math.min(3000 * probeFailures, 30000));
+    }
   }
   try{ cartesiaStatus.textContent = voiceStatusText(); }catch(e){}
   try{ showBuildStamp(); }catch(e){}
@@ -6626,6 +6690,13 @@ function showBuildStamp(){
   const worker = backendCapabilities && backendCapabilities.version;
   buildStamp.textContent = 'page ' + APP_VERSION + '  ·  worker ' +
     (worker || (backendUrl ? '—' : 'not used'));
+  /* On the first line of the log as well, where a photo of the full-screen
+     view shows it: the stamp above lives inside a settings panel nobody
+     opens, and "is the new version even running" was unanswerable. */
+  try{
+    const ready = document.getElementById('readyMsg');
+    if(ready) ready.textContent = t('readyMsg') + '  \u00b7  ' + APP_VERSION + '  \u00b7  worker ' + (worker || '\u2014');
+  }catch(e){}
 }
 showBuildStamp();
 

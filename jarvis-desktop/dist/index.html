@@ -2394,7 +2394,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.8.1';
+const APP_VERSION = '2.8.2';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -12924,6 +12924,11 @@ async function readMessageStream(response, onText){
         block.__partial += (d.partial_json || '');
       } else if(d.type === 'thinking_delta'){
         block.thinking = (block.thinking || '') + (d.thinking || '');
+      } else if(d.type === 'thought_signature_delta'){
+        /* Gemini's signature for a tool call, arriving after the call
+           itself. Kept on the block, which goes back verbatim next round;
+           the worker hands it back to Gemini and keeps it from Anthropic. */
+        block.thought_signature = d.thought_signature;
       }
       return;
     }
@@ -13496,7 +13501,11 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCloseNamedTool(tu.input);
           } else if(tu.name === 'close_this_window'){
             payload = await callCloseWindowTool();
-          } else if(tu.name === 'search_web'){
+          } else if(tu.name === 'search_web' || tu.name === 'web_search'){
+            /* web_search is Anthropic's own server-side search, which never
+               comes through here while Claude answers. When another engine
+               is answering it has no such tool, but it reads the name in the
+               prompt and calls it anyway — the same search, done here. */
             payload = await callSearchWebTool(tu.input);
           } else if(tu.name === 'read_page'){
             payload = await callReadPageTool(tu.input);

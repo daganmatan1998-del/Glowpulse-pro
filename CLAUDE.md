@@ -93,6 +93,16 @@ single file `dist/index.html`.
   unresolved path does not. There is deliberately no shell.execute tool at
   all — workspace_git only runs a fixed allowlist of git subcommands via
   Command::arg, never a shell string.
+- **Gemini 3 refuses a replayed tool call without its thought signature**
+  (worker 2.6.2). It arrives on `tool_calls[].extra_content.google.
+  thought_signature`; the worker puts it on the tool_use block as
+  `thought_signature` (streamed: in content_block_start, or a
+  `thought_signature_delta`), the page sends blocks back verbatim, and the
+  worker replays it to Google (placeholder `skip_thought_signature_validator`
+  when absent) and strips it before Anthropic. Its 400 says "model", so
+  without this every tool round on Gemini failed over — to a blind engine,
+  losing any picture. A picture reaching an engine that cannot see is now
+  described by Workers AI first (runEngineChain), never silently stripped.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.

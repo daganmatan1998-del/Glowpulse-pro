@@ -75,7 +75,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.6.1';
+const WORKER_VERSION = '2.6.2';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -366,6 +366,7 @@ async function handleMessages(request, env) {
   const hasImage = (body.messages || []).some(m =>
     Array.isArray(m.content) && m.content.some(b => b && b.type === 'image'));
   let describedBy = null;
+  let describeTried = false;
   if (hasImage) {
     const seeing = chain.filter(e => e.vendor === 'anthropic' || engineSeesImages(e, env));
     if (seeing.length) {
@@ -376,10 +377,11 @@ async function handleMessages(request, env) {
          hand that to the one that is answering. Done once, before any
          engine is tried, so a failover does not re-describe. */
       describedBy = await describeImagesInBody(body, env);
+      describeTried = true;
     }
   }
 
-  return runEngineChain(chain, body, env, request, describedBy);
+  return runEngineChain(chain, body, env, request, describedBy, describeTried);
 }
 
 /* THE ACTUAL CALL, DOWN THE CHAIN — pulled out of handleMessages so the
@@ -387,7 +389,7 @@ async function handleMessages(request, env) {
    exact same fallback machinery rather than reimplementing it. Nothing
    about handleMessages' behaviour changes: this is its own loop, moved
    here verbatim, with the two callers now sharing it. */
-async function runEngineChain(chain, body, env, request, describedBy) {
+async function runEngineChain(chain, body, env, request, describedBy, alreadyTriedDescribing) {
   const skipped = [];
   let lastError = null;
 
@@ -405,10 +407,27 @@ async function runEngineChain(chain, body, env, request, describedBy) {
   const resting = chain.filter(engine => cooling(engine));
   const awake = chain.filter(engine => !cooling(engine));
 
+  /* A picture, and the engines that can see it have all failed. The one
+     about to answer cannot, and would have had the picture stripped out
+     from under it. Described instead — once, on a copy, so an engine that
+     CAN see and comes later (pass 2) still gets the real thing. */
+  let described = null;
+  let describeTried = !!alreadyTriedDescribing;   // a describer that just failed is not asked twice
+
   for (const group of [awake, resting]) {
     for (let i = 0; i < group.length; i++) {
       const engine = group[i];
-      const attempt = await callEngine(engine, body, env, request, group !== awake || i > 0, describedBy);
+      let sendBody = body, sendDescribedBy = describedBy;
+      if (!describedBy && imageWillBeDropped(engine, body, env)) {
+        if (!describeTried) {
+          describeTried = true;
+          const copy = JSON.parse(JSON.stringify(body));
+          const by = await describeImagesInBody(copy, env);
+          if (by) described = { body: copy, by: by };
+        }
+        if (described) { sendBody = described.body; sendDescribedBy = described.by; }
+      }
+      const attempt = await callEngine(engine, sendBody, env, request, group !== awake || i > 0, sendDescribedBy);
       if (attempt.ok) { clearCooldown(engine); return attempt.response; }
 
       if (!attempt.retriable) return attempt.response;
@@ -477,6 +496,7 @@ async function callEngine(engine, body, env, request, announce, describedBy) {
   /* Workers AI is a binding, not an endpoint: no fetch, no key, no streaming
      to convert. Handled up front so the HTTP path below stays untouched. */
   if (engine.vendor === 'workers-ai') return await callWorkersAI(engine, body, env, request, announce, describedBy);
+  const anthropicBody = engine.vendor === 'anthropic' ? withoutThoughtSignatures(body) : body;
   let upstream;
   try {
     upstream = engine.vendor === 'anthropic'
@@ -488,7 +508,7 @@ async function callEngine(engine, body, env, request, announce, describedBy) {
             'anthropic-version': ANTHROPIC_VERSION,
             'anthropic-beta': 'mcp-client-2025-04-04'
           },
-          body: JSON.stringify(withCaching(body))
+          body: JSON.stringify(withCaching(anthropicBody))
         })
       : await fetch(engine.url, {
           method: 'POST',
@@ -507,7 +527,7 @@ async function callEngine(engine, body, env, request, announce, describedBy) {
      differently — the turn is retried once with the body exactly as the page
      sent it, and the only thing lost is the saving. */
   if (!upstream.ok && engine.vendor === 'anthropic' &&
-      looksLikeCacheComplaint(upstream.status, detail) && withCaching(body) !== body) {
+      looksLikeCacheComplaint(upstream.status, detail) && withCaching(anthropicBody) !== anthropicBody) {
     try {
       const plain = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -517,7 +537,7 @@ async function callEngine(engine, body, env, request, announce, describedBy) {
           'anthropic-version': ANTHROPIC_VERSION,
           'anthropic-beta': 'mcp-client-2025-04-04'
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify(anthropicBody)
       });
       upstream = plain;
       detail = upstream.ok ? '' : await upstream.text().catch(() => '');
@@ -538,7 +558,12 @@ async function callEngine(engine, body, env, request, announce, describedBy) {
       });
       upstream = retry;
       detail = upstream.ok ? '' : await upstream.text().catch(() => '');
+      /* Only a retry that WORKED proves reasoning_effort was the problem.
+         Any other INVALID_ARGUMENT used to switch it off for the life of
+         the isolate, and Gemini went back to thinking before every reply. */
+      if (!upstream.ok) googleRejectsReasoningEffort = false;
     } catch (err) {
+      googleRejectsReasoningEffort = false;
       return { ok: false, retriable: true, reason: 'unreachable', engine: engine,
                response: json({ error: 'could not reach ' + engine.label }, 502, env, request) };
     }
@@ -1067,7 +1092,8 @@ export const __test = {
   getAgentConfig(env, id) { return getAgentConfig(env, id); },
   setAgentConfig(env, id, patch) { return setAgentConfig(env, id, patch); },
   dailyIsDue(schedule, lastRunAt, now) { return dailyIsDue(schedule, lastRunAt, now); },
-  qaCheckPage(u) { return qaCheckPage(u); }
+  qaCheckPage(u) { return qaCheckPage(u); },
+  openAIStreamToAnthropic(b) { return openAIStreamToAnthropic(b); }
 };
 
 function shouldFailover(status, bodyText) {
@@ -1137,6 +1163,11 @@ const VISION_MODELS = [
 function engineSeesImages(provider, env) {
   const vendor = (provider && provider.vendor) || '';
   const model  = String((provider && provider.model) || '');
+
+  /* callWorkersAI sends text only, whatever the model could do, so a
+     Llama 4 there was counted as seeing while its picture was dropped
+     without a word — and nothing described it first. */
+  if (vendor === 'workers-ai') return false;
 
   /* The manual override, and the only thing that does not go stale as models
      ship. Takes a vendor ("xai") or a piece of a model name ("qwen2.5-vl"). */
@@ -1283,11 +1314,20 @@ function toOpenAIRequest(body, env, provider) {
         messages.push({
           role: 'assistant',
           content: text || null,
-          tool_calls: toolUses.map(call => ({
-            id: call.id,
-            type: 'function',
-            function: { name: call.name, arguments: JSON.stringify(call.input || {}) }
-          }))
+          tool_calls: toolUses.map((call, i) => {
+            const out = {
+              id: call.id,
+              type: 'function',
+              function: { name: call.name, arguments: JSON.stringify(call.input || {}) }
+            };
+            /* Gemini puts the signature on the first call of a step and
+               validates that one; see GEMINI_SIGNATURE_PLACEHOLDER. */
+            if (provider.vendor === 'google') {
+              const signature = call.thought_signature || (i === 0 ? GEMINI_SIGNATURE_PLACEHOLDER : '');
+              if (signature) out.extra_content = { google: { thought_signature: signature } };
+            }
+            return out;
+          })
         });
         continue;
       }
@@ -1343,6 +1383,46 @@ function stripLeadingThinkingBlock(text) {
   return match ? text.slice(match[0].length) : text;
 }
 
+/* GEMINI'S THOUGHT SIGNATURES. Gemini 3 hands back an opaque signature with
+   each step's function calls (tool_calls[].extra_content.google.
+   thought_signature) and refuses the next request if a replayed call has
+   lost it: "Function call is missing a thought_signature ...". That 400
+   says "model" in it, so shouldFailover read it as a dead engine and the
+   turn fell to whatever came next — a text-only engine, with the picture
+   he had just sent stripped out on the way. Every tool round on Gemini
+   ended like that.
+
+   So the signature travels on the tool_use block itself, as
+   thought_signature: the page keeps each block exactly as it arrived and
+   sends it back verbatim, which brings it here again on the next round.
+   It is put back where Gemini looks for it, and taken off for Anthropic,
+   which refuses a field it does not know. A call with no signature at all
+   (an older page, or a call another engine made earlier in the turn) gets
+   the placeholder Google documents for exactly that case. */
+const GEMINI_SIGNATURE_PLACEHOLDER = 'skip_thought_signature_validator';
+
+function thoughtSignatureOf(call) {
+  const google = call && call.extra_content && call.extra_content.google;
+  return (google && typeof google.thought_signature === 'string' && google.thought_signature) || '';
+}
+
+function withoutThoughtSignatures(body) {
+  const carries = (body && body.messages || []).some(m => Array.isArray(m.content) &&
+    m.content.some(b => b && b.type === 'tool_use' && 'thought_signature' in b));
+  if (!carries) return body;
+  return {
+    ...body,
+    messages: body.messages.map(m => !Array.isArray(m.content) ? m : {
+      ...m,
+      content: m.content.map(b => {
+        if (!b || b.type !== 'tool_use' || !('thought_signature' in b)) return b;
+        const { thought_signature, ...rest } = b;
+        return rest;
+      })
+    })
+  };
+}
+
 function openAIMessageToAnthropic(data) {
   const choice = (data.choices || [])[0] || {};
   const message = choice.message || {};
@@ -1351,12 +1431,15 @@ function openAIMessageToAnthropic(data) {
   for (const call of (message.tool_calls || [])) {
     let input = {};
     try { input = JSON.parse((call.function && call.function.arguments) || '{}'); } catch (e) {}
-    content.push({
+    const block = {
       type: 'tool_use',
       id: call.id,
       name: call.function && call.function.name,
       input: input
-    });
+    };
+    const signature = thoughtSignatureOf(call);
+    if (signature) block.thought_signature = signature;
+    content.push(block);
   }
   return {
     content: content,
@@ -1373,6 +1456,8 @@ function openAIStreamToAnthropic(upstreamBody) {
   let stopReason = 'end_turn';
   let outputTokens = 0;
   const toolBlocks = new Map();
+  const signed = new Set();
+  let lastSlot = null;
   let nextIndex = 1;
 
   let leadingBuffer = '';
@@ -1464,13 +1549,27 @@ function openAIStreamToAnthropic(upstreamBody) {
             }
 
             for (const call of (delta.tool_calls || [])) {
-              const slot = call.index == null ? 0 : call.index;
+              /* Gemini sends each call whole, often with no index at all, so
+                 two calls in one step both landed in slot 0 and became one
+                 call with the second's arguments glued onto the first's.
+                 With no index, the id tells calls apart; with neither, the
+                 chunk continues the call before it. */
+              const slot = call.index != null ? 'i' + call.index
+                         : call.id ? 'id:' + call.id
+                         : (lastSlot || 'i0');
+              lastSlot = slot;
+              const signature = thoughtSignatureOf(call);
               if (!toolBlocks.has(slot)) {
                 const index = nextIndex++;
                 toolBlocks.set(slot, index);
-                send('content_block_start', { type: 'content_block_start', index: index,
-                     content_block: { type: 'tool_use', id: call.id || ('call_' + index),
-                                      name: (call.function && call.function.name) || '', input: {} } });
+                const block = { type: 'tool_use', id: call.id || ('call_' + index),
+                                name: (call.function && call.function.name) || '', input: {} };
+                if (signature) { block.thought_signature = signature; signed.add(slot); }
+                send('content_block_start', { type: 'content_block_start', index: index, content_block: block });
+              } else if (signature && !signed.has(slot)) {
+                signed.add(slot);
+                send('content_block_delta', { type: 'content_block_delta', index: toolBlocks.get(slot),
+                     delta: { type: 'thought_signature_delta', thought_signature: signature } });
               }
               const argsChunk = call.function && call.function.arguments;
               if (argsChunk) {

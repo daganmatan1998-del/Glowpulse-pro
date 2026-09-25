@@ -75,7 +75,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.6.0';
+const WORKER_VERSION = '2.6.1';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -3576,6 +3576,26 @@ const WORKER_AGENT_TOOLS = {
     name: 'remember',
     description: 'Save one short, self-contained fact worth keeping, in your own memory namespace.',
     input_schema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] }
+  },
+  /* Read-only in practice, not just in description: checkToolPermission
+     upgrades this to shopify.write the moment the query is a mutation
+     (containsMutation, the exact same check handleShopify uses), and
+     neither agent that gets this tool server-side (analytics, inventory)
+     holds shopify.write — so a scheduled run cannot change the store no
+     matter what it asks for, before dispatchWorkerTool's body is ever
+     reached. */
+  shopify_admin_query: {
+    name: 'shopify_admin_query',
+    description: 'Run a read-only Shopify Admin GraphQL query against the configured store. Pass store_name only if more than one store is configured.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        variables: { type: 'object' },
+        store_name: { type: 'string' }
+      },
+      required: ['query']
+    }
   }
 };
 
@@ -3610,6 +3630,20 @@ async function dispatchWorkerTool(env, agent, name, input) {
       'INSERT INTO agent_memory (id, namespace, agent_id, text, created_at) VALUES (?, ?, ?, ?, ?)'
     ).bind(id, agent.memoryNamespace, agent.id, String((input && input.text) || '').slice(0, 2000), Date.now()).run();
     return { ok: true, id };
+  }
+  if (name === 'shopify_admin_query') {
+    const stores = shopifyStores(env);
+    if (!stores.length) return { error: 'shopify not configured' };
+    const target = findStore(env, input && input.store_name);
+    if (!target) {
+      return {
+        error: (input && input.store_name)
+          ? 'no store named "' + input.store_name + '". Configured: ' + stores.map(s => s.name).join(', ')
+          : 'more than one store is configured; pass store_name. Configured: ' + stores.map(s => s.name).join(', ')
+      };
+    }
+    const result = await shopifyGraphQL(target, String((input && input.query) || ''), (input && input.variables) || {});
+    return result.data;
   }
   return { error: 'unknown tool: ' + name };
 }
@@ -3755,16 +3789,20 @@ async function dueAgents(env, now) {
   return due;
 }
 
-/* Only competitor and news are wired to run server-side today — the two
-   agents whose whole job is the public web, which the worker can already
-   reach without a page. Analytics/Inventory declare a schedule too (they
-   may usefully run daily) but their tool is shopify_admin_query with
-   shopify.write reachable through the same call, and giving the WORKER a
-   parallel path to that — rather than the page's existing one, already
-   wired to the action log — is exactly the duplicate system this project
-   was asked not to build. They stay on-demand from the page for now;
-   scheduling them server-side is future work, noted rather than faked. */
-const SERVER_RUNNABLE_SCHEDULED_AGENTS = new Set(['competitor', 'news']);
+/* Competitor and news were the first two wired to run server-side — the
+   whole-public-web agents, needing nothing the worker did not already
+   have. Analytics and Inventory join them here: their tool
+   (shopify_admin_query) reaches the worker's own dispatchWorkerTool,
+   which is READ-ONLY for both in practice, not just in description —
+   checkToolPermission upgrades a mutating query to shopify.write and
+   refuses it before dispatch ever runs, and neither agent's registry
+   entry holds that permission. So this is not a second path to writing
+   the store; the only path to that stays exactly where it was, on the
+   page, gated by shopify.write and logged. Store Manager itself is NOT
+   added here on purpose: it DOES hold shopify.write, and a store manager
+   running unattended on a timer is a different, much bigger decision than
+   giving two read-only reporting agents a schedule. */
+const SERVER_RUNNABLE_SCHEDULED_AGENTS = new Set(['competitor', 'news', 'analytics', 'inventory']);
 
 async function runScheduledAgent(env, agentId) {
   if (!SERVER_RUNNABLE_SCHEDULED_AGENTS.has(agentId)) {
@@ -3780,10 +3818,22 @@ async function runScheduledAgent(env, agentId) {
     prompt = 'Check each of these competitor pages and report ONLY what changed since your last note in your ' +
              'own memory (call remember to check nothing — you cannot read memory back yet, so rely on what ' +
              'the page says now and note anything worth tracking for next time): ' + urls.join(', ');
-  } else { // 'news'
+  } else if (agentId === 'news') {
     const topics = Array.isArray(config.topics) && config.topics.length ? config.topics : ['ecommerce', 'AI'];
     prompt = 'Produce one short digest for these topics, today only: ' + topics.join(', ') +
              '. If nothing meets the bar today, say so in one line rather than padding it out.';
+  } else if (agentId === 'analytics' || agentId === 'inventory') {
+    /* store_name is optional config (POST /agents/config?agent_id=analytics
+       with {"config":{"store_name":"..."}}) — needed only when more than
+       one store is configured; shopify_admin_query itself says so plainly
+       if it turns out to be ambiguous and none was given. */
+    const storeNote = config.store_name ? (' Use store_name "' + config.store_name + '" if the tool asks for one.') : '';
+    prompt = (agentId === 'analytics'
+      ? 'Using shopify_admin_query (read-only), look at recent orders and product performance.'
+      : 'Using shopify_admin_query (read-only), check current inventory levels and recent sales velocity.')
+      + storeNote + ' Flag anything that looks like a meaningful change; if nothing does, say so in one line.';
+  } else {
+    return { ok: false, agentId, error: 'no prompt defined for this scheduled agent' };
   }
   try {
     const result = await runAgentInWorker(env, agentId, prompt);

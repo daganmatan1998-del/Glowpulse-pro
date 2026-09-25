@@ -548,9 +548,13 @@ needs his sign-off first. Everything he had already decided about Shopify and
 WhatsApp writes — no approval step, the action log is the record — stayed
 exactly as it was; this did not reopen that choice.
 
-**Two of the nineteen run with nobody watching.** Competitor Intelligence and
+**Four of the nineteen run with nobody watching.** Competitor Intelligence and
 News/Intelligence fire from the same Cron Trigger that already sends "at 4pm"
 messages with the computer off, read the public web, and write a note to
-memory rather than a stream of chat messages nobody is there to read. A daily
-summary — built from what actually happened, sent once, silent on a quiet day
-— goes out the same way, through the WhatsApp outbox already documented above.
+memory rather than a stream of chat messages nobody is there to read.
+Analytics and Inventory joined them: read-only Shopify checks, on a schedule,
+with no way to become a write — a mutating query is refused before it ever
+reaches the store, whatever is asked for. Store Manager, which does hold a
+write permission, stays deliberately off any timer. A daily summary — built
+from what actually happened, sent once, silent on a quiet day — goes out the
+same way, through the WhatsApp outbox already documented above.

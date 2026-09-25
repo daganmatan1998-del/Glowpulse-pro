@@ -68,11 +68,21 @@ single file `dist/index.html`.
   shell.execute, payments.read/write and production.deploy are granted to
   NOBODY and enforced in agentHasPermission() regardless of what a registry
   entry says — never wire a real capability to any of those three.
-  Two agents (competitor, news) run server-side from the Cron Trigger via
-  runAgentInWorker's own tiny tool loop (search_web/read_page/remember
-  only); everything else runs client-side via runAgentPersona, reusing
-  JARVIS's own tool implementations (callSearchWebTool etc.) rather than
-  reimplementing them. The Coding Agent's filesystem/git tools are confined
+  Four agents (competitor, news, analytics, inventory — SERVER_RUNNABLE_
+  SCHEDULED_AGENTS) run server-side from the Cron Trigger via
+  runAgentInWorker's own tiny tool loop (search_web/read_page/remember,
+  plus shopify_admin_query for the latter two); everything else runs
+  client-side via runAgentPersona, reusing JARVIS's own tool
+  implementations (callSearchWebTool etc.) rather than reimplementing
+  them. shopify_admin_query is read-only for analytics/inventory IN
+  PRACTICE, not just by convention: checkToolPermission upgrades a
+  mutating query to shopify.write and refuses it before dispatch runs,
+  and neither agent's registry entry holds that permission — a scheduled
+  run cannot write to the store no matter what it asks for. Store Manager
+  itself (which DOES hold shopify.write) is deliberately NOT in that set —
+  an unattended store manager on a timer is a much bigger decision than a
+  read-only reporting agent, and was not asked for. The Coding Agent's
+  filesystem/git tools are confined
   to one folder (dirs_next::data_dir()/jarvis-workspace) by
   resolve_in_workspace in main.rs — canonicalize-and-starts_with, which is
   what actually catches a symlink escape; a plain string check on the

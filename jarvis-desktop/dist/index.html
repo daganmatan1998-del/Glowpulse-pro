@@ -1926,6 +1926,8 @@ const I18N = {
     sttFailed: 'Could not transcribe: {why}',
     seeing: 'Looking at: {what}',
     saidNotDone: 'He described doing something and no tool ran, so it did not happen. The sentence was not spoken. Nothing was changed on your machine.',
+    calendarConnectOpened: '\u25B8 opened Google to connect your calendar \u2014 pick the account and approve',
+    calendarConnectLink: 'Open this to connect your Google Calendar:',
     cameraDescribed: 'Note: no engine on your worker takes pictures directly, so anything you show him is described by a vision model first and he answers from the description. Fine detail — small print, exact shades — may not survive that. Set ANTHROPIC_API_KEY, or point the chain at a model that sees, for him to look at it himself.',
     cameraNoFrameYet: 'The camera has not produced a usable picture yet — give it a second and ask again.',
     cameraBlind: 'The camera is on, but no engine connected to your worker can see pictures — the worker strips them out on the way, so what you hold up will not reach him. Fix it on Cloudflare: set ANTHROPIC_API_KEY, or point the chain at a model that can see (Gemini, GPT-4o, Grok, Llama 4), or add that model to VISION_ENGINES.',
@@ -2163,6 +2165,8 @@ const I18N = {
     sttFailed: 'לא הצלחתי לתמלל: {why}',
     seeing: 'מסתכל על: {what}',
     saidNotDone: 'הוא תיאר פעולה ושום כלי לא רץ, אז זה לא קרה. המשפט לא הושמע. שום דבר לא השתנה במחשב שלך.',
+    calendarConnectOpened: '\u25B8 נפתח Google לחיבור היומן \u2014 תבחר את החשבון ותאשר',
+    calendarConnectLink: 'פתח את זה כדי לחבר את יומן Google:',
     cameraDescribed: 'שים לב: אף מנוע ב-worker שלך לא מקבל תמונות ישירות, אז כל מה שתראה לו עובר קודם תיאור על ידי מודל ראייה, והוא עונה מהתיאור. פרטים עדינים — אותיות קטנות, גוונים מדויקים — עלולים לא לשרוד. להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה, כדי שיסתכל בעצמו.',
     cameraNoFrameYet: 'המצלמה עוד לא הפיקה תמונה שמישהי — תן לה עוד רגע ותנסה שוב.',
     cameraBlind: 'המצלמה פתוחה, אבל אף מנוע שמחובר ל-worker שלך לא יכול לראות תמונות — ה-worker מסנן אותן בדרך, ומה שתרים לא יגיע אליו. לתקן ב-Cloudflare: להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה (Gemini, GPT-4o, Grok, Llama 4), או להוסיף אותו ל-VISION_ENGINES.',
@@ -2394,7 +2398,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.8.2';
+const APP_VERSION = '2.8.3';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -8430,7 +8434,7 @@ const SHOW_HTML_TOOL = {
 
 const CALENDAR_CREATE_TOOL = {
   name: 'create_calendar_event',
-  description: "Create a new event on the user's Google Calendar. Use this when he asks you to schedule, book, add or remind him of something at a specific time. Always confirm back what you scheduled. Times must be full ISO 8601 with an offset (e.g. 2026-08-05T15:00:00+03:00); for an all-day event pass a plain date (2026-08-05) instead.",
+  description: "Create a new event on the user's Google Calendar. Use this when he asks you to schedule, book, add or remind him of something at a specific time. Always confirm back what you scheduled, and in whose calendar: the result names the Google account it went into (calendar). If it returns an error, NOTHING was added — say that plainly, with its tell_the_user, and never say it was scheduled. Times must be full ISO 8601 with an offset (e.g. 2026-08-05T15:00:00+03:00); for an all-day event pass a plain date (2026-08-05) instead.",
   input_schema: {
     type: 'object',
     properties: {
@@ -8443,6 +8447,40 @@ const CALENDAR_CREATE_TOOL = {
     required: ['title', 'start']
   }
 };
+
+/* Connecting the calendar is something he does, on Google's own screen, in
+   his own browser — the app only opens it. The address comes from the
+   worker and goes straight to the browser; the model never sees it. */
+const CALENDAR_CONNECT_TOOL = {
+  name: 'connect_google_calendar',
+  description: "Open Google's sign-in in his browser to connect, reconnect or switch the Google Calendar you read and write. Use it when he asks to connect or link his calendar, to use a different Google account for it, or when a calendar tool answered needs_connect. Nothing is connected until he picks the account and approves on Google's page, which then names the account — say that, and do not claim it is connected.",
+  input_schema: { type: 'object', properties: {}, required: [] }
+};
+
+async function callConnectCalendarTool(){
+  if(!backendUrl) return { error: 'no backend is configured' };
+  let data;
+  try{
+    const res = await fetch(backendUrl + '/calendar/connect', { method:'POST', headers: jarvisHeaders() });
+    if(res.status === 401){ await forceReauth(); return { error:'session expired' }; }
+    data = await res.json().catch(()=> ({}));
+    if(!res.ok || !data.url) return { error: data.error || ('HTTP ' + res.status), tell_the_user: data.tell_the_user, redirect_uri: data.redirect_uri };
+  }catch(err){
+    return { error: 'Could not reach the worker: ' + ((err && err.message) || err) };
+  }
+  const opener = window.__TAURI__ && window.__TAURI__.opener;
+  try{
+    if(IS_DESKTOP && opener && opener.openUrl) await opener.openUrl(data.url);
+    else if(!window.open(data.url, '_blank', 'noopener')) throw new Error('the browser blocked the new tab');
+  }catch(err){
+    /* Shown to him, never handed to the model: it carries the signed state. */
+    addMessage('system', t('calendarConnectLink') + ' ' + data.url);
+    return { ok: true, opened: false, note: 'The link is on his screen; he opens it, picks the account and approves. Nothing is connected until he does.' };
+  }
+  addMessage('system', t('calendarConnectOpened'));
+  return { ok: true, opened: true,
+           note: "Google's sign-in is open in his browser. He picks the account whose calendar you should use and approves; the page then names the account. Nothing is connected until he does — say that." };
+}
 
 /* WhatsApp to his own phone, through the worker. There is deliberately no
    recipient field: the worker holds his number and CallMeBot will only
@@ -10430,7 +10468,7 @@ async function runModel3dJob(body, firstLabel, caption){
 
 const CALENDAR_TOOL = {
   name: 'get_calendar_events',
-  description: "Get the user's upcoming Google Calendar events. Use this whenever the user asks about their schedule, calendar, upcoming events, availability, or what they have planned.",
+  description: "Get the user's upcoming Google Calendar events. Use this whenever the user asks about their schedule, calendar, upcoming events, availability, or what they have planned. The result names whose calendar it read (calendar). If it returns needs_connect, the calendar is not connected: say so and offer to connect it with connect_google_calendar.",
   input_schema: {
     type: 'object',
     properties: {
@@ -12764,7 +12802,7 @@ async function callCalendarTool(input){
     });
     if(res.status === 401){ await forceReauth(); return { error:'session expired' }; }
     const data = await res.json();
-    if(!res.ok) return { error: data.error || 'calendar request failed' };
+    if(!res.ok) return { error: data.error || 'calendar request failed', tell_the_user: data.tell_the_user, needs_connect: data.needs_connect };
     return data;
   }catch(err){
     return { error: 'Could not reach the calendar service: ' + err.message };
@@ -12815,7 +12853,8 @@ async function callCalendarCreateTool(input){
     });
     if(res.status === 401){ await forceReauth(); return { error:'session expired' }; }
     const data = await res.json();
-    if(!res.ok) return { error: data.error || 'could not create the event' };
+    if(!res.ok) return { error: data.error || 'could not create the event', tell_the_user: data.tell_the_user, needs_connect: data.needs_connect,
+                         nothing_was_added: true };
     return data;
   }catch(err){
     return { error: 'Could not reach the calendar service: ' + err.message };
@@ -13055,6 +13094,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     const caps = backendCapabilities || {};
     if(caps.whatsapp) everydayTools.push(WHATSAPP_TOOL);
     if(caps.call) everydayTools.push(CALL_TOOL);
+    if(caps.calendar_can_connect) everydayTools.push(CALENDAR_CONNECT_TOOL);
     if(caps.whatsapp_later && (caps.whatsapp || caps.call)) everydayTools.push(SCHEDULE_MANAGE_TOOL);
     /* The supervisor tool, offered once the registry has actually been
        fetched (see runBackendProbe) rather than gambled on — a tool that
@@ -13287,6 +13327,12 @@ const ACTION_CLAIM_DONE_HE = /^\s*(?:\u05d0\u05d5\u05e7\u05d9[,.]?\s+)?(?:\u05e0
    failure and can describe it honestly. What this is guarding against is
    words with no attempt behind them at all. */
 let turnToolRan = false;
+/* Ran is not the same as worked. A tool that returned an error was still
+   "a tool ran", so "Done, it's in your calendar" after a failed write went
+   straight out: nothing checked it. These say whether anything in the turn
+   succeeded, and what failed. */
+let turnToolSucceeded = false;
+let turnToolFailures = [];
 
 /* A bare "here you go" is how an ANSWER is handed over as often as an
    action, and the voice gate must not silence him mid-conversation for
@@ -13305,9 +13351,24 @@ function claimsItDidSomething(text){
   return claimsAnAction(t);
 }
 
+/* "\u05dc\u05d0 \u05d4\u05d5\u05e1\u05e4\u05ea\u05d9" is "I did NOT add" — the verb matched, the word before it
+   reversed it, and the truthful "I did not add it, the calendar is not
+   connected" read as a claim. A verb within a word of \u05dc\u05d0 or \u05d0\u05dc is
+   not one. */
+const HE_NEGATED_BEFORE = /(?:^|[\s,.;:!?\u2014-])(?:\u05dc\u05d0|\u05d0\u05dc)(?:\s+\S+)?\s+$/;
+function claimsInHebrew(t){
+  const re = new RegExp(ACTION_CLAIM_HE.source, 'g');
+  let m;
+  while((m = re.exec(t))){
+    if(!HE_NEGATED_BEFORE.test(t.slice(Math.max(0, m.index - 24), m.index))) return true;
+    if(re.lastIndex === m.index) re.lastIndex++;
+  }
+  return false;
+}
+
 function claimsAnAction(text){
   const t = String(text || '');
-  return ACTION_CLAIM_EN.test(t) || ACTION_CLAIM_HE.test(t) ||
+  return ACTION_CLAIM_EN.test(t) || claimsInHebrew(t) ||
          ACTION_CLAIM_GERUND.test(t) ||
          ACTION_CLAIM_DONE.test(t) || ACTION_CLAIM_DONE_HE.test(t);
 }
@@ -13339,6 +13400,8 @@ function trimStaleFrames(messages){
 async function askJarvis(userText, images, onText, tag){
   userInterrupted = false;
   turnToolRan = false;
+  turnToolSucceeded = false;
+  turnToolFailures = [];
   /* Set for the whole turn, so every tool the loop runs is attributed to
      whoever started it rather than all of them reading "chat". */
   toolOrigin = (tag && tag.origin) || 'chat';
@@ -13385,6 +13448,12 @@ async function askJarvis(userText, images, onText, tag){
     let budget = replyBudget();
     let data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
     let collected = textOf(data);
+    /* Each round's text arrives with nothing between it and the last. The
+       screen's copy is joined with a newline (collected, below); the voice
+       got them glued — "...for November 2.That did not happen..." — one
+       "sentence" holding the false claim AND the correction, held whole and
+       never spoken. The same newline, sent to the voice, keeps them apart. */
+    const roundBoundary = () => { if(onText && collected) onText('\n'); };
 
     /* Cut off before producing anything showable. That is almost always a
        build — a whole HTML document is written as tool arguments, token by
@@ -13444,6 +13513,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCalendarTool(tu.input);
           } else if(tu.name === 'create_calendar_event'){
             payload = await callCalendarCreateTool(tu.input);
+          } else if(tu.name === 'connect_google_calendar'){
+            payload = await callConnectCalendarTool();
           } else if(tu.name === 'send_whatsapp'){
             payload = await callWhatsAppTool(tu.input);
           } else if(tu.name === 'call_me'){
@@ -13526,6 +13597,9 @@ async function askJarvis(userText, images, onText, tag){
              reason here means a misconfigured key or a dead endpoint names
              itself instead of hiding behind a generic apology. */
           logActionEnd(logEntry, payload);
+          if(payload && !payload.error) turnToolSucceeded = true;
+          else turnToolFailures.push({ tool: tu.name, error: String((payload && payload.error) || 'no result'),
+                                       tell_the_user: (payload && payload.tell_the_user) || null });
           if(payload && payload.error && payload.error !== 'cancelled'){
             addMessage('system', 'DEBUG (' + tu.name + '): ' + payload.error);
           }
@@ -13553,12 +13627,37 @@ async function askJarvis(userText, images, onText, tag){
           }
         }
         workingMessages = [...workingMessages, { role:'user', content:toolResults }];
+        roundBoundary();
         data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
         const more = textOf(data);
         if(more) collected = collected ? collected + '\n' + more : more;
       }
 
-      if(loopGuard > 0) break;                       // he used a tool; nothing to correct
+      if(loopGuard > 0){
+        /* He used a tool — but if every one of them failed and his last
+           words still say it was done, that is the same false "done" the
+           no-tool case below catches, arrived at through a tool error.
+           Handed back once with what actually failed. */
+        const lastText = textOf(data);
+        if(!turnToolSucceeded && turnToolFailures.length && corrections < 1 && claimsAnAction(lastText)){
+          corrections++;
+          setToolStatus(t('doingItForReal'));
+          const failed = turnToolFailures.map(f => f.tool + ': ' + f.error).join('; ');
+          const nudge = currentLang === 'he'
+            ? '\u05e2\u05e6\u05d5\u05e8. \u05db\u05dc \u05db\u05dc\u05d9 \u05e9\u05e7\u05e8\u05d0\u05ea \u05dc\u05d5 \u05d1\u05ea\u05d5\u05e8 \u05d4\u05d6\u05d4 \u05e0\u05db\u05e9\u05dc, \u05d0\u05d6 \u05e9\u05d5\u05dd \u05d3\u05d1\u05e8 \u05dc\u05d0 \u05d1\u05d5\u05e6\u05e2: ' + failed + '. \u05ea\u05d2\u05d9\u05d3 \u05dc\u05d5 \u05d1\u05e4\u05e9\u05d8\u05d5\u05ea \u05e9\u05d6\u05d4 \u05dc\u05d0 \u05e7\u05e8\u05d4 \u05d5\u05dc\u05de\u05d4 (\u05d0\u05dd \u05d9\u05e9 \u05d1\u05ea\u05d5\u05e6\u05d0\u05d4 tell_the_user \u2014 \u05d4\u05e9\u05ea\u05de\u05e9 \u05d1\u05d5). \u05d0\u05dc \u05ea\u05d2\u05d9\u05d3 \u05e9\u05d6\u05d4 \u05d1\u05d5\u05e6\u05e2 \u05d5\u05d0\u05dc \u05ea\u05ea\u05e0\u05e6\u05dc.'
+            : 'Stop. Every tool you called in this turn failed, so nothing was done: ' + failed +
+              '. Tell him plainly that it did not happen and why (use tell_the_user from the result if there is one). Do not say it was done, and do not apologise.';
+          workingMessages = [...workingMessages,
+                             { role:'assistant', content: lastText || '(no text)' },
+                             { role:'user', content: nudge }];
+          roundBoundary();
+          data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
+          const fixed = textOf(data);
+          if(fixed) collected = fixed;     // replaces the false "done", as below
+          continue;
+        }
+        break;                                       // he used a tool and it worked, or said it failed
+      }
       if(data.stop_reason === 'tool_use') break;     // out of rounds, handled below
       if(corrections >= 1) break;                    // one correction, never a loop
       if(!claimsAnAction(collected)) break;          // he claimed nothing
@@ -13571,6 +13670,7 @@ async function askJarvis(userText, images, onText, tag){
       workingMessages = [...workingMessages,
                          { role:'assistant', content: collected || '(no text)' },
                          { role:'user', content: nudge }];
+      roundBoundary();
       data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
       const fixed = textOf(data);
       /* REPLACES the claim rather than being appended under it. Appending
@@ -14866,13 +14966,15 @@ async function handleSend(){
      Held, not deleted: the screen still shows the whole reply. It is the
      speaker that stops making promises. */
   let heldClaims = [];
+  let spokeCount = 0;
   const sayOrHold = (sentence)=>{
     if(!sentence) return;
-    if(!turnToolRan && claimsItDidSomething(sentence)){ heldClaims.push(sentence); return; }
-    if(heldClaims.length && turnToolRan){
+    if(!turnToolSucceeded && claimsItDidSomething(sentence)){ heldClaims.push(sentence); return; }
+    if(heldClaims.length && turnToolSucceeded){
       for(const held of heldClaims) enqueueSpeech(held);
       heldClaims = [];
     }
+    spokeCount++;
     enqueueSpeech(sentence);
   };
 
@@ -14927,8 +15029,18 @@ async function handleSend(){
 
   /* The turn is over. Anything still held was a promise nothing backed up. */
   if(heldClaims.length){
-    if(turnToolRan){
+    if(turnToolSucceeded){
       for(const held of heldClaims) enqueueSpeech(held);
+    } else if(turnToolRan){
+      /* A tool ran and failed: the claim stays unspoken, and what he
+         does hear is the answer that says what failed — or, if every
+         sentence of it was held, the tool's own account of the failure. */
+      if(!spokeCount){
+        const why = turnToolFailures.map(f => f.tell_the_user).filter(Boolean)[0];
+        enqueueSpeech(why || (currentLang === 'he'
+          ? '\u05d6\u05d4 \u05dc\u05d0 \u05d4\u05e6\u05dc\u05d9\u05d7 \u2014 \u05d4\u05e4\u05e8\u05d8\u05d9\u05dd \u05e2\u05dc \u05d4\u05de\u05e1\u05da.'
+          : 'That did not work \u2014 the details are on screen.'));
+      }
     } else {
       /* He asked for something, was told it was done, and it was not. Say
          that, out loud, instead of the sentence that was not true — and

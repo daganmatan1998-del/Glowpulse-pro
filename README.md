@@ -27,6 +27,32 @@ ones came up.
 Voice input needs `/stt`, which this worker has. WebView2 carries no Web Speech
 API, so on the desktop app transcription has nowhere else to come from.
 
+## Connecting Google Calendar
+
+Two secrets on the worker, then one sentence to JARVIS. Once:
+
+1. In [Google Cloud console](https://console.cloud.google.com/), make a project
+   and enable **Google Calendar API** (APIs & Services → Library).
+2. **OAuth consent screen**: External; add your own Gmail as a test user; then
+   **Publish app** so its status reads *In production*. Left in *Testing*,
+   Google expires the connection every seven days. Google will warn that the
+   app is unverified when you connect — it is your own app; Advanced →
+   continue.
+3. **Credentials → Create credentials → OAuth client ID → Web application**,
+   with this exact **Authorized redirect URI**: `https://<your-worker>/calendar/oauth`
+   (the address the app talks to, plus `/calendar/oauth`).
+4. Put the two values on the worker: `wrangler secret put GOOGLE_CLIENT_ID` and
+   `wrangler secret put GOOGLE_CLIENT_SECRET`, then redeploy.
+5. Say **"connect my calendar"**. Google's own sign-in opens in your browser;
+   pick the account whose calendar he should use and approve. The page that
+   comes back names the account, and from then on every read and write says
+   which calendar it touched. Say it again any time to switch accounts or to
+   reconnect.
+
+The permission is kept in D1 (`jarvis_meta`), so no refresh token has to be
+copied anywhere. An existing `GOOGLE_REFRESH_TOKEN` still works; a connection
+made from the app takes precedence over it.
+
 ## One thing to know before you set `ALLOWED_ORIGIN`
 
 It defaults to `*`, which reflects whatever origin asked — so both the website
@@ -290,6 +316,15 @@ sentence, which is what keeps "Opening hours are nine to five" out.
 When one fires with `loopGuard === 0`, the reply is handed straight back with an
 instruction to call the tool now or say plainly that it cannot be done. Once,
 never a loop, and never when a tool actually ran.
+
+A tool that ran and *failed* used to count as having run. Asked for a meeting
+on 2 November, `create_calendar_event` came back "calendar not configured" and
+he said "Done, it's in your calendar" — which nothing checked. Now the turn
+records whether anything succeeded (`turnToolSucceeded`), not just whether
+something was dispatched: when every tool failed and the last words still
+claim success, the reply is handed back once with what failed, and a claim is
+held from the voice until a tool has actually worked. `לא הוספתי` ("I did not
+add it") is a negation, not a claim, and is read as one.
 
 ## Serious Mode does not exist on the desktop
 

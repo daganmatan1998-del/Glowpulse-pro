@@ -17,9 +17,9 @@
      CARTESIA_VOICE_ID     a voice uuid      → voice (has a default)
      SHOPIFY_STORE         e.g. ovrea         → single-store tools (see SHOPIFY_STORES below)
      SHOPIFY_ADMIN_TOKEN   shpat_...          → single-store tools
-     GOOGLE_CLIENT_ID                        → calendar
+     GOOGLE_CLIENT_ID                        → calendar (then say "connect my calendar")
      GOOGLE_CLIENT_SECRET                    → calendar
-     GOOGLE_REFRESH_TOKEN                    → calendar
+     GOOGLE_REFRESH_TOKEN                    → calendar, optional: connecting from the app replaces it
      ALLOWED_ORIGIN        https://your.site → CORS lock (defaults to *)
      WHATSAPP_PHONE        his own number, e.g. 0552813729 or +972552813729
      CALLMEBOT_APIKEY      the key CallMeBot sends back on WhatsApp
@@ -60,8 +60,10 @@
      POST /tts                 { text, language }       → audio/wav
      POST /image               { prompt, reference? }   → { image: base64 }
      POST /mcp/<name>          proxy to a remote MCP server, adding its own auth header
-     GET  /calendar/upcoming?days=7                     → { events: [...] }
-     POST /calendar/create     { title, start, end, ... } → { ok, event }
+     GET  /calendar/upcoming?days=7                     → { calendar, events: [...] }
+     POST /calendar/create     { title, start, end, ... } → { ok, calendar, event }
+     POST /calendar/connect                             → { url } Google's consent screen
+     GET  /calendar/oauth      (Google's redirect back; public, signed state)
      POST /shopify/query       { query, variables }     → GraphQL result
      POST /whatsapp/send       { text, send_at? }       → sends now, or queues it
      POST /call/start          { text, send_at? }       → rings him now, or queues it
@@ -75,7 +77,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.6.2';
+const WORKER_VERSION = '2.6.3';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -99,6 +101,9 @@ export default {
         return json(await health(env), 200, env, request);
       }
       if (path === '/auth/pin')     return await handleAuth(request, env);
+      /* Google's redirect back after he approves the calendar: it carries
+         no token of ours, only the signed state that handler checks. */
+      if (path === '/calendar/oauth') return await handleCalendarOAuth(request, env, url);
 
       const authed = await requireToken(request, env);
       if (!authed) return json({ error: 'unauthorized' }, 401, env, request);
@@ -114,6 +119,7 @@ export default {
       if (path.indexOf('/mcp/') === 0)             return await handleMcpProxy(request, env, path);
       if (path === '/calendar/upcoming')           return await handleCalendarUpcoming(request, env, url);
       if (path === '/calendar/create')             return await handleCalendarCreate(request, env);
+      if (path === '/calendar/connect')            return await handleCalendarConnect(request, env, url);
       if (path === '/shopify/query')               return await handleShopify(request, env);
       if (path === '/whatsapp/send')               return await handleOutboxSend(request, env, ctx, 'whatsapp');
       if (path === '/call/start')                  return await handleOutboxSend(request, env, ctx, 'call');
@@ -323,7 +329,11 @@ async function health(env) {
       name: s.name,
       handle: String(s.store || '').trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0].replace(/\.myshopify\.com$/, '')
     })),
-    calendar: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN),
+    calendar: await calendarConfigured(env),
+    /* Whether "connect my calendar" can work at all yet. Whose calendar it
+       is — an email address — is deliberately not here: /health answers
+       anyone. Every authed calendar reply names it instead. */
+    calendar_can_connect: calendarClientConfigured(env),
     whatsapp: whatsAppConfigured(env),
     /* Names only, never values, so "I can't send messages" can become "the
        worker is missing CALLMEBOT_APIKEY" — the difference between a dead
@@ -2436,30 +2446,121 @@ async function shopifyGraphQL(target, query, variables) {
   return { ok: upstream.ok, data };
 }
 
-async function googleAccessToken(env) {
+/* =====================================================================
+   GOOGLE CALENDAR — connected from the app, and always saying whose.
+
+   It used to need three secrets, the third a refresh token that had to be
+   minted by hand in an OAuth playground. Nobody had done that, so every
+   read and write answered "calendar not configured" — and a write that
+   failed like that was then reported to him as done. Asked for a meeting
+   on 2 November, he was told it was in his calendar; it had gone nowhere.
+
+   Now only the OAuth client is a secret (GOOGLE_CLIENT_ID and
+   GOOGLE_CLIENT_SECRET). He says "connect my calendar", the app opens
+   Google's own consent screen, he picks the account, and the callback here
+   keeps the refresh token in D1 next to the name of that account. Every
+   read and write says which account it touched, so "which calendar did it
+   go into" has an answer instead of a guess. GOOGLE_REFRESH_TOKEN still
+   works for a setup that already has one; a connection made from the app
+   takes precedence over it, being the more recent choice.
+   ===================================================================== */
+const CALENDAR_SCOPES = 'openid email https://www.googleapis.com/auth/calendar.events';
+const CALENDAR_STATE_TTL_SECONDS = 15 * 60;
+
+function calendarClientConfigured(env) {
+  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+}
+
+async function storedCalendar(env) {
+  if (!env.JARVIS_DB) return null;
+  try {
+    await ensureSchema(env);
+    const row = await env.JARVIS_DB.prepare("SELECT value FROM jarvis_meta WHERE key = 'google_calendar'").first();
+    return row && row.value ? JSON.parse(row.value) : null;
+  } catch (e) { return null; }
+}
+
+async function saveCalendar(env, value) {
+  await ensureSchema(env);
+  await env.JARVIS_DB.prepare(
+    "INSERT INTO jarvis_meta (key, value) VALUES ('google_calendar', ?) " +
+    'ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+  ).bind(JSON.stringify(value)).run();
+}
+
+/* The refresh token to use and whose calendar it opens, or null. */
+async function calendarAuth(env) {
+  if (!calendarClientConfigured(env)) return null;
+  const stored = await storedCalendar(env);
+  if (stored && stored.refresh_token) {
+    return { refreshToken: stored.refresh_token, account: stored.account || null, source: 'connected' };
+  }
+  if (env.GOOGLE_REFRESH_TOKEN) {
+    return { refreshToken: env.GOOGLE_REFRESH_TOKEN, account: null, source: 'secret' };
+  }
+  return null;
+}
+
+async function calendarConfigured(env) {
+  return !!(await calendarAuth(env));
+}
+
+async function googleAccessToken(env, refreshToken) {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: env.GOOGLE_CLIENT_ID,
       client_secret: env.GOOGLE_CLIENT_SECRET,
-      refresh_token: env.GOOGLE_REFRESH_TOKEN,
+      refresh_token: refreshToken,
       grant_type: 'refresh_token'
     })
   });
-  const data = await res.json();
-  if (!res.ok || !data.access_token) throw new Error('google auth failed: ' + JSON.stringify(data).slice(0, 200));
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.access_token) {
+    const err = new Error('google auth failed: ' + JSON.stringify(data).slice(0, 200));
+    /* invalid_grant: revoked, or expired — which is what a Google app left
+       in "Testing" does to its refresh tokens after seven days. */
+    err.reconnect = data.error === 'invalid_grant';
+    throw err;
+  }
   return data.access_token;
 }
 
-function calendarConfigured(env) {
-  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN);
+/* Every way of not reaching the calendar, said so that nobody can mistake
+   it for success: nothing was read, nothing was added, and here is the one
+   thing that fixes it. */
+function calendarUnavailable(env, request, expired) {
+  const canConnect = calendarClientConfigured(env);
+  return json({
+    error: expired ? 'calendar connection expired' : 'calendar not configured',
+    connected: false,
+    needs_connect: canConnect,
+    missing: canConnect ? [] : ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+    tell_the_user: canConnect
+      ? (expired
+          ? 'The Google Calendar connection has expired, so nothing was read or added. Say "connect my calendar" and I will open Google to reconnect it.'
+          : 'Your Google Calendar is not connected yet, so nothing was read or added. Say "connect my calendar" and I will open Google to connect it.')
+      : 'Your Google Calendar is not connected, so nothing was read or added: the worker is missing GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. Once those are set, say "connect my calendar".'
+  }, 503, env, request);
+}
+
+async function calendarToken(env, request) {
+  const auth = await calendarAuth(env);
+  if (!auth) return { fail: calendarUnavailable(env, request, false) };
+  try {
+    return { auth, token: await googleAccessToken(env, auth.refreshToken) };
+  } catch (err) {
+    if (err.reconnect) return { fail: calendarUnavailable(env, request, true) };
+    return { fail: json({ error: 'calendar sign-in failed: ' + String(err.message || err).slice(0, 200),
+                          tell_the_user: 'Google refused the calendar sign-in, so nothing was read or added.' }, 502, env, request) };
+  }
 }
 
 async function handleCalendarUpcoming(request, env, url) {
-  if (!calendarConfigured(env)) return json({ error: 'calendar not configured' }, 503, env, request);
   const days = Math.min(60, Math.max(1, parseInt(url.searchParams.get('days') || '7', 10) || 7));
-  const token = await googleAccessToken(env);
+  const got = await calendarToken(env, request);
+  if (got.fail) return got.fail;
   const now = new Date();
   const until = new Date(now.getTime() + days * 86400000);
   const api = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
@@ -2469,7 +2570,7 @@ async function handleCalendarUpcoming(request, env, url) {
   api.searchParams.set('orderBy', 'startTime');
   api.searchParams.set('maxResults', '40');
 
-  const res = await fetch(api.toString(), { headers: { Authorization: 'Bearer ' + token } });
+  const res = await fetch(api.toString(), { headers: { Authorization: 'Bearer ' + got.token } });
   const data = await res.json();
   if (!res.ok) return json({ error: 'calendar read failed', detail: data }, 502, env, request);
 
@@ -2482,11 +2583,11 @@ async function handleCalendarUpcoming(request, env, url) {
     description: e.description ? String(e.description).slice(0, 300) : null,
     link: e.htmlLink || null
   }));
-  return json({ days, count: events.length, events }, 200, env, request);
+  /* A primary calendar's summary is the address of the account it belongs to. */
+  return json({ calendar: got.auth.account || data.summary || null, days, count: events.length, events }, 200, env, request);
 }
 
 async function handleCalendarCreate(request, env) {
-  if (!calendarConfigured(env)) return json({ error: 'calendar not configured' }, 503, env, request);
   const body = await request.json().catch(() => ({}));
   const title = String((body && body.title) || '').trim();
   const start = String((body && body.start) || '').trim();
@@ -2513,16 +2614,19 @@ async function handleCalendarCreate(request, env) {
     end: allDay ? { date: end } : { dateTime: end, timeZone }
   };
 
-  const token = await googleAccessToken(env);
+  const got = await calendarToken(env, request);
+  if (got.fail) return got.fail;
   const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + got.token },
     body: JSON.stringify(event)
   });
   const data = await res.json();
-  if (!res.ok) return json({ error: 'calendar write failed', detail: data }, 502, env, request);
+  if (!res.ok) return json({ error: 'calendar write failed', detail: data,
+                             tell_the_user: 'Google refused the new event, so nothing was added.' }, 502, env, request);
   return json({
     ok: true,
+    calendar: got.auth.account || (data.organizer && data.organizer.email) || (data.creator && data.creator.email) || null,
     event: {
       title: data.summary,
       start: data.start && (data.start.dateTime || data.start.date),
@@ -2530,6 +2634,123 @@ async function handleCalendarCreate(request, env) {
       link: data.htmlLink
     }
   }, 200, env, request);
+}
+
+/* THE CONNECT FLOW. POST /calendar/connect (authed, from the app) answers
+   with Google's consent URL; the app opens it in his browser. The state
+   carried through Google is signed here and lives fifteen minutes, so the
+   public callback below only ever accepts a round trip this worker began.
+   Signed with its own prefix: a state is never a valid session token. */
+async function signCalendarState(env) {
+  const nonce = b64urlEncode(crypto.getRandomValues(new Uint8Array(12)));
+  const encoded = b64urlEncode(new TextEncoder().encode(JSON.stringify({
+    exp: Math.floor(Date.now() / 1000) + CALENDAR_STATE_TTL_SECONDS, n: nonce })));
+  return encoded + '.' + b64urlEncode(await hmac(tokenSecret(env) || 'dev-secret', 'calendar-state.' + encoded));
+}
+
+async function verifyCalendarState(env, state) {
+  if (!state || state.indexOf('.') < 0) return false;
+  const [encoded, sig] = state.split('.');
+  const expected = b64urlEncode(await hmac(tokenSecret(env) || 'dev-secret', 'calendar-state.' + encoded));
+  if (!sig || sig.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < sig.length; i++) diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
+  if (diff !== 0) return false;
+  try {
+    const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(encoded)));
+    return payload.exp > Math.floor(Date.now() / 1000);
+  } catch (e) { return false; }
+}
+
+function calendarRedirectUri(url) {
+  return url.origin + '/calendar/oauth';
+}
+
+async function handleCalendarConnect(request, env, url) {
+  if (!calendarClientConfigured(env)) {
+    return json({ error: 'the worker is missing GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET',
+                  missing: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+                  redirect_uri: calendarRedirectUri(url),
+                  tell_the_user: 'The calendar cannot be connected yet: the worker needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first, from an OAuth client whose redirect URI is ' + calendarRedirectUri(url) + '.' },
+                503, env, request);
+  }
+  const consent = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  consent.searchParams.set('client_id', env.GOOGLE_CLIENT_ID);
+  consent.searchParams.set('redirect_uri', calendarRedirectUri(url));
+  consent.searchParams.set('response_type', 'code');
+  consent.searchParams.set('scope', CALENDAR_SCOPES);
+  consent.searchParams.set('access_type', 'offline');
+  consent.searchParams.set('prompt', 'consent select_account');   // always a refresh token, always a choice of account
+  consent.searchParams.set('include_granted_scopes', 'true');
+  consent.searchParams.set('state', await signCalendarState(env));
+  return json({ ok: true, url: consent.toString(), redirect_uri: calendarRedirectUri(url) }, 200, env, request);
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+function calendarPage(title, bodyHtml, status) {
+  return new Response(
+    '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + escapeHtml(title) + '</title>' +
+    '<body style="font-family:system-ui,sans-serif;background:#05080d;color:#cfe8ee;display:flex;min-height:100vh;' +
+    'align-items:center;justify-content:center;margin:0;padding:16px"><div style="max-width:520px">' +
+    '<h1 style="font-size:20px;color:#5ff">' + escapeHtml(title) + '</h1>' + bodyHtml + '</div></body>',
+    { status: status || 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+
+/* Where Google sends him back. Public by necessity — Google's redirect
+   carries no token of ours — which is exactly why the signed state is
+   checked before anything else is looked at. */
+async function handleCalendarOAuth(request, env, url) {
+  if (url.searchParams.get('error')) {
+    return calendarPage('Calendar not connected',
+      '<p>Google said: ' + escapeHtml(url.searchParams.get('error')) + '. Nothing was changed.</p>', 400);
+  }
+  if (!(await verifyCalendarState(env, url.searchParams.get('state') || ''))) {
+    return calendarPage('Calendar not connected',
+      '<p>This link has expired, or was not started by your JARVIS. Ask him to connect the calendar again.</p>', 400);
+  }
+  const code = url.searchParams.get('code') || '';
+  if (!code || !calendarClientConfigured(env)) {
+    return calendarPage('Calendar not connected', '<p>Google did not send a sign-in code back. Nothing was changed.</p>', 400);
+  }
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code: code,
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: calendarRedirectUri(url),
+      grant_type: 'authorization_code'
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.refresh_token) {
+    return calendarPage('Calendar not connected',
+      '<p>Google did not hand over a lasting permission' +
+      (data.error ? ' (' + escapeHtml(data.error) + ')' : '') +
+      '. Remove JARVIS at myaccount.google.com/permissions and connect again.</p>', 400);
+  }
+  let account = null;
+  try {
+    const claims = JSON.parse(new TextDecoder().decode(b64urlDecode(String(data.id_token || '').split('.')[1] || '')));
+    account = claims.email || null;
+  } catch (e) { /* no id_token: the account is named on the first read instead */ }
+
+  if (!env.JARVIS_DB) {
+    return calendarPage('Almost connected',
+      '<p>Signed in as <b>' + escapeHtml(account || 'your Google account') + '</b>, but this worker has no database ' +
+      'to keep the permission in. Set this as the <code>GOOGLE_REFRESH_TOKEN</code> secret:</p>' +
+      '<p style="word-break:break-all;background:#0b1520;padding:8px"><code>' + escapeHtml(data.refresh_token) + '</code></p>');
+  }
+  await saveCalendar(env, { refresh_token: data.refresh_token, account: account, connected_at: new Date().toISOString() });
+  return calendarPage('Calendar connected',
+    '<p>JARVIS now reads and writes the Google Calendar of <b>' + escapeHtml(account || 'the account you chose') +
+    '</b>. You can close this tab.</p>');
 }
 
 /* =====================================================================

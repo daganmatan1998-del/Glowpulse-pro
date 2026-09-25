@@ -103,6 +103,20 @@ single file `dist/index.html`.
   without this every tool round on Gemini failed over — to a blind engine,
   losing any picture. A picture reaching an engine that cannot see is now
   described by Workers AI first (runEngineChain), never silently stripped.
+- **Google Calendar is connected from the app** (worker 2.6.3 / page 2.8.3).
+  Only GOOGLE_CLIENT_ID/SECRET are secrets; "connect my calendar" →
+  connect_google_calendar → POST /calendar/connect → Google consent (signed
+  15-min state, prefix `calendar-state.` so it is never a session token) →
+  public GET /calendar/oauth → refresh token + account email in jarvis_meta
+  `google_calendar`. Every calendar reply carries `calendar` (whose). The
+  consent URL goes to the browser, never to the model.
+- **"Ran" is not "worked".** turnToolSucceeded (set from the RESULT, not the
+  dispatch) gates the voice's held claims and a second corrective pass for
+  "every tool failed, yet he says done". roundBoundary() sends '\n' to the
+  voice between rounds — without it the last sentence of one round and the
+  first of the next were glued into one, and a correction was held along
+  with the false claim it followed. Hebrew negation (לא/אל before the verb)
+  is not a claim.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.

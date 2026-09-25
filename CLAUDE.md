@@ -61,6 +61,10 @@ single file `dist/index.html`.
   registry, and vice versa — `supervisor.e2e.mjs` in the test set checks this
   cross-file consistency and has already caught one real miss
   (workspace_list_dir defined but never added to agentToolDefs()).
+  JARVIS himself reads the system back through agent_system_info (2.8.1,
+  read-only: /agents, /approvals/pending, /events/recent, /memory, each
+  failing on its own), and his prompt carries the roster built from the
+  cached registry — never a hand-written list of agents.
   Approval is required ONLY for filesystem.write and git.write (the Coding
   Agent) — shopify.write/whatsapp.send/phone.call stay exactly as already
   shipped (log-gated, no approval step; see handleShopify's own comment).

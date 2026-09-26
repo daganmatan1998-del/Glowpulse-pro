@@ -77,7 +77,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.6.3';
+const WORKER_VERSION = '2.6.4';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -2467,8 +2467,26 @@ async function shopifyGraphQL(target, query, variables) {
 const CALENDAR_SCOPES = 'openid email https://www.googleapis.com/auth/calendar.events';
 const CALENDAR_STATE_TTL_SECONDS = 15 * 60;
 
+/* The two values as Google issued them. Pasted into a dashboard they
+   arrive with whatever came along — a trailing newline, quotes, the label
+   they were copied next to ("CLIENT SECRET GOCSPX-...") — and Google then
+   answers invalid_client at the very last step, after he has already
+   approved everything. None of that can be part of a real value, so it is
+   taken off here rather than failing on it. */
+function googleClient(env) {
+  const clean = v => String(v || '').trim().replace(/^['"]+|['"]+$/g, '').trim();
+  let id = clean(env.GOOGLE_CLIENT_ID);
+  let secret = clean(env.GOOGLE_CLIENT_SECRET);
+  const idMatch = /[0-9]+-[A-Za-z0-9_]+\.apps\.googleusercontent\.com/.exec(id);
+  if (idMatch) id = idMatch[0];
+  const secretMatch = /GOCSPX-[A-Za-z0-9_-]+/.exec(secret);
+  if (secretMatch) secret = secretMatch[0];
+  return { id, secret };
+}
+
 function calendarClientConfigured(env) {
-  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+  const c = googleClient(env);
+  return !!(c.id && c.secret);
 }
 
 async function storedCalendar(env) {
@@ -2510,8 +2528,8 @@ async function googleAccessToken(env, refreshToken) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      client_id: googleClient(env).id,
+      client_secret: googleClient(env).secret,
       refresh_token: refreshToken,
       grant_type: 'refresh_token'
     })
@@ -2675,7 +2693,7 @@ async function handleCalendarConnect(request, env, url) {
                 503, env, request);
   }
   const consent = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  consent.searchParams.set('client_id', env.GOOGLE_CLIENT_ID);
+  consent.searchParams.set('client_id', googleClient(env).id);
   consent.searchParams.set('redirect_uri', calendarRedirectUri(url));
   consent.searchParams.set('response_type', 'code');
   consent.searchParams.set('scope', CALENDAR_SCOPES);
@@ -2722,18 +2740,35 @@ async function handleCalendarOAuth(request, env, url) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code: code,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      client_id: googleClient(env).id,
+      client_secret: googleClient(env).secret,
       redirect_uri: calendarRedirectUri(url),
       grant_type: 'authorization_code'
     })
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.refresh_token) {
+  /* Each way this last step fails has one fix, and it is a different one
+     each time — so each is named, rather than one piece of advice that is
+     right for only one of them. */
+  if (!res.ok) {
+    const why = String(data.error || ('HTTP ' + res.status));
+    const fix = why === 'invalid_client'
+      ? 'Google did not accept the worker\'s <code>GOOGLE_CLIENT_SECRET</code> for this client. In Cloudflare, enter it again: ' +
+        'only the value, which starts <code>GOCSPX-</code>, exactly as Google Cloud shows it under Clients for this client ' +
+        '(if you added a new secret there, it is the new one). Deploy, then connect again.'
+      : why === 'redirect_uri_mismatch'
+      ? 'The client in Google Cloud does not list this worker\'s address. Under Authorized redirect URIs, add exactly ' +
+        '<code>' + escapeHtml(calendarRedirectUri(url)) + '</code>, then connect again.'
+      : why === 'invalid_grant'
+      ? 'This sign-in was already used or took too long. Ask JARVIS to connect the calendar again.'
+      : 'Nothing was changed. Ask JARVIS to connect the calendar again.';
     return calendarPage('Calendar not connected',
-      '<p>Google did not hand over a lasting permission' +
-      (data.error ? ' (' + escapeHtml(data.error) + ')' : '') +
-      '. Remove JARVIS at myaccount.google.com/permissions and connect again.</p>', 400);
+      '<p>Google refused the last step (' + escapeHtml(why) + ').</p><p>' + fix + '</p>', 400);
+  }
+  if (!data.refresh_token) {
+    return calendarPage('Calendar not connected',
+      '<p>Google did not hand over a lasting permission. Remove JARVIS at myaccount.google.com/permissions ' +
+      'and connect again.</p>', 400);
   }
   let account = null;
   try {

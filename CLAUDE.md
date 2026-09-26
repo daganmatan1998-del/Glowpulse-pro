@@ -110,6 +110,9 @@ single file `dist/index.html`.
   public GET /calendar/oauth → refresh token + account email in jarvis_meta
   `google_calendar`. Every calendar reply carries `calendar` (whose). The
   consent URL goes to the browser, never to the model.
+  googleClient() cleans both values (whitespace, quotes, a pasted label):
+  a dirty secret only fails at the LAST step, as invalid_client, after he
+  has approved everything — and each oauth failure names its own fix.
 - **"Ran" is not "worked".** turnToolSucceeded (set from the RESULT, not the
   dispatch) gates the voice's held claims and a second corrective pass for
   "every tool failed, yet he says done". roundBoundary() sends '\n' to the

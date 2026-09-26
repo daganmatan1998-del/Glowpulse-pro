@@ -14,12 +14,24 @@ export function resolve(slot, seen = new Set()) {
 
 export const isReal = (slot) => Boolean(manifest[slot]);
 
-export const srcset = (slot, ext) =>
-  manifest[slot].widths.map((w) => `/assets/img/${slot}-${w}.${ext} ${w}w`).join(', ');
+// A manifest entry is either local ({w, h, widths}: files in assets/img) or
+// remote ({w, h, webp}: one full-resolution WebP on a CDN).
+const isRemote = (slot) => Boolean(manifest[slot]?.webp);
+
+/** srcset for one format, or '' when that format doesn't exist for the slot. */
+export const srcset = (slot, ext) => {
+  const m = manifest[slot];
+  if (isRemote(slot)) return ext === 'webp' ? `${m.webp} ${m.w}w` : '';
+  return m.widths.map((w) => `/assets/img/${slot}-${w}.${ext} ${w}w`).join(', ');
+};
+
+/** The best preloadable format for a slot: local AVIF, or the remote WebP. */
+export const preloadFormat = (slot) => (isRemote(slot) ? 'webp' : 'avif');
 
 export const imageUrl = (slot, width = 1080) => {
   const s = resolve(slot);
   if (!s) return null;
+  if (isRemote(s)) return manifest[s].webp;
   const w = manifest[s].widths.reduce((a, b) => (Math.abs(b - width) < Math.abs(a - width) ? b : a));
   return `/assets/img/${s}-${w}.jpg`;
 };
@@ -51,6 +63,7 @@ export function picture({
   const mobileSources =
     ms && ms !== s
       ? ['avif', 'webp', 'jpg']
+          .filter((ext) => srcset(ms, ext))
           .map(
             (ext) =>
               `<source media="(max-width: 767px)" type="image/${ext === 'jpg' ? 'jpeg' : ext}" srcset="${srcset(ms, ext)}" sizes="100vw" width="${manifest[ms].w}" height="${manifest[ms].h}">`,
@@ -58,6 +71,11 @@ export function picture({
           .join('')
       : '';
   const pos = IMAGES[s]?.position || '50% 50%';
+  const load = priority ? 'fetchpriority="high" loading="eager"' : 'loading="lazy"';
+  const imgAttrs = `width="${m.w}" height="${m.h}" alt="${esc(realAlt)}" style="object-position:${pos}" ${load} decoding="async"`;
+  if (isRemote(s)) {
+    return `<picture class="${className}">${mobileSources}<img src="${m.webp}" ${imgAttrs}></picture>`;
+  }
   const mid = m.widths[Math.min(2, m.widths.length - 1)];
-  return `<picture class="${className}">${mobileSources}<source type="image/avif" srcset="${srcset(s, 'avif')}" sizes="${sizes}"><source type="image/webp" srcset="${srcset(s, 'webp')}" sizes="${sizes}"><img src="/assets/img/${s}-${mid}.jpg" srcset="${srcset(s, 'jpg')}" sizes="${sizes}" width="${m.w}" height="${m.h}" alt="${esc(realAlt)}" style="object-position:${pos}" ${priority ? 'fetchpriority="high" loading="eager"' : 'loading="lazy"'} decoding="async"></picture>`;
+  return `<picture class="${className}">${mobileSources}<source type="image/avif" srcset="${srcset(s, 'avif')}" sizes="${sizes}"><source type="image/webp" srcset="${srcset(s, 'webp')}" sizes="${sizes}"><img src="/assets/img/${s}-${mid}.jpg" srcset="${srcset(s, 'jpg')}" sizes="${sizes}" ${imgAttrs}></picture>`;
 }

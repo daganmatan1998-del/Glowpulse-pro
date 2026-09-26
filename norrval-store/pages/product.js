@@ -20,7 +20,10 @@ const gallerySlots = () => GALLERY.filter(isReal);
 
 export function productSchema() {
   const price = PRODUCT.price[cur];
-  const images = gallerySlots().map((s) => STORE.siteUrl.replace(/\/$/, '') + imageUrl(s, 1440));
+  const images = gallerySlots().map((s) => {
+    const u = imageUrl(s, 1440);
+    return /^https?:/.test(u) ? u : STORE.siteUrl.replace(/\/$/, '') + u;
+  });
   const specs = PRODUCT.specifications.filter(([, v]) => v);
   return {
     '@context': 'https://schema.org',

@@ -3,7 +3,7 @@ import { REVIEWS } from '../data/reviews.js';
 import { IMAGES } from '../data/images.js';
 import { esc, txt, money } from '../utils/html.js';
 import { ICONS } from '../components/icons.js';
-import { picture, resolve, isReal, srcset } from '../components/picture.js';
+import { picture, resolve, isReal, srcset, preloadFormat } from '../components/picture.js';
 import { layout, orgSchema } from '../components/layout.js';
 import { productSchema } from './product.js';
 
@@ -275,7 +275,7 @@ export function homePage() {
     if (!d) return '';
     // Preload only the AVIF the browser will actually pick.
     const tag = (slot, media) =>
-      `<link rel="preload" as="image" type="image/avif" imagesrcset="${srcset(slot, 'avif')}" imagesizes="100vw" media="${media}" fetchpriority="high">`;
+      `<link rel="preload" as="image" type="image/${preloadFormat(slot)}" imagesrcset="${srcset(slot, preloadFormat(slot))}" imagesizes="100vw" media="${media}" fetchpriority="high">`;
     return m && m !== d
       ? tag(m, '(max-width: 767px)') + tag(d, '(min-width: 768px)')
       : tag(d, 'all');

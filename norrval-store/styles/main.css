@@ -617,7 +617,7 @@ h3 {
   position: relative;
   z-index: 2;
   padding-bottom: clamp(40px, 8vh, 96px);
-  padding-top: calc(125vw * 0.63);
+  padding-top: calc(125vw * 0.74);
 }
 .hero__content .lead {
   color: #c3cad1;

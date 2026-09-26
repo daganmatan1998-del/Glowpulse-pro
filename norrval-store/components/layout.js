@@ -215,7 +215,8 @@ export function layout({
 }) {
   const url = STORE.siteUrl.replace(/\/$/, '') + path;
   const fullTitle = path === '/' ? title : `${title} | ${STORE.brand}`;
-  const og = STORE.siteUrl.replace(/\/$/, '') + (ogImage || imageUrl('ad', 1080) || imageUrl('hero-desktop', 1440) || '/assets/og.jpg');
+  const ogPath = ogImage || imageUrl('ad', 1080) || imageUrl('hero-desktop', 1440) || '/assets/og.jpg';
+  const og = /^https?:/.test(ogPath) ? ogPath : STORE.siteUrl.replace(/\/$/, '') + ogPath;
   return `<!doctype html>
 <html lang="${STORE.locale}">
 <head>

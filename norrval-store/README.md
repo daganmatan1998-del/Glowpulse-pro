@@ -66,6 +66,10 @@ Every shot is generated for its container. None is a crop of another.
 | wrist | 4:5 | Lifestyle scroller, product page, gallery | Prompt ready |
 | ad | 1:1 | Paid social; also the Open Graph image | Prompt ready |
 
+Until you self-host, the five generated shots load from Higgsfield's public
+CDN (`data/remote-images.json`: full-resolution WebP, about 150–200 KB each).
+A local file in `assets/source/` always takes over from the remote copy.
+
 A slot with no image is left out of the gallery and the lifestyle scroller. In
 a section that needs an image, it falls back to a *different* real shot
 (`fallback` in the registry) and uses that shot's own alt text. You never get a

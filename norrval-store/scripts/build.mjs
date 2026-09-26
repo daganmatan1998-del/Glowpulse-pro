@@ -9,7 +9,10 @@ const DIST = path.join(ROOT, 'dist');
 
 const { setManifest } = await import('../components/picture.js');
 const manifestPath = path.join(ROOT, 'assets/img/manifest.json');
-setManifest(fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : {});
+// Local, self-hosted images win; Higgsfield-hosted copies fill any slot without one.
+const local = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : {};
+const { _note, ...remote } = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/remote-images.json'), 'utf8'));
+setManifest({ ...remote, ...local });
 
 const { STORE } = await import('../data/store.js');
 const { homePage } = await import('../pages/home.js');

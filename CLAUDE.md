@@ -120,6 +120,20 @@ single file `dist/index.html`.
   first of the next were glued into one, and a correction was held along
   with the false claim it followed. Hebrew negation (לא/אל before the verb)
   is not a claim.
+- **Screen watching (2.9.0) needs the rebuilt app.** "Can you see my
+  screen" → every message carries a fresh capture from capture_screen_frame
+  (main.rs; 1280px PNG, never written to disk — take_screenshot's saving
+  stays for real screenshots) until "thank you jarvis" and the like, or ten
+  quiet minutes. Start/end are matched in handleSend by screenWatchCommand
+  BEFORE the local command detectors (else "look at my screen" is the
+  camera's "look at this"), and the capture is added after the message is
+  drawn and only when it goes to the model. Only the newest capture is sent;
+  stopping drops them all from chatHistory (dropScreenFrames), or the last
+  one kept riding along after "thanks". The watch_screen tool puts its
+  capture BESIDE the tool_result (payload.__attach), never inside it — inside
+  it reaches every non-Anthropic engine as base64 text. A build without
+  capture_screen_frame refuses honestly; it never falls back to
+  take_screenshot, which would save a file per sentence.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.

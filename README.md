@@ -53,6 +53,22 @@ The permission is kept in D1 (`jarvis_meta`), so no refresh token has to be
 copied anywhere. An existing `GOOGLE_REFRESH_TOKEN` still works; a connection
 made from the app takes precedence over it.
 
+## Watching the screen, on request
+
+"Hey Jarvis, can you see my screen?" (or "תסתכל על המסך") turns it on, and an
+amber **◉ SCREEN** tag stays on the orb while it is. From then on every message
+carries a fresh capture of the primary screen, taken the moment you spoke, so a
+question is always answered about the screen as it is now. "Thank you, Jarvis",
+"thanks for helping", "תודה על העזרה", "stop watching" — or ten quiet minutes —
+turn it off, and the captures are dropped. "Thanks — and what's this button?" is a
+new question and does not.
+
+It is a look each time you speak, not a video stream: nothing is sent while you
+are not talking to him. The captures come from `capture_screen_frame` in the
+desktop app and are never saved to disk, so **this needs the app rebuilt**; an
+older build says so rather than filling Pictures\Screenshots with a file per
+sentence.
+
 ## One thing to know before you set `ALLOWED_ORIGIN`
 
 It defaults to `*`, which reflects whatever origin asked — so both the website

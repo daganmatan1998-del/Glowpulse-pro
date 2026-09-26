@@ -638,6 +638,21 @@
   #approvalsPanel button:hover{ background:rgba(255,255,255,0.12); }
   #approvalsPanel .apEmpty{ opacity:0.6; padding:6px 2px; }
 
+  /* WATCHING YOUR SCREEN. Shown the whole time screen watching is on, in the
+     small orb as well as expanded: being looked at is exactly the thing he
+     must never have to wonder about. Amber, the colour this panel already
+     uses for "busy with something", and never clickable. */
+  #screenWatchTag{ display:none; }
+  html.screen-watch #screenWatchTag{
+    display:block; position:fixed; top:6px; left:50%; transform:translateX(-50%);
+    z-index:96; pointer-events:none; white-space:nowrap;
+    font:700 9px/1 'Courier New', Consolas, monospace; letter-spacing:2px;
+    color:#ffb020; background:rgba(0,10,20,0.8);
+    border:1px solid rgba(255,176,32,0.75); border-radius:10px; padding:3px 7px;
+    box-shadow:0 0 8px rgba(255,176,32,0.45);
+  }
+  html.screen-watch.orb-expanded #screenWatchTag{ top:16px; font-size:11px; padding:4px 10px; }
+
   /* A thin ring that reports state at a glance, since there is no text here:
      dim when idle, brighter and pulsing while listening, steady while he
      speaks. It sits outside the canvas so the hologram is never obscured. */
@@ -1479,6 +1494,7 @@
      dashboard nobody asked for. -->
 <div id="approvalsBadge" title="Pending approvals"></div>
 <div id="approvalsPanel"></div>
+<div id="screenWatchTag" aria-hidden="true">&#9673; SCREEN</div>
 <!-- The full-screen environment's frame. Present always, painted only in
      .orb-expanded, and pointer-events:none throughout — it is something to
      read, never something to click, so it cannot swallow a click meant for
@@ -1928,6 +1944,11 @@ const I18N = {
     saidNotDone: 'He described doing something and no tool ran, so it did not happen. The sentence was not spoken. Nothing was changed on your machine.',
     calendarConnectOpened: '\u25B8 opened Google to connect your calendar \u2014 pick the account and approve',
     calendarConnectLink: 'Open this to connect your Google Calendar:',
+    screenWatchOn: '\u25C9 watching your screen \u2014 say \u201cthanks\u201d when you are done',
+    screenWatchOff: '\u25CB stopped watching your screen',
+    screenWatchIdle: '\u25CB stopped watching your screen after 10 quiet minutes',
+    screenWatchNeedsRebuild: 'Watching the screen needs the rebuilt desktop app \u2014 this build cannot capture the screen without saving a file. Rebuild the app and ask again.',
+    screenWatchFailed: 'Could not capture the screen: {why}',
     cameraDescribed: 'Note: no engine on your worker takes pictures directly, so anything you show him is described by a vision model first and he answers from the description. Fine detail — small print, exact shades — may not survive that. Set ANTHROPIC_API_KEY, or point the chain at a model that sees, for him to look at it himself.',
     cameraNoFrameYet: 'The camera has not produced a usable picture yet — give it a second and ask again.',
     cameraBlind: 'The camera is on, but no engine connected to your worker can see pictures — the worker strips them out on the way, so what you hold up will not reach him. Fix it on Cloudflare: set ANTHROPIC_API_KEY, or point the chain at a model that can see (Gemini, GPT-4o, Grok, Llama 4), or add that model to VISION_ENGINES.',
@@ -2167,6 +2188,11 @@ const I18N = {
     saidNotDone: 'הוא תיאר פעולה ושום כלי לא רץ, אז זה לא קרה. המשפט לא הושמע. שום דבר לא השתנה במחשב שלך.',
     calendarConnectOpened: '\u25B8 נפתח Google לחיבור היומן \u2014 תבחר את החשבון ותאשר',
     calendarConnectLink: 'פתח את זה כדי לחבר את יומן Google:',
+    screenWatchOn: '\u25c9 \u05e6\u05d5\u05e4\u05d4 \u05d1\u05de\u05e1\u05da \u05e9\u05dc\u05da \u2014 \u05ea\u05d2\u05d9\u05d3 \"\u05ea\u05d5\u05d3\u05d4\" \u05db\u05e9\u05e1\u05d9\u05d9\u05de\u05ea',
+    screenWatchOff: '\u25cb \u05d4\u05e4\u05e1\u05e7\u05ea\u05d9 \u05dc\u05e6\u05e4\u05d5\u05ea \u05d1\u05de\u05e1\u05da',
+    screenWatchIdle: '\u25cb \u05d4\u05e4\u05e1\u05e7\u05ea\u05d9 \u05dc\u05e6\u05e4\u05d5\u05ea \u05d1\u05de\u05e1\u05da \u05d0\u05d7\u05e8\u05d9 10 \u05d3\u05e7\u05d5\u05ea \u05e9\u05dc \u05e9\u05e7\u05d8',
+    screenWatchNeedsRebuild: '\u05e6\u05e4\u05d9\u05d9\u05d4 \u05d1\u05de\u05e1\u05da \u05d3\u05d5\u05e8\u05e9\u05ea \u05dc\u05d1\u05e0\u05d5\u05ea \u05de\u05d7\u05d3\u05e9 \u05d0\u05ea \u05d0\u05e4\u05dc\u05d9\u05e7\u05e6\u05d9\u05d9\u05ea \u05d4\u05d3\u05e1\u05e7\u05d8\u05d5\u05e4 \u2014 \u05d4\u05d2\u05e8\u05e1\u05d4 \u05d4\u05d6\u05d5 \u05dc\u05d0 \u05d9\u05d5\u05d3\u05e2\u05ea \u05dc\u05e6\u05dc\u05dd \u05d0\u05ea \u05d4\u05de\u05e1\u05da \u05d1\u05dc\u05d9 \u05dc\u05e9\u05de\u05d5\u05e8 \u05e7\u05d5\u05d1\u05e5. \u05ea\u05d1\u05e0\u05d4 \u05de\u05d7\u05d3\u05e9 \u05d5\u05ea\u05d1\u05e7\u05e9 \u05e9\u05d5\u05d1.',
+    screenWatchFailed: '\u05dc\u05d0 \u05d4\u05e6\u05dc\u05d7\u05ea\u05d9 \u05dc\u05e6\u05dc\u05dd \u05d0\u05ea \u05d4\u05de\u05e1\u05da: {why}',
     cameraDescribed: 'שים לב: אף מנוע ב-worker שלך לא מקבל תמונות ישירות, אז כל מה שתראה לו עובר קודם תיאור על ידי מודל ראייה, והוא עונה מהתיאור. פרטים עדינים — אותיות קטנות, גוונים מדויקים — עלולים לא לשרוד. להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה, כדי שיסתכל בעצמו.',
     cameraNoFrameYet: 'המצלמה עוד לא הפיקה תמונה שמישהי — תן לה עוד רגע ותנסה שוב.',
     cameraBlind: 'המצלמה פתוחה, אבל אף מנוע שמחובר ל-worker שלך לא יכול לראות תמונות — ה-worker מסנן אותן בדרך, ומה שתרים לא יגיע אליו. לתקן ב-Cloudflare: להגדיר ANTHROPIC_API_KEY, או לכוון למודל שרואה (Gemini, GPT-4o, Grok, Llama 4), או להוסיף אותו ל-VISION_ENGINES.',
@@ -2398,7 +2424,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.8.3';
+const APP_VERSION = '2.9.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -11835,7 +11861,7 @@ async function callCloseWindowTool(){
 
 const SCREENSHOT_TOOL = {
   name: 'take_screenshot',
-  description: "Capture what is on his screen right now. Desktop only.\n\nUSE IT WHENEVER HE ASKS FOR A SCREENSHOT, in either language and in any phrasing: \"take a screenshot\", \"screenshot\", \"capture my screen\", \"grab the screen\", \"קח צילום מסך\", \"תצלם את המסך\", \"צלם מסך\", \"תצלם לי את זה\", \"תעשה סקרין שוט\". Do not ask him to confirm and do not explain that you are about to — just take it.\n\nAlso use it when answering needs you to SEE the screen: \"what does this error say\", \"why does this look wrong\", \"read this for me\", \"what am I looking at\". The image comes back to you directly, so you can read text, diagnose a layout, or pull data off the page.\n\nThe file is also saved into his Pictures/Screenshots folder, so it appears in his gallery like any other screenshot. Captures the primary monitor whole; you cannot choose a region or a second screen.\n\nAfter taking one, say in one short sentence what you can see, or answer whatever he asked about it. Do not describe the whole screen unless he asked for that.",
+  description: "Capture what is on his screen right now, once. Desktop only. If he asks whether you can see his screen, or to look at, watch or help with what is on it, use watch_screen instead: that keeps looking with every message until he thanks you.\n\nUSE IT WHENEVER HE ASKS FOR A SCREENSHOT, in either language and in any phrasing: \"take a screenshot\", \"screenshot\", \"capture my screen\", \"grab the screen\", \"קח צילום מסך\", \"תצלם את המסך\", \"צלם מסך\", \"תצלם לי את זה\", \"תעשה סקרין שוט\". Do not ask him to confirm and do not explain that you are about to — just take it.\n\nAlso use it when answering needs you to SEE the screen: \"what does this error say\", \"why does this look wrong\", \"read this for me\", \"what am I looking at\". The image comes back to you directly, so you can read text, diagnose a layout, or pull data off the page.\n\nThe file is also saved into his Pictures/Screenshots folder, so it appears in his gallery like any other screenshot. Captures the primary monitor whole; you cannot choose a region or a second screen.\n\nAfter taking one, say in one short sentence what you can see, or answer whatever he asked about it. Do not describe the whole screen unless he asked for that.",
   input_schema: { type: 'object', properties: {}, required: [] }
 };
 
@@ -11863,6 +11889,236 @@ async function callScreenshotTool(){
   }catch(err){
     return { error: String((err && err.message) || err) };
   }
+}
+
+/* =====================================================================
+   WATCHING HIS SCREEN — on request, until he says thanks.
+
+   "Hey Jarvis, can you see my screen?" turns it on; from then on every
+   message he sends carries a fresh capture of the primary screen, taken the
+   moment he spoke, so "what does this error mean" is answered about the
+   screen as it is now and not as it was when he first asked. "Thank you,
+   Jarvis" (or "thanks for helping", "\u05ea\u05d5\u05d3\u05d4 \u05e2\u05dc \u05d4\u05e2\u05d6\u05e8\u05d4", "stop watching") turns it
+   off. Not a video stream to the cloud: a look each time he speaks, which
+   is what "watching" means for a conversation, at a fraction of the cost
+   and without sending his screen anywhere while he is not talking to him.
+
+   Start and stop are matched HERE, not left to the model, for the reason
+   every other mode switch in this file is: it must work whatever engine is
+   answering, and "thanks" ending it must be certain, not interpreted. The
+   watch_screen tool covers every other phrasing. Only the newest capture
+   is ever sent (trimStaleFrames), and capture_screen_frame never writes a
+   file — take_screenshot's saving is for screenshots he asked to keep.
+   ===================================================================== */
+const SCREEN_WATCH_IDLE_MS = 10 * 60 * 1000;
+let screenWatch = false;
+let screenWatchLastAt = 0;
+let screenTurnNote = '';       // said to the model for this one turn only
+
+const SCREEN_START_PATTERNS = [
+  /\b(?:can|could|do|did)\s+you\s+see\s+(?:my|the|this)\s+(?:screen|monitor|display|computer)\b/,
+  /\byou\s+(?:can\s+)?see\s+my\s+(?:screen|monitor|display)\b/,
+  /\b(?:look|looking|glance)\s+at\s+(?:my|the|this)\s+(?:screen|monitor|display)\b/,
+  /\b(?:watch|check|read)\s+(?:out\s+)?(?:my|the)\s+(?:screen|monitor|display)\b/,
+  /\bwhats?\s+(?:is\s+)?on\s+my\s+(?:screen|monitor|display)\b/,
+  /\bshare\s+my\s+screen\b/,
+  /\u05e8\u05d5\u05d0\u05d4\s+\u05d0\u05ea\s+(?:\u05d4)?\u05de\u05e1\u05da/,
+  /(?:\u05ea\u05e1\u05ea\u05db\u05dc|\u05ea\u05d1\u05d9\u05d8|\u05ea\u05e6\u05e4\u05d4|\u05ea\u05e2\u05e7\u05d5\u05d1)\s+(?:\u05e2\u05dc\s+|\u05d0\u05d7\u05e8\u05d9\s+)?(?:\u05d1)?(?:\u05d4)?\u05de\u05e1\u05da/,
+  /(?:\u05ea\u05e8\u05d0\u05d4|\u05ea\u05d1\u05d3\u05d5\u05e7|\u05ea\u05e7\u05e8\u05d0)\s+(?:\u05d0\u05ea\s+)?(?:\u05de\u05d4\s+(?:\u05d9\u05e9|\u05e9\u05d9\u05e9|\u05e8\u05e9\u05d5\u05dd|\u05db\u05ea\u05d5\u05d1)\s+)?(?:\u05dc\u05d9\s+)?(?:\u05e2\u05dc\s+|\u05d1)?(?:\u05d4)?\u05de\u05e1\u05da/,
+  /\u05de\u05d4\s+(?:\u05d9\u05e9|\u05e8\u05e9\u05d5\u05dd|\u05db\u05ea\u05d5\u05d1)\s+(?:\u05dc\u05d9\s+)?(?:\u05e2\u05dc\s+|\u05d1)(?:\u05d4)?\u05de\u05e1\u05da/
+];
+const SCREEN_STOP_PATTERNS = [
+  /\b(?:stop|quit)\s+(?:watching|looking|viewing|seeing)\b/,
+  /\byou\s+can\s+stop\s+(?:watching|looking)\b/,
+  /\b(?:dont|do\s+not)\s+(?:watch|look\s+at)\s+my\s+(?:screen|monitor)\b/,
+  /\b(?:close|shut)\s+your\s+eyes\b/,
+  /(?:\u05ea\u05e4\u05e1\u05d9\u05e7|\u05d3\u05d9|\u05d0\u05e4\u05e9\u05e8\s+\u05dc\u05d4\u05e4\u05e1\u05d9\u05e7|\u05d0\u05ea\u05d4\s+\u05d9\u05db\u05d5\u05dc\s+\u05dc\u05d4\u05e4\u05e1\u05d9\u05e7)\s+(?:\u05dc\u05d4\u05e1\u05ea\u05db\u05dc|\u05dc\u05e6\u05e4\u05d5\u05ea|\u05dc\u05e8\u05d0\u05d5\u05ea)/,
+  /\u05d0\u05dc\s+(?:\u05ea\u05e1\u05ea\u05db\u05dc|\u05ea\u05e6\u05e4\u05d4)\s+(?:\u05e2\u05dc\s+|\u05d1)?(?:\u05d4)?\u05de\u05e1\u05da/
+];
+/* "Thank you, Jarvis" ends it; "thanks — and what is this button?" is a
+   new question and must not. So a thanks ends the watching only when
+   everything else in the sentence is courtesy: the name, "so much", "for
+   the help", "that's all". Normalised by normaliseHeard, which deletes
+   apostrophes — "that's" arrives as "thats". */
+const SCREEN_THANKS = ['thanks','thank','thx','ty','cheers','appreciate','\u05ea\u05d5\u05d3\u05d4'];
+const SCREEN_DONE = /\b(?:thats\s+(?:all|it)|were\s+done|im\s+done|all\s+done|done)\b|\u05d6\u05d4\u05d5|\u05d6\u05d4\s+\u05d4\u05db(?:\u05d5)?\u05dc|\u05e1\u05d9\u05d9\u05de\u05e0\u05d5|\u05d2\u05de\u05e8\u05e0\u05d5/;
+const SCREEN_COURTESY = new Set(['you','so','much','very','a','lot','for','the','your','all','help','helping','helped',
+  'me','thats','that','is','it','its','were','we','im','done','ok','okay','great','perfect','awesome','nice','good',
+  'cool','hey','hi','man','bro','buddy','again','now','and','bye','goodbye','appreciated','really','just','this','sir',
+  '\u05e8\u05d1\u05d4','\u05e2\u05dc','\u05d4\u05e2\u05d6\u05e8\u05d4','\u05e2\u05d6\u05e8\u05d4','\u05e9\u05e2\u05d6\u05e8\u05ea','\u05dc\u05d9','\u05d6\u05d4\u05d5','\u05d6\u05d4','\u05d4\u05db\u05dc','\u05d4\u05db\u05d5\u05dc','\u05e1\u05d1\u05d1\u05d4','\u05d0\u05d7\u05dc\u05d4','\u05de\u05e2\u05d5\u05dc\u05d4',
+  '\u05d9\u05d5\u05e4\u05d9','\u05d0\u05d7\u05d9','\u05dc\u05da','\u05de\u05de\u05e9','\u05d0\u05d5\u05e7\u05d9\u05d9','\u05d0\u05d5\u05e7\u05d9','\u05d8\u05d5\u05d1','\u05d1\u05e1\u05d3\u05e8','\u05e1\u05d9\u05d9\u05de\u05e0\u05d5','\u05d2\u05de\u05e8\u05e0\u05d5','\u05d1\u05d9\u05d9','\u05d4\u05d9\u05d9']);
+
+/* 'start' only while not watching, 'end' only while watching, else null. */
+function screenWatchCommand(text, watching){
+  const norm = normaliseHeard(text);
+  if(!norm) return null;
+  const words = norm.split(' ').filter(Boolean);
+  if(watching){
+    if(SCREEN_STOP_PATTERNS.some(re => re.test(norm))) return 'end';
+    const thanked = words.some(w => SCREEN_THANKS.indexOf(w) >= 0);
+    const done = SCREEN_DONE.test(norm);
+    const onlyCourtesy = words.length <= 12 && words.every(w =>
+      SCREEN_THANKS.indexOf(w) >= 0 || SCREEN_COURTESY.has(w) || wordIsName(w));
+    if((thanked || done) && onlyCourtesy) return 'end';
+    return null;
+  }
+  if(SCREEN_STOP_PATTERNS.some(re => re.test(norm))) return null;   // "don't look at my screen"
+  return SCREEN_START_PATTERNS.some(re => re.test(norm)) ? 'start' : null;
+}
+
+function setScreenWatch(on){
+  screenWatch = !!on;
+  screenWatchLastAt = on ? Date.now() : 0;
+  document.documentElement.classList.toggle('screen-watch', screenWatch);
+}
+
+async function captureScreenFrame(){
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!IS_DESKTOP || !invoke) return { error: 'only the desktop app can see the screen' };
+  try{
+    /* Bounded: the capture happens before his message goes anywhere, so a
+       capture that never returned would hold the message with it. */
+    const b64 = await Promise.race([
+      invoke('capture_screen_frame'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('the screen capture took too long')), 4000))
+    ]);
+    if(!b64) return { error: 'the capture came back empty' };
+    /* live: only the newest is ever sent. screen: it is not a photo he
+       chose, and not a camera frame either — see askJarvis. */
+    return { frame: { kind:'image', media_type:'image/png', data: b64, live:true, screen:true } };
+  }catch(err){
+    const why = String((err && err.message) || err);
+    /* An app built before this existed answers "command ... not found". */
+    return { error: why, rebuild: /not\s+found|unknown\s+command|capture_screen_frame/i.test(why) };
+  }
+}
+
+const SCREEN_NOTE_WATCHING =
+  '\n\nYOU ARE WATCHING HIS SCREEN. He asked you to, and until he thanks you or says he is done, each ' +
+  'message he sends carries a capture of his primary screen taken the moment he spoke. The newest screen ' +
+  'image is his screen right now; older ones are gone. Answer about what is on it directly, as someone ' +
+  'looking at the same screen: read what is written there, name the window or the element he means. If ' +
+  'he asks you to DO something, do it with your tools as usual \u2014 the capture is context, not the ' +
+  'subject of every sentence. If what he asks about is too small or cut off to read, say so rather than ' +
+  'guess. The app ends the watching itself when he thanks you; after that you do not see his screen.';
+const SCREEN_NOTE_STARTED =
+  '\n\nHE HAS JUST ASKED WHETHER YOU CAN SEE HIS SCREEN, AND YOU CAN: the newest screen capture is his ' +
+  'screen at this moment. Say yes, name in a few words what is in front of him, and answer anything else ' +
+  'he asked. Do not describe the whole screen.';
+const SCREEN_NOTE_ENDED =
+  '\n\nHE HAS JUST ENDED THE SCREEN WATCHING \u2014 he thanked you or said he is done. You no longer ' +
+  'see his screen. Reply briefly and warmly, and do not describe the screen.';
+function screenNoteFailed(got){
+  return '\n\nHE ASKED YOU TO LOOK AT HIS SCREEN, BUT YOU CANNOT SEE IT: ' +
+    (got.rebuild ? 'this build of the desktop app cannot capture the screen yet; it has to be rebuilt with the new version'
+                 : 'the capture failed (' + got.error + ')') +
+    '. Say that plainly and what would fix it. Never describe or guess at his screen.';
+}
+
+async function startScreenWatch(){
+  const got = await captureScreenFrame();
+  if(!got.frame){
+    addMessage('system', got.rebuild ? t('screenWatchNeedsRebuild') : t('screenWatchFailed').replace('{why}', got.error));
+    screenTurnNote = screenNoteFailed(got);
+    return got;
+  }
+  setScreenWatch(true);
+  addMessage('system', t('screenWatchOn'));
+  screenTurnNote = SCREEN_NOTE_STARTED;
+  return got;
+}
+
+/* Screen captures out of the history kept in memory: all but the newest
+   while watching (only the newest is ever sent), and every one of them once
+   watching stops. trimStaleFrames keeps the newest frame in each request —
+   right for a look in progress, wrong after "thanks": the last capture
+   would have gone on riding along with every message he sent afterwards. */
+function dropScreenFrames(keepNewest){
+  let newest = -1;
+  if(keepNewest){
+    for(let i = chatHistory.length - 1; i >= 0; i--){
+      if(chatHistory[i] && chatHistory[i].screenFrame){ newest = i; break; }
+    }
+  }
+  for(let i = 0; i < chatHistory.length; i++){
+    const m = chatHistory[i];
+    if(i === newest || !m || !m.screenFrame) continue;
+    const { liveFrame, screenFrame, ...rest } = m;
+    const content = Array.isArray(m.content)
+      ? [{ type:'text', text:'[a screen capture was here; it has been dropped]' }]
+          .concat(m.content.filter(b => b && b.type !== 'image'))
+      : m.content;
+    chatHistory[i] = Object.assign(rest, { content });
+  }
+}
+
+function stopScreenWatch(why){
+  if(!screenWatch) return;
+  setScreenWatch(false);
+  dropScreenFrames(false);
+  addMessage('system', t(why === 'idle' ? 'screenWatchIdle' : 'screenWatchOff'));
+  if(why !== 'idle') screenTurnNote = SCREEN_NOTE_ENDED;
+}
+
+/* The look that rides along with a message while watching is on. */
+async function freshScreenFrame(){
+  if(!screenWatch) return null;
+  if(Date.now() - screenWatchLastAt > SCREEN_WATCH_IDLE_MS){ stopScreenWatch('idle'); return null; }
+  const got = await captureScreenFrame();
+  if(!got.frame){
+    screenTurnNote = '\n\nYOUR LOOK AT HIS SCREEN FAILED THIS TIME (' + got.error + '). You do not see it now; ' +
+                     'say so if he asks about it, and never answer from an older capture as if it were current.';
+    return null;
+  }
+  screenWatchLastAt = Date.now();
+  return got.frame;
+}
+
+function screenWatchNote(){
+  return (screenWatch ? SCREEN_NOTE_WATCHING : '') + (screenTurnNote || '');
+}
+
+/* Ten quiet minutes and he is not being watched any more — the tag should
+   not sit on his screen all afternoon because he forgot to say thanks. */
+setInterval(() => {
+  if(screenWatch && Date.now() - screenWatchLastAt > SCREEN_WATCH_IDLE_MS) stopScreenWatch('idle');
+}, 30000);
+
+const WATCH_SCREEN_TOOL = {
+  name: 'watch_screen',
+  description: "Start or stop watching his screen. Desktop only. on:true when he asks whether you can see his screen, or asks you to look at, watch or help with something on it, and you are not already watching: from then on every message he sends carries a fresh capture of his primary screen taken the moment he spoke, until he thanks you or says he is done. on:false when he asks you to stop looking. For \"take a screenshot\" use take_screenshot instead.",
+  input_schema: {
+    type: 'object',
+    properties: { on: { type:'boolean', description:'true to start watching, false to stop.' } },
+    required: ['on']
+  }
+};
+
+async function callWatchScreenTool(input){
+  if(!IS_DESKTOP) return { error: 'only available in the desktop app' };
+  if(input && input.on === false){
+    const was = screenWatch;
+    stopScreenWatch('asked');
+    return { ok: true, watching: false, note: was ? 'Stopped. You no longer see his screen.' : 'You were not watching his screen.' };
+  }
+  const got = screenWatch ? await captureScreenFrame() : await startScreenWatch();
+  if(!got.frame){
+    return { error: got.rebuild ? 'this build of the desktop app cannot capture the screen' : got.error,
+             tell_the_user: got.rebuild
+               ? 'Watching the screen needs the rebuilt desktop app; this build cannot capture the screen yet.'
+               : 'The screen could not be captured: ' + got.error };
+  }
+  if(screenWatch) screenWatchLastAt = Date.now();
+  /* The capture goes BESIDE the result, as its own image block, not inside
+     it: a picture inside a tool result reaches Claude as a picture but
+     every other engine as a string of base64. Beside it, the worker hands
+     it to a model that can see or has it described first. */
+  return { ok: true, watching: true,
+           note: 'You are watching his screen now; the image after this result is it, as it is this moment.',
+           __attach: [
+             { type:'image', source:{ type:'base64', media_type:'image/png', data: got.frame.data } },
+             { type:'text', text:'[His screen, captured just now for watch_screen.]' }
+           ] };
 }
 
 async function callCloseNamedTool(input){
@@ -13016,8 +13272,7 @@ async function readMessageStream(response, onText){
 /* Either he is being looked at this turn, or he is being remembered from
    the last one. Never both: a look replaces the note it is about to write. */
 function cameraSystemExtras(){
-  if(lookPending) return LOOK_INSTRUCTION;
-  return seenNote();
+  return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote();
 }
 
 async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget){
@@ -13058,7 +13313,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     requestBody.tools = fullCapability()
       ? [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL, MAKE_ZIP_TOOL, BUILD3D_TOOL]
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
-    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL,
+    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                           TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                           WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                           NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL);
@@ -13078,7 +13333,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     /* Desktop only, and not gated behind ULTRON: opening a link is an everyday
        errand, not heavy work. In the browser the capability does not exist at
        all, so offering it there would only invite a promise it cannot keep. */
-    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, CAMERA_TOOL,
+    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                       WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                       NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL);
@@ -13385,10 +13640,11 @@ function trimStaleFrames(messages){
       const { eyePrompt, ...bare } = m;
       return bare;
     }
-    const { liveFrame, eyePrompt, ...clean } = m;   // never send our own bookkeeping
+    const { liveFrame, eyePrompt, screenFrame, ...clean } = m;   // never send our own bookkeeping
     if(i === newestLive || !Array.isArray(clean.content)) return clean;
     const kept = clean.content.filter(b => b && b.type !== 'image');
-    kept.unshift({ type:'text', text:'[a camera frame was here; it has been dropped as out of date]' });
+    kept.unshift({ type:'text', text: screenFrame ? '[a screen capture was here; it has been dropped as out of date]'
+                                                  : '[a camera frame was here; it has been dropped as out of date]' });
     return { ...clean, content: kept };
   });
 }
@@ -13407,7 +13663,7 @@ async function askJarvis(userText, images, onText, tag){
   toolOrigin = (tag && tag.origin) || 'chat';
   if(images && images.length){
     // Keep the newest photo around: it is what "put MY product in a scene" needs.
-    const photo = images.filter(a => a.kind !== 'pdf' && a.kind !== 'text' && a.kind !== 'video').slice(-1)[0];
+    const photo = images.filter(a => a.kind !== 'pdf' && a.kind !== 'text' && a.kind !== 'video' && !a.screen).slice(-1)[0];
     if(photo && photo.data) lastAttachedImage = photo;
     const blocks = [];
     for(const att of images){
@@ -13434,9 +13690,14 @@ async function askJarvis(userText, images, onText, tag){
        the model verbatim and an unknown field there would be rejected. Stripped
        again in trimStaleFrames before anything is sent. */
     const wasLive = images.some(a => a && a.live);
-    const entry = wasLive ? { role:'user', content: blocks, liveFrame:true }
+    const wasScreen = images.some(a => a && a.screen);
+    const entry = wasLive ? (wasScreen ? { role:'user', content: blocks, liveFrame:true, screenFrame:true }
+                                       : { role:'user', content: blocks, liveFrame:true })
                           : { role:'user', content: blocks };
     chatHistory.push(tag ? { ...entry, ...tag } : entry);
+    /* Only the newest capture is ever sent, so the older ones would only
+       sit in memory — one per sentence while watching. */
+    if(wasScreen) dropScreenFrames(true);
   } else {
     const entry = { role:'user', content:userText };
     chatHistory.push(tag ? { ...entry, ...tag } : entry);
@@ -13483,6 +13744,7 @@ async function askJarvis(userText, images, onText, tag){
         const toolUseBlocks = (data.content || []).filter(b => b.type === 'tool_use');
         workingMessages = [...workingMessages, { role:'assistant', content:data.content }];
         const toolResults = [];
+        const attachAfterResults = [];
         for(const tu of toolUseBlocks){
           setToolStatus(toolStatusLabel(tu, loopGuard));
           /* Opened here, before the dispatch below, so that a tool which
@@ -13566,6 +13828,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCameraTool(tu.input);
           } else if(tu.name === 'take_screenshot'){
             payload = await callScreenshotTool();
+          } else if(tu.name === 'watch_screen'){
+            payload = await callWatchScreenTool(tu.input);
           } else if(tu.name === 'close_browser_tab'){
             payload = await callCloseTabTool(tu.input);
           } else if(tu.name === 'close_window_named'){
@@ -13596,6 +13860,12 @@ async function askJarvis(userText, images, onText, tag){
              process that request" with no idea which part broke. Surfacing the
              reason here means a misconfigured key or a dead endpoint names
              itself instead of hiding behind a generic apology. */
+          /* Blocks a tool hands the model BESIDE its result (a screen
+             capture): taken off before the payload is logged or sent. */
+          if(payload && payload.__attach){
+            attachAfterResults.push(...payload.__attach);
+            delete payload.__attach;
+          }
           logActionEnd(logEntry, payload);
           if(payload && !payload.error) turnToolSucceeded = true;
           else turnToolFailures.push({ tool: tu.name, error: String((payload && payload.error) || 'no result'),
@@ -13626,6 +13896,8 @@ async function askJarvis(userText, images, onText, tag){
             toolResults.push({ type:'tool_result', tool_use_id: tu.id, content: JSON.stringify(payload) });
           }
         }
+        /* After every tool_result, never before one: the results must lead. */
+        if(attachAfterResults.length) toolResults.push(...attachAfterResults);
         workingMessages = [...workingMessages, { role:'user', content:toolResults }];
         roundBoundary();
         data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
@@ -14799,7 +15071,8 @@ async function handleSend(){
      it is remembered as a line of text for the minute and a half
      afterwards. An attached photo is untouched by any of this: choosing a
      file is already asking. */
-  if(!images.length && text && liveActive() && detectWorkflowCommand(text) === 'look_now'){
+  if(!images.length && text && liveActive() && detectWorkflowCommand(text) === 'look_now' &&
+     !(IS_DESKTOP && screenWatchCommand(text, screenWatch))){
     const frame = grabLiveFrame();
     if(frame){
       images.push(frame);
@@ -14843,6 +15116,13 @@ async function handleSend(){
   renderImgPreviews();
   addMessage('user', text, images);
 
+  /* Screen watching starts and ends here, before any local command can
+     read the same words as something else ("look at my screen" is not the
+     camera's "look at this"). A recognised start or end skips the local
+     commands and goes to the model, which answers it. */
+  const screenCmd = IS_DESKTOP && text ? screenWatchCommand(text, screenWatch) : null;
+  if(screenCmd === 'end') stopScreenWatch('thanks');
+
   /* Mode switching is handled here rather than as a model tool, for three
      reasons. It has to work when every engine is down — a visual state of
      the app should not depend on a provider having credit. It has to be
@@ -14851,7 +15131,7 @@ async function handleSend(){
      normal mode" should never be *interpreted*, only matched. Anything that
      is not one of these phrases falls straight through to the model as usual. */
   const modeCmd = detectModeCommand(text);
-  if(modeCmd && !images.length){
+  if(modeCmd && !images.length && !screenCmd){
     /* Already there. Silence would be the wrong answer: his message is sitting
        in the log with nothing under it, which reads as the app having hung
        rather than as "nothing to do". */
@@ -14886,7 +15166,7 @@ async function handleSend(){
      numbers are worthless without something to say about them, and that
      needs the model. runWorkflowCommand returns false for it. */
   let modelText = text;
-  const plan = images.length ? null : planRequests(text);
+  const plan = (images.length || screenCmd) ? null : planRequests(text);
   if(plan){
     const done = [];
     for(const step of plan.steps){
@@ -14910,7 +15190,7 @@ async function handleSend(){
        neither repeats it nor claims it cannot. */
     modelText = (done.length ? '[Already done by the app, do not do again: ' + done.join('; ') + '.] ' : '') +
                 plan.rest.join(', ');
-  } else if(!images.length){
+  } else if(!images.length && !screenCmd){
     const flow = detectWorkflowCommand(text);
     if(flow){
       chatHistory.push({ role:'user', content: text });
@@ -14932,6 +15212,17 @@ async function handleSend(){
          confuses every engine. */
       chatHistory.pop();
     }
+  }
+
+  /* Only now, when the message is going to the model: a local command
+     answered above never needed a look at the screen. Added after the
+     message was drawn, so the capture is not shown to him as an attachment. */
+  if(screenCmd === 'start'){
+    const got = await startScreenWatch();
+    if(got.frame) images.push(got.frame);
+  } else if(screenWatch && screenCmd !== 'end'){
+    const frame = await freshScreenFrame();
+    if(frame) images.push(frame);
   }
 
   isThinking = true;
@@ -15001,6 +15292,7 @@ async function handleSend(){
   };
 
   const reply = await askJarvis(modelText, images, onText);
+  screenTurnNote = '';
   await persistCurrentSession(); // ensure the user's message is saved even if askJarvis failed
   if(pending.isConnected) pending.remove();
   isThinking = false;

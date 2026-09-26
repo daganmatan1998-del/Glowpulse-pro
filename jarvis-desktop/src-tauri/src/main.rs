@@ -390,6 +390,50 @@ fn take_screenshot() -> Result<String, String> {
     Ok(STANDARD.encode(bytes))
 }
 
+/* WATCHING THE SCREEN, AS OPPOSED TO SCREENSHOTTING IT.
+ *
+ * While he has asked JARVIS to watch his screen, every message he sends
+ * carries a fresh look at it. take_screenshot is the wrong tool for that:
+ * it writes a PNG into Pictures\Screenshots each time, which is right for
+ * "take a screenshot" and would fill the folder with one file per sentence
+ * here. This is the same capture, kept in memory and never written to disk.
+ *
+ * 1280px wide rather than take_screenshot's 1600: it rides along with every
+ * message while watching is on, ordinary interface text is still readable at
+ * this width, each look costs about 1,200 tokens instead of 2,000, and even a
+ * screen full of photograph stays well inside the 5MB an image may be. PNG,
+ * because the image crate is built with PNG only (see Cargo.toml). */
+#[tauri::command]
+fn capture_screen_frame() -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    use std::io::Cursor;
+    use xcap::Monitor;
+
+    let monitors = Monitor::all().map_err(|e| format!("could not list monitors: {e}"))?;
+    let monitor = monitors
+        .into_iter()
+        .find(|m| m.is_primary())
+        .ok_or_else(|| "no primary monitor found".to_string())?;
+
+    let image = monitor
+        .capture_image()
+        .map_err(|e| format!("capture failed: {e}"))?;
+
+    let (w, h) = (image.width(), image.height());
+    let image = if w > 1280 {
+        let nh = (h as f32 * (1280.0 / w as f32)) as u32;
+        image::imageops::resize(&image, 1280, nh, image::imageops::FilterType::Triangle)
+    } else {
+        image
+    };
+
+    let mut buf = Cursor::new(Vec::new());
+    image
+        .write_to(&mut buf, image::ImageFormat::Png)
+        .map_err(|e| format!("could not encode the image: {e}"))?;
+    Ok(STANDARD.encode(buf.into_inner()))
+}
+
 /* A WINDOW OF ITS OWN FOR A MODEL.
  *
  * The orb is a 180-pixel circle with no frame, pinned above everything: a
@@ -925,6 +969,7 @@ fn main() {
             close_window_named,
             close_browser_tab,
             take_screenshot,
+            capture_screen_frame,
             open_model_window,
             work_area,
             open_service_window,

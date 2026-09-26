@@ -22,6 +22,10 @@ npm run check             # lists every placeholder left + broken links
 npm run serve             # http://localhost:4173
 ```
 
+Want one file instead? `npm run single` bundles every page, with CSS and JS
+inlined, into `dist/norrval-store.html`. It opens straight from disk with a
+double-click and no server, and internal links become `#/…` routes.
+
 `dist/` is a plain static site. Deploy it to any static host (Cloudflare Pages,
 Netlify, Vercel, S3 + CloudFront). Configure the host to serve `404.html` for
 unknown paths.

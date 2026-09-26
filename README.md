@@ -342,6 +342,14 @@ claim success, the reply is handed back once with what failed, and a claim is
 held from the voice until a tool has actually worked. `לא הוספתי` ("I did not
 add it") is a negation, not a claim, and is read as one.
 
+"Open YouTube" was the case that kept coming back. A fallback model would write
+"I called open_url to open YouTube" — read aloud as "open underscore url" — and
+sometimes had called nothing at all. Now a site he names on its own (YouTube,
+Gmail, Google, Drive, Maps, WhatsApp, Facebook, Instagram, TikTok, Netflix,
+Spotify, Shopify) is opened by the app directly, like the camera; "I called
+<tool_name>" counts as a claim; and when the call did happen the sentence is
+turned into "I opened YouTube" before anyone hears or reads it.
+
 ## Serious Mode does not exist on the desktop
 
 `seriousMode()` returns `modeState.mode === 'ultron' && !IS_DESKTOP` — false on

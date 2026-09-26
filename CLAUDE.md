@@ -134,6 +134,15 @@ single file `dist/index.html`.
   it reaches every non-Anthropic engine as base64 text. A build without
   capture_screen_frame refuses honestly; it never falls back to
   take_screenshot, which would save a file per sentence.
+- **"Open YouTube" is opened locally (2.9.1)**, like the camera: the
+  open_site flow (OPEN_SITES, anchored to the whole sentence, last in
+  FLOW_RULES, in SELF_CONTAINED_FLOWS) calls callOpenUrlTool itself. Fallback
+  engines answered "I called open_url to open YouTube" — read aloud as "open
+  underscore url" — and sometimes called nothing. ACTION_CLAIM_TOOL makes
+  "I called/used <snake_case>" a claim; humaniseToolTalk turns a real one
+  into "I opened YouTube" (screen and voice), speakableToolTalk strips any
+  leftover underscores for the voice. On the website open_site returns
+  false and the model answers as before.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.

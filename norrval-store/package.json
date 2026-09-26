@@ -1,0 +1,16 @@
+{
+  "name": "norrval-store",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "NORRVAL — static storefront for the Nocturne watch.",
+  "scripts": {
+    "images": "python3 scripts/images.py",
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check.mjs",
+    "serve": "npx --yes serve dist -l 4173"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
